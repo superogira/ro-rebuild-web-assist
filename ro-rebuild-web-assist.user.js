@@ -4171,6 +4171,8 @@
     { name: 'Improve Concentration', skillId: 27, level: 10, selfCast: true, intervalMin: 4.3, spMin: 70, cooldownMs: 1, job: 'Archer/Hunter', desc: 'บัพ DEX+AGI' },
     { name: 'Charge Arrow', skillId: 25, level: 1, targeted: true, maxUsesPerTarget: 1, maxDistance: 10, spMin: 20, cooldownMs: 60000, job: 'Archer/Hunter', desc: 'ดันมอนออกไกล' },
     { name: 'Arrow Shower', skillId: 26, level: 5, ground: true, maxUsesPerTarget: 1, maxDistance: 10, mobCountMin: 2, spMin: 20, cooldownMs: 60000, job: 'Hunter', desc: 'AoE ธนู (เลือกพื้นที่)' },
+    // ---- Thief/Assassin/Rogue (จาก packet capture) ----
+    { name: 'Steal', skillId: 61, level: 10, targeted: true, maxUsesPerTarget: 1, maxDistance: 2, spMin: 10, cooldownMs: 1, job: 'Thief/Assassin/Rogue', desc: 'ขโมยของจากมอน (ใช้ที่เลเวลสูงสุด)' },
   ];
   function skillPresetGroups() {
     const groups = {};
