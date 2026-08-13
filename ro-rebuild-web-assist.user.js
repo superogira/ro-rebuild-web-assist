@@ -4758,7 +4758,8 @@
       if (!t || !t.closest || !t.matches || !t.matches(ASSIST_INPUT_SEL)) return false;
       return root.contains(t)
         || (t.closest && t.closest('#__assist_itempopup'))
-        || (t.closest && t.closest('#__assist_skillpopup'));
+        || (t.closest && t.closest('#__assist_skillpopup'))
+        || (t.closest && t.closest('#__assist_feedback_modal'));
     }
     function ourActiveInput() {
       const ae = document.activeElement;
@@ -4793,6 +4794,11 @@
     function handleInputKey(inp, e) {
       const k = e.key;
       const s = inp.selectionStart, en = inp.selectionEnd;
+      // ★ Escape → ปิด feedback modal (ถ้าอยู่ใน modal)
+      if (k === 'Escape') {
+        const modal = inp.closest && inp.closest('#__assist_feedback_modal');
+        if (modal) { modal.remove(); return; }
+      }
       if (k === 'Backspace') {
         if (s === en && s > 0) { inp.value = inp.value.slice(0, s - 1) + inp.value.slice(en); inp.selectionStart = inp.selectionEnd = s - 1; }
         else if (s !== en) { inp.value = inp.value.slice(0, s) + inp.value.slice(en); inp.selectionStart = inp.selectionEnd = s; }
@@ -4803,7 +4809,21 @@
       else if (k === 'ArrowRight') { inp.selectionStart = inp.selectionEnd = Math.min(inp.value.length, s + 1); }
       else if (k === 'Home') { inp.selectionStart = inp.selectionEnd = 0; }
       else if (k === 'End') { inp.selectionStart = inp.selectionEnd = inp.value.length; }
-      else if (k === 'Enter') { inp.blur(); }
+      else if (k === 'Enter') {
+        // ★ textarea: Enter = ขึ้นบรรทัด, Ctrl+Enter = ส่ง (feedback modal)
+        //   input (1 บรรทัด): Enter = blur (เหมือนเดิม)
+        if (inp.tagName === 'TEXTAREA') {
+          if (e.ctrlKey || e.metaKey) {
+            const modal = inp.closest('#__assist_feedback_modal');
+            if (modal) { const b = modal.querySelector('#__assist_feedback_send'); if (b) b.click(); }
+            return;
+          }
+          inp.value = inp.value.slice(0, s) + '\n' + inp.value.slice(en);
+          inp.selectionStart = inp.selectionEnd = s + 1;
+        } else {
+          inp.blur();
+        }
+      }
       else if (k.length === 1) {   // ตัวอักษร 1 ตัว (รวมตัวเลข ภาษาอังกฤษ)
         inp.value = inp.value.slice(0, s) + k + inp.value.slice(en);
         inp.selectionStart = inp.selectionEnd = s + 1;
@@ -5241,6 +5261,16 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
     const close = () => overlay.remove();
     overlay.querySelector('#__assist_feedback_cancel').onclick = close;
     overlay.onclick = (e) => { if (e.target === overlay) close(); };
+    // ★ กัน Unity ขโมย focus เวลาคลิก textarea (mirror root mousedown handler)
+    overlay.addEventListener('mousedown', (e) => {
+      if (e.target.matches && e.target.matches('input, select, textarea, button')) {
+        e.stopPropagation();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') {
+          setTimeout(() => { try { e.target.focus(); } catch (_) {} }, 0);
+        }
+      }
+    }, true);
     overlay.querySelector('#__assist_feedback_send').onclick = async () => {
       const msg = box.value.trim();
       if (!msg) { box.focus(); return; }
