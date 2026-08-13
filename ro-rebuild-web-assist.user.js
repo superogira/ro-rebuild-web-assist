@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.72.0
+// @version      4.73.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,7 +116,7 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.72.0';
+  const VERSION = '4.73.0';
   const GITHUB_RAW = 'https://raw.githubusercontent.com/superogira/ro-rebuild-web-assist/main/ro-rebuild-web-assist.user.js';
   // ★ Feedback — ส่งปัญหา/ข้อเสนอแนะถึงผู้พัฒนาผ่าน Telegram
   const FEEDBACK_BOT_TOKEN = '7932077955:AAEc2u3FaKLY-6iY6VjseK5_GPJXgYK3ORA';
@@ -1233,12 +1233,13 @@
       if (now - (last3cDebugAt || 0) > 3000) {
         last3cDebugAt = now;
         const flags = [];
-        if (sub === 7) { let pp = 3; while (pp + 9 <= u.length) { flags.push(u[pp+8]); pp += 9; } }
+        if (sub === 7 || sub === 13) { let pp = 3; while (pp + 9 <= u.length) { flags.push(u[pp+8]); pp += 9; } }
         log('📡 0x3c sub=' + sub + ' len=' + u.length + ' flags=[' + flags.join(',') + ']');
       }
-      if (sub === 7 && u.length >= 5) {
-        // ★ sub=7: multi-entity list (warp portals + positions)
-        //   format: [3c][0700] then repeating [id:4][x:2][y:2][flag:1] (9 bytes each)
+      if ((sub === 7 || sub === 13) && u.length >= 5) {
+        // ★ sub=7 / sub=13: multi-entity minimap list (players + warps + NPCs)
+        //   format: [3c][sub:2] then repeating [id:4][x:2][y:2][flag:1] (9 bytes each)
+        //   ★★ sub=13 = initial map data (ส่งตอนเข้าแมป — มีผู้เล่นทุกคนในแมป)
         let p = 3;
         while (p + 9 <= u.length) {
           const eid = u32(u, p); p += 4;
