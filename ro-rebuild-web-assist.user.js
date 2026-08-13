@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.55.0
+// @version      4.56.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,7 +116,7 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.55.0';
+  const VERSION = '4.56.0';
   const GITHUB_RAW = 'https://raw.githubusercontent.com/superogira/ro-rebuild-web-assist/main/ro-rebuild-web-assist.user.js';
   const CFG_STORAGE_KEY = 'roAssistConfig_v1';
   // keys ที่บันทึก/โหลด (boolean/number/array/string — ไม่เก็บ function หรือ object ซ้อน)
@@ -5231,16 +5231,25 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
       // ★ map entities — สำหรับแสดง dots บนแผนที่ใน remote monitor
       mapEntities: (() => {
         const now = nowMs(); const out = [];
-        const STALE_MS = 60000;   // ★ entity ที่ไม่ได้อัปเดตเกิน 60s → ข้าม (mirror bot_server.js:1484)
+        const STALE_MS = 60000;
+        // ★★ prioritize: boss > mini boss > monster > warp > NPC > player
+        //   เพื่อให้ entities สำคัญโผล่ในแผนที่ก่อน (กันผู้เล่นเยอะกิน slot)
+        const priority = (e) => {
+          if (e._isBoss) return 0;
+          if (e._isMiniBoss) return 1;
+          if (e.kind === 1) return 2;       // monster
+          if (e._isWarp) return 3;          // warp
+          if (e.kind === 2) return 4;       // NPC
+          return 5;                         // player (lowest)
+        };
+        const valid = [];
         for (const e of entities.values()) {
-          if (e.id === playerId) continue;   // ตัวเองแสดงแยก
+          if (e.id === playerId) continue;
           if (e.x == null || !e.alive) continue;
           if (isStaleId(e.id, now)) continue;
-          // ★ stale check: NPC/warp (kind=2) ไม่หมดอายุ (อยู่กับที่) — มอน/ผู้เล่นหมดอายุถ้าไม่ได้อัปเดต 60s
           if (e.kind !== 2) {
-            if (!e._lastSeenAt) e._lastSeenAt = now;   // stamp ครั้งแรก
+            if (!e._lastSeenAt) e._lastSeenAt = now;
             if (now - e._lastSeenAt > STALE_MS) {
-              // ★★ mini boss ที่หายไป (0x3c หยุดส่ง = ตาย/ถูกฆ่า) → ล้าง bossAlertedIds เพื่อ alert ใหม่ตอนเกิดใหม่
               if ((e._isMiniBoss || e._isBoss) && bossAlertedIds.has(e.id)) {
                 bossAlertedIds.delete(e.id);
                 entities.delete(e.id);
@@ -5249,7 +5258,11 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
               continue;
             }
           }
-          // จำกัดจำนวน (กัน payload ใหญ่เกิน)
+          valid.push(e);
+        }
+        // ★ sort by priority → important entities first
+        valid.sort((a, b) => priority(a) - priority(b));
+        for (const e of valid) {
           if (out.length >= 50) break;
           out.push({ id: e.id.toString(16), kind: e.kind || 0, x: e.x, y: e.y, name: e.name || '', hp: e.hp, hpMax: e.hpMax, isBoss: !!e._isBoss, isMiniBoss: !!e._isMiniBoss, isWarp: !!e._isWarp });
         }
