@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.56.0
+// @version      4.57.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,7 +116,7 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.56.0';
+  const VERSION = '4.57.0';
   const GITHUB_RAW = 'https://raw.githubusercontent.com/superogira/ro-rebuild-web-assist/main/ro-rebuild-web-assist.user.js';
   const CFG_STORAGE_KEY = 'roAssistConfig_v1';
   // keys ที่บันทึก/โหลด (boolean/number/array/string — ไม่เก็บ function หรือ object ซ้อน)
@@ -1465,7 +1465,20 @@
           // ★ (C) SPAWN อัปเดต player.x/y ด้วย (mirror world.js:1289-1292) — กัน stale หลังวาร์ป
           if (id === playerId && x != null) { player.x = x; player.y = y; }
           // ★ เก็บ playerName — ใช้เป็น guard กัน false ID change (mirror world.js:1235)
-          if (id === playerId && name && !playerName) { playerName = name; log('👤 player_name =', name); }
+          if (id === playerId && name && !playerName) {
+            playerName = name; log('👤 player_name =', name);
+            // ★ re-register + re-send Telegram config ตอนรู้ชื่อครั้งแรก
+            //   (SELECT_CHAR ส่ง setTelegram ก่อนรู้ชื่อ → relay ปฏิเสธ → ส่งใหม่ตอนนี้)
+            if (relayWs && relayWs.readyState === 1) {
+              try {
+                relayWs.send(JSON.stringify({ type: 'register', playerId: playerId.toString(16), playerName }));
+                if (CFG.telegramBotToken && CFG.telegramChatId) {
+                  relayWs.send(JSON.stringify({ type: 'setTelegram', botToken: CFG.telegramBotToken, chatId: CFG.telegramChatId }));
+                  log('📨 ส่ง Telegram config ไป relay อีกครั้ง (หลังรู้ชื่อ)');
+                }
+              } catch (_) {}
+            }
+          }
         }
       } catch (e) { /* SPAWN parse error ข้าม */ }
     }
@@ -3353,10 +3366,15 @@
       const pct = hpPct();
       console.table([{
         version: VERSION + (latestVersion && cmpVer(latestVersion, VERSION) > 0 ? ` → ${latestVersion} ⬆` : ''),
+        combat: CFG.combatEnabled ? 'ON ⚔️' : 'off',
         loot: CFG.lootEnabled ? 'ON' : 'off',
         heal: CFG.healEnabled ? 'ON' : 'off',
         dead: isDead ? '☠️ YES' : 'no',
         HP: hp.cur != null ? `${hp.cur}/${hp.max} (${pct != null ? pct.toFixed(0) : '?'}%)` : '?',
+        map: currentMap || '?',
+        farmMap: CFG.farmMap || '(any)',
+        entities: entities.size,
+        target: target ? target.id.toString(16) : '-',
         healAt: CFG.healAtPercent + '%',
         healItems: CFG.healItems.map(nameOf).join(', '),
         healMode: CFG.healMode,
