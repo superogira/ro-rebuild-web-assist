@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.68.0
+// @version      4.69.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,7 +116,7 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.68.0';
+  const VERSION = '4.69.0';
   const GITHUB_RAW = 'https://raw.githubusercontent.com/superogira/ro-rebuild-web-assist/main/ro-rebuild-web-assist.user.js';
   // ★ Feedback — ส่งปัญหา/ข้อเสนอแนะถึงผู้พัฒนาผ่าน Telegram
   const FEEDBACK_BOT_TOKEN = '7932077955:AAEc2u3FaKLY-6iY6VjseK5_GPJXgYK3ORA';
@@ -4714,12 +4714,6 @@
               <button id="__assist_t_warptoboss" class="off">👑 วาร์ปไปสู้ Boss</button>
               <button id="__assist_t_warptominiboss" class="off">👹 วาร์ปไปสู้ Mini Boss</button>
             </div>
-            <div class="btns">
-              <button id="__assist_t_fleeplayers" class="off">🏃 หนีผู้เล่น</button>
-            </div>
-            <div class="row"><label>แผนที่สำรอง (คั่นด้วย ,)</label><input id="__assist_fleemaps" type="text" placeholder="moc_fild04,moc_fild08,gef_fild13" style="width:100%"></div>
-            <div class="row"><label>รัศมีตรวจจับ (ช่อง)</label><input id="__assist_fleeradius" type="number" value="30" style="width:60px"></div>
-            <div class="btns"><button id="__assist_applyflee">ใช้ค่าหนีผู้เล่น</button></div>
             <div class="btns"><button id="__assist_applycombat">ใช้ค่า combat</button></div>
           </div>
           <!-- 📦 Loot -->
@@ -4771,6 +4765,11 @@
           </div>
           <!-- 🏃 Flee -->
           <div class="__assist_subpage" data-sub="flee">
+            <div class="btns"><button id="__assist_t_fleeplayers" class="off">🏃 หนีผู้เล่น</button></div>
+            <div class="field"><label>แผนที่สำรองเมื่อหนีผู้เล่น (คั่นด้วยจุลภาค)</label><input type="text" id="__assist_fleemaps" placeholder="moc_fild04,moc_fild08,gef_fild13"></div>
+            <div class="field"><label>รัศมีตรวจจับผู้เล่น (ช่อง) — 0 = หนีทันทีที่มีผู้เล่นในแผนที่</label><input type="number" id="__assist_fleeradius" min="0" max="200" placeholder="30"></div>
+            <div class="btns"><button id="__assist_applyfleemap">ใช้ค่าหนีผู้เล่น</button></div>
+            <hr style="border:none;border-top:1px solid #3a3f4b;margin:8px 0">
             <div class="field"><label>flee: รุม N ตัว (0=off)</label><input type="number" id="__assist_fleemob" min="0" max="20"></div>
             <div class="field"><label>flee: aggro N ตัว (0=off)</label><input type="number" id="__assist_fleeaggro" min="0" max="20"></div>
             <div class="field"><label>flee: มอนรอบ N ตัว ในระยะ (0=off)</label><input type="number" id="__assist_fleeprox" min="0" max="20"></div>
@@ -5121,13 +5120,13 @@
     root.querySelector('#__assist_t_warptoboss').addEventListener('click', () => { CFG.warpToBoss = !CFG.warpToBoss; saveConfigDebounced(); log('👑 วาร์ปไปสู้ Boss:', CFG.warpToBoss ? 'เปิด' : 'ปิด'); });
     root.querySelector('#__assist_t_warptominiboss').addEventListener('click', () => { CFG.warpToMiniBoss = !CFG.warpToMiniBoss; saveConfigDebounced(); log('👹 วาร์ปไปสู้ Mini Boss:', CFG.warpToMiniBoss ? 'เปิด' : 'ปิด'); });
     root.querySelector('#__assist_t_fleeplayers').addEventListener('click', () => { CFG.fleeFromPlayers = !CFG.fleeFromPlayers; saveConfigDebounced(); log('🏃 หนีผู้เล่น:', CFG.fleeFromPlayers ? 'เปิด' : 'ปิด'); });
-    root.querySelector('#__assist_applyflee').addEventListener('click', () => {
+    root.querySelector('#__assist_applyfleemap').addEventListener('click', () => {
       const maps = root.querySelector('#__assist_fleemaps').value.split(',').map(s => s.trim()).filter(Boolean);
       const radius = parseInt(root.querySelector('#__assist_fleeradius').value, 10);
       CFG.fleeMaps = maps;
-      if (!isNaN(radius) && radius > 0) CFG.fleePlayerRadius = radius;
+      if (!isNaN(radius) && radius >= 0) CFG.fleePlayerRadius = radius;
       saveConfigDebounced();
-      log('🏃 หนีผู้เล่น: แผนที่สำรอง', maps.length, 'แผนที่, รัศมี', CFG.fleePlayerRadius, 'ช่อง');
+      log('🏃 หนีผู้เล่น: แผนที่สำรอง', maps.length, 'แผนที่, รัศมี', CFG.fleePlayerRadius, 'ช่อง' + (radius === 0 ? ' (หนีทันที)' : ''));
     });
     // ---- flee wires (แยกจาก combat) ----
     root.querySelector('#__assist_applyflee').addEventListener('click', () => {
