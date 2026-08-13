@@ -769,7 +769,7 @@ function renderAlerts(d) {
   const el = document.getElementById('alert-list');
   const alerts = d.alerts || [];
   if (alerts.length === 0) { el.innerHTML = '<div class="empty">(ไม่มี log สำคัญ)</div>'; return; }
-  el.innerHTML = alerts.map(a => {
+  el.innerHTML = alerts.slice().reverse().map(a => {
     const time = new Date(a.t).toLocaleTimeString();
     let color = '#e8e8e8';
     if (a.type === 'card') color = '#f1c40f';
@@ -780,7 +780,7 @@ function renderAlerts(d) {
       <span style="color:${color}">${escapeHtml(a.msg || '')}</span>
     </div>`;
   }).join('');
-  el.scrollTop = el.scrollHeight;
+  el.scrollTop = 0;
 }
 
 function escapeHtml(s) { return String(s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])); }
@@ -791,6 +791,7 @@ function escapeHtml(s) { return String(s).replace(/[<>&"]/g, c => ({'<':'&lt;','
 const CTRL_SYSTEMS = [
   ['combat','⚔️'],['loot','📦'],['heal','💉'],['rest','🪑'],
   ['skill','🔮'],['buff','✨'],['sell','💰'],['storage','🏦'],
+  ['warpToBoss','👑'],['warpToMiniBoss','👹'],
 ];
 let ctrlTogglesState = {};
 
