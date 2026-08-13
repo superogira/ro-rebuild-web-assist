@@ -4722,7 +4722,7 @@
         </div>
         <div class="__assist_page" data-page="log">
           <div class="logbox" id="__assist_logbox"></div>
-          <div class="btns"><button id="__assist_clearlog">ล้าง log</button></div>
+          <div class="btns"><button id="__assist_copylog">📋 คัดลอก log</button><button id="__assist_clearlog">ล้าง log</button></div>
         </div>
       </div>
     `;
@@ -5119,6 +5119,30 @@
       inp.click();
     });
     root.querySelector('#__assist_clearlog').addEventListener('click', () => ASSIST.clearLogs());
+    // ★ คัดลอก log — ใช้ navigator.clipboard ถ้าได้ ไม่งั้นใช้ textarea fallback
+    root.querySelector('#__assist_copylog').addEventListener('click', () => {
+      const logs = ASSIST.getLogs();
+      if (!logs.length) { log('⚠️ ไม่มี log ให้คัดลอก'); return; }
+      const text = logs.map(l => {
+        const d = new Date(l.t);
+        const ts = d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0')+':'+d.getSeconds().toString().padStart(2,'0');
+        return `[${ts}] ${l.msg}`;
+      }).join('\n');
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(
+          () => { log('📋 คัดลอก log แล้ว (' + logs.length + ' บรรทัด) — ไปวางได้เลย'); },
+          () => { fallbackCopy(text); }
+        );
+      } else { fallbackCopy(text); }
+      function fallbackCopy(txt) {
+        const ta = document.createElement('textarea');
+        ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); log('📋 คัดลอก log แล้ว (' + logs.length + ' บรรทัด)'); }
+        catch (_) { log('❌ คัดลอกไม่สำเร็จ — ลองเลือกข้อความเอง'); }
+        document.body.removeChild(ta);
+      }
+    });
     root.querySelector('#__assist_clearalert')?.addEventListener('click', () => ASSIST.clearImportantLogs());
     const updBtn = root.querySelector('#__assist_updatebtn');
     if (updBtn) updBtn.addEventListener('click', () => { if (confirm('อัปเดตเป็นเวอร์ชั่นล่าสุด?\n(หลังอัปเดตต้อง reconnect เกม ปิด-เปิดหน้า)')) ASSIST.update(); });
