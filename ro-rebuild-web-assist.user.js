@@ -5210,10 +5210,18 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
           if (e.id === playerId) continue;   // ตัวเองแสดงแยก
           if (e.x == null || !e.alive) continue;
           if (isStaleId(e.id, now)) continue;
-          // ★ stale check: NPC (kind=2) ไม่หมดอายุ (อยู่กับที่) — มอน/ผู้เล่นหมดอายุถ้าไม่ได้อัปเดต 60s
+          // ★ stale check: NPC/warp (kind=2) ไม่หมดอายุ (อยู่กับที่) — มอน/ผู้เล่นหมดอายุถ้าไม่ได้อัปเดต 60s
           if (e.kind !== 2) {
             if (!e._lastSeenAt) e._lastSeenAt = now;   // stamp ครั้งแรก
-            if (now - e._lastSeenAt > STALE_MS) continue;
+            if (now - e._lastSeenAt > STALE_MS) {
+              // ★★ mini boss ที่หายไป (0x3c หยุดส่ง = ตาย/ถูกฆ่า) → ล้าง bossAlertedIds เพื่อ alert ใหม่ตอนเกิดใหม่
+              if (e._isMiniBoss && bossAlertedIds.has(e.id)) {
+                bossAlertedIds.delete(e.id);
+                entities.delete(e.id);
+                log('👹 Mini Boss หายไป (ไม่ได้รับตำแหน่ง 60s) — จะ alert ใหม่เมื่อเกิดใหม่');
+              }
+              continue;
+            }
           }
           // จำกัดจำนวน (กัน payload ใหญ่เกิน)
           if (out.length >= 50) break;
