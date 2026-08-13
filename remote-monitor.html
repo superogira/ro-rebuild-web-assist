@@ -970,6 +970,12 @@ function openMapFullscreen() {
   img.onload = () => {
     img.className = 'map-img';
     img.dataset.map = smallImg.dataset.map;
+    // ★★ บังคับขยายให้เต็มจอ (scale up) — คำนวณ scale จาก viewport
+    const maxW = window.innerWidth - 60;
+    const maxH = window.innerHeight - 60;
+    const scale = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight);
+    img.style.width = Math.round(img.naturalWidth * scale) + 'px';
+    img.style.height = Math.round(img.naturalHeight * scale) + 'px';
     _mfBox.appendChild(img);
     _mfImg = img;
     // wire click (walk/warp)
