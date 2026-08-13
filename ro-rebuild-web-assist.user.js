@@ -156,6 +156,10 @@
       if (!raw) return;
       const saved = JSON.parse(raw);
       for (const k of PERSIST_KEYS) if (k in saved) CFG[k] = saved[k];
+      // ★ migrate: monitorSendIntervalMs เก่า default 3000 → ใหม่ 1000
+      //   ถ้า saved = 3000 (= old default) → ปรับเป็น 1000 (new default)
+      //   ถ้า saved เป็นค่าอื่นที่ผู้ใช้ตั้งเอง → เก็บไว้
+      if (saved.monitorSendIntervalMs === 3000) { CFG.monitorSendIntervalMs = 1000; log('⚙️ migrate monitorSendIntervalMs: 3000 → 1000'); }
       log('💾 โหลดค่าที่บันทึกไว้จากเครื่อง (' + PERSIST_KEYS.filter(k => k in saved).length + ' รายการ)');
     } catch (e) { /* parse fail — ใช้ default */ }
   }
@@ -5194,7 +5198,7 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
   let relayDataCount = 0;               // จำนวนครั้งที่ส่งข้อมูลแล้ว
   function sendMonitorData() {
     const now = nowMs();
-    const interval = CFG.monitorSendIntervalMs || 3000;
+    const interval = CFG.monitorSendIntervalMs || 1000;
     if (now - lastMonitorSendAt < interval) return;
     lastMonitorSendAt = now;
     const s = ASSIST.getStats();
