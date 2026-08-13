@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.48.0
+// @version      4.49.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,7 +116,7 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.48.0';
+  const VERSION = '4.49.0';
   const GITHUB_RAW = 'https://raw.githubusercontent.com/superogira/ro-rebuild-web-assist/main/ro-rebuild-web-assist.user.js';
   const CFG_STORAGE_KEY = 'roAssistConfig_v1';
   // keys ที่บันทึก/โหลด (boolean/number/array/string — ไม่เก็บ function หรือ object ซ้อน)
@@ -129,7 +129,7 @@
     'combatEnabled', 'targetWhitelist', 'targetBlacklist', 'attackRange', 'rangedAttackRange',
     'maxAcquireDistance', 'searchRadii', 'maxChaseDistance', 'antiKS', 'avoidOtherPlayers', 'targetLowestHpFirst',
     'fleeOnMobCount', 'fleeOnAggroCount', 'fleeOnProximityCount', 'fleeOnProximityRadius', 'fleeMonsters', 'fleeMonsterRadius', 'maxEngageSecSlow', 'slowMonsterSubIds',
-    'wanderEnabled', 'warpFindEnabled', 'warpToMonster', 'stuckWarpOnAbandon',
+    'wanderEnabled', 'warpFindEnabled', 'warpToMonster', 'stuckWarpOnAbandon', 'warpToBoss', 'bossAlertRadius',
     'restEnabled', 'restHpPercent', 'restUntilPercent', 'restMaxSec', 'postCombatDelayMs', 'autoRespawnEnabled', 'autoRespawnDelayMs', 'telegramAlertCard', 'telegramAlertFlee', 'telegramAlertBotMention', 'telegramAlertNearby', 'telegramAlertWhisper', 'telegramBotToken', 'telegramChatId',
     'sellEnabled', 'sellNpcName', 'sellNpcMap', 'sellNpcX', 'sellNpcY', 'sellIntervalMin', 'sellOnFull', 'sellItemIds',
     'storageEnabled', 'kafraName', 'kafraMap', 'kafraMapX', 'kafraMapY', 'kafraChoice', 'depositOnFull', 'depositAfterSell', 'depositItemIds',
@@ -444,6 +444,8 @@
     warpToMonsterCooldownMs: 10000,
     warpToMonsterMaxPerEntity: 2,
     stuckWarpOnAbandon: 0,        // abandon 3 ครั้งใน 60s → วาร์ปสุ่ม
+    warpToBoss: false,            // ★ วาร์ปไปสู้ mini-boss เมื่อตรวจจับได้ (toggle, default OFF)
+    bossAlertRadius: 0,           // ★ ระยะที่จะ alert boss (0 = ทุกระยะ, เช่น 50 = ภายใน 50 ช่อง)
     // หามอน
     wanderEnabled: true,          // ไม่เจอมอน → สุ่มเดิน
     wanderMaxStep: 20,            // สุ่มระยะ ≤20 ช่อง
@@ -751,6 +753,8 @@
   let currentMap = null;               // ชื่อแมปปัจจุบัน (จาก opcode 0x12) — จำเป็นสำหรับ warp
   let playerZeny = null;              // ★ เงินปัจจุบัน (จาก 0x38 MAP_DATA offset 9 — ส่งตอนเข้าแมป/วาร์ป)
   let lastFarmWarpBackAt = 0;          // ★ throttle retry วาร์ปกลับแมปฟาร์ม (กันติดแมปผิด)
+  let bossAlertedIds = new Set();       // ★ entity IDs ที่ alert boss ไปแล้ว (กันสแปม)
+  let lastBossWarpAt = 0;              // ★ throttle วาร์ปไปหา boss
   const warpQueue = new Map();         // dropId -> {dropId,itemId,x,y,offsetIdx,warpAt,pickupSentAt}
   let lastWarpAt = 0;                  // throttle การวาร์ป
   let warpGuardUntil = 0;              // ★ ระยะหลังวาร์ป — รอ player pos อัปเดตก่อนคำนวณ dist
@@ -1012,6 +1016,7 @@
           monsterAggro.clear(); mobAttackers.clear();
           target = null;
           log('🧹 ล้าง entities แมปเก่า (เปลี่ยนแมป)');
+          bossAlertedIds.clear();   // ★ ล้าง boss alert cache (เริ่มนับใหม่ในแมปใหม่)
           navWanderReset();   // ★ เปลี่ยนแมป → reset wander state (ล้าง target เก่า)
           navPatrolReset();   // ★ reset patrol state ด้วย
           // ★ warp-back-to-farm: ออกจากแมปฟาร์ม → วาร์ปกลับ
@@ -1186,6 +1191,42 @@
       const zeny = u32(u, 9);
       if (zeny != null && zeny !== playerZeny) {
         playerZeny = zeny;
+      }
+    }
+    // ★ 0x3c MINIMAP_MARKER: server ส่งตำแหน่ง boss/mini-boss สำหรับแสดงใน minimap
+    //   format: [3c][sub:2][id:4][x:2][y:2][flag:1] (12 bytes)
+    //   ★ มีแค่ entity ID + X/Y — ไม่มีชื่อ/sub/kind/HP (เพราะอยู่ไกล)
+    //   ★ server ส่งต่อเนื่อง (เหมือน MOVE แต่สำหรับ boss โดยเฉพาะ)
+    else if (op === 0x3c && u.length >= 12) {
+      const id = u32(u, 3);            // offset 3 = entity ID (หลัง sub 2 bytes)
+      const x = i16(u, 7), y = i16(u, 9);  // offset 7,9 = x, y (i16 LE)
+      if (id && x >= -500 && x <= 1000 && y >= -500 && y <= 1000) {
+        const now = nowMs();
+        let m = entities.get(id);
+        if (m) {
+          // entity มีอยู่แล้ว → อัปเดตตำแหน่ง
+          m.x = x; m.y = y; m._lastSeenAt = now; m._isBoss = true;
+        } else {
+          // ★ entity ใหม่ → สร้างเป็น boss (kind=1 monster + _isBoss=true)
+          m = { id, kind: 1, x, y, alive: true, _lastSeenAt: now, _isBoss: true, name: 'Boss' };
+          entities.set(id, m);
+        }
+        // ★ alert boss (ครั้งเดียวต่อ entity ID — กันสแปม)
+        if (!bossAlertedIds.has(id)) {
+          bossAlertedIds.add(id);
+          const dist = (player.x != null) ? Math.hypot(x - player.x, y - player.y).toFixed(0) : '?';
+          log('👑 ตรวจจับ Boss! entity', id.toString(16), '@(', x, y, ') ห่าง', dist, 'ช่อง');
+          logImportant('card', '👑 ตรวจจับ Boss ที่ (' + x + ', ' + y + ') ห่าง ' + dist + ' ช่อง');
+        }
+        // ★ auto-warp to boss (ถ้าเปิด toggle)
+        if (CFG.warpToBoss && player.x != null && now - lastBossWarpAt > 10000) {
+          const d = Math.hypot(x - player.x, y - player.y);
+          if (d > 10) {   // ห่างเกิน 10 ช่อง → วาร์ป
+            log('👑 วาร์ปไปสู้ Boss @(', x, y, ') ห่าง', d.toFixed(0), 'ช่อง');
+            sendTeleport(currentMap, x, y);
+            lastBossWarpAt = now;
+          }
+        }
       }
     }
     // 0x4d NPC_DIALOG (mirror world.js:441-449)
@@ -4444,6 +4485,9 @@
               <button id="__assist_t_warptomon" class="off">วาร์ปไปหามอนที่ตี</button>
             </div>
             <div class="field"><label>stuck abandon N ครั้งใน 60s → วาร์ปสุ่ม (0=ปิด)</label><input type="number" id="__assist_stuckwarp" min="0" max="20"></div>
+            <div class="btns">
+              <button id="__assist_t_warptoboss" class="off">👑 วาร์ปไปสู้ Boss</button>
+            </div>
             <div class="btns"><button id="__assist_applycombat">ใช้ค่า combat</button></div>
           </div>
           <!-- 📦 Loot -->
@@ -4811,6 +4855,7 @@
       const sw = parseInt(root.querySelector('#__assist_stuckwarp').value, 10);
       if (!isNaN(sw)) { CFG.stuckWarpOnAbandon = sw; log('⚔️ stuck abandon → วาร์ปสุ่ม =', sw === 0 ? 'ปิด' : sw + 'ครั้ง'); }
     });
+    root.querySelector('#__assist_t_warptoboss').addEventListener('click', () => { CFG.warpToBoss = !CFG.warpToBoss; saveConfigDebounced(); log('👑 วาร์ปไปสู้ Boss:', CFG.warpToBoss ? 'เปิด' : 'ปิด'); });
     // ---- flee wires (แยกจาก combat) ----
     root.querySelector('#__assist_applyflee').addEventListener('click', () => {
       const fm = parseInt(root.querySelector('#__assist_fleemob').value, 10);
@@ -5149,7 +5194,7 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
           }
           // จำกัดจำนวน (กัน payload ใหญ่เกิน)
           if (out.length >= 50) break;
-          out.push({ id: e.id.toString(16), kind: e.kind || 0, x: e.x, y: e.y, name: e.name || '', hp: e.hp, hpMax: e.hpMax });
+          out.push({ id: e.id.toString(16), kind: e.kind || 0, x: e.x, y: e.y, name: e.name || '', hp: e.hp, hpMax: e.hpMax, isBoss: !!e._isBoss });
         }
         return out;
       })(),
@@ -5544,6 +5589,7 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
     if (respawnBtn) { respawnBtn.textContent = 'Respawn: ' + (CFG.autoRespawnEnabled ? 'ON' : 'OFF'); respawnBtn.className = CFG.autoRespawnEnabled ? 'on' : 'off'; }
     syncInput('#__assist_fleeprox', CFG.fleeOnProximityCount);
     syncInput('#__assist_stuckwarp', CFG.stuckWarpOnAbandon);
+    syncToggle('#__assist_t_warptoboss', CFG.warpToBoss === true);
     syncInput('#__assist_fleemonsters', (CFG.fleeMonsters || []).join(','));
     syncInput('#__assist_fleemonsterradius', CFG.fleeMonsterRadius);
     const syncToggle = (sel, on) => { const el = root.querySelector(sel); if (el) el.className = on ? 'on' : 'off'; };
