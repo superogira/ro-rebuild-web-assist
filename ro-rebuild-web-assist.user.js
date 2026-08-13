@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.73.0
+// @version      4.74.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,7 +116,7 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.73.0';
+  const VERSION = '4.74.0';
   const GITHUB_RAW = 'https://raw.githubusercontent.com/superogira/ro-rebuild-web-assist/main/ro-rebuild-web-assist.user.js';
   // ★ Feedback — ส่งปัญหา/ข้อเสนอแนะถึงผู้พัฒนาผ่าน Telegram
   const FEEDBACK_BOT_TOKEN = '7932077955:AAEc2u3FaKLY-6iY6VjseK5_GPJXgYK3ORA';
@@ -4764,10 +4764,11 @@
               <button id="__assist_t_lowhp" class="on">lowestHP</button>
             </div>
             <div class="btns">
-              <button id="__assist_t_wander" class="on">เดินหามอน</button>
-              <button id="__assist_t_warpfind" class="off">วาร์ปหามอน</button>
-              <button id="__assist_t_warptomon" class="off">วาร์ปไปหามอนที่ตี</button>
+              <button id="__assist_t_wander" class="on">🚶 เดินหามอน</button>
+              <button id="__assist_t_warpfind" class="off">🌀 วาร์ปหามอน</button>
+              <button id="__assist_t_warptomon" class="off">🌀 วาร์ปไปหามอนที่ตี</button>
             </div>
+            <div class="field"><label>วาร์ปหามอนเมื่อไม่เจอมอน (วินาที) — 0 = วาร์ปทันทีหลังตีมอนเสร็จ</label><input type="number" id="__assist_nowarpsec" min="0" max="120" placeholder="30"></div>
             <div class="field"><label>stuck abandon N ครั้งใน 60s → วาร์ปสุ่ม (0=ปิด)</label><input type="number" id="__assist_stuckwarp" min="0" max="20"></div>
             <div class="btns">
               <button id="__assist_t_warptoboss" class="off">👑 วาร์ปไปสู้ Boss</button>
@@ -5175,7 +5176,12 @@
       if (!isNaN(r)) { if (r > 2) ASSIST.setRanged(r); else ASSIST.setAttackRange(r || 2); }
       const sw = parseInt(root.querySelector('#__assist_stuckwarp').value, 10);
       if (!isNaN(sw)) { CFG.stuckWarpOnAbandon = sw; log('⚔️ stuck abandon → วาร์ปสุ่ม =', sw === 0 ? 'ปิด' : sw + 'ครั้ง'); }
+      const nws = parseInt(root.querySelector('#__assist_nowarpsec')?.value, 10);
+      if (!isNaN(nws)) { CFG.noMonsterWarpSec = nws; log('🌀 วาร์ปหามอนหลังไม่เจอ', nws === 0 ? 'ทันที' : nws + 'วิ'); }
     });
+    // ★ populate noMonsterWarpSec ครั้งเดียว
+    const _nws = root.querySelector('#__assist_nowarpsec');
+    if (_nws) _nws.value = CFG.noMonsterWarpSec;
     root.querySelector('#__assist_t_warptoboss').addEventListener('click', () => { CFG.warpToBoss = !CFG.warpToBoss; saveConfigDebounced(); log('👑 วาร์ปไปสู้ Boss:', CFG.warpToBoss ? 'เปิด' : 'ปิด'); });
     root.querySelector('#__assist_t_warptominiboss').addEventListener('click', () => { CFG.warpToMiniBoss = !CFG.warpToMiniBoss; saveConfigDebounced(); log('👹 วาร์ปไปสู้ Mini Boss:', CFG.warpToMiniBoss ? 'เปิด' : 'ปิด'); });
     root.querySelector('#__assist_t_fleeplayers').addEventListener('click', () => { CFG.fleeFromPlayers = !CFG.fleeFromPlayers; saveConfigDebounced(); log('🏃 หนีผู้เล่น:', CFG.fleeFromPlayers ? 'เปิด' : 'ปิด'); });
