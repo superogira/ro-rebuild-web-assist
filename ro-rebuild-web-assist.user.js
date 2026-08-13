@@ -3014,9 +3014,11 @@
       // ไม่เจอมอน
       if (!noMonsterSince) noMonsterSince = now;
       const noMonSec = (now - noMonsterSince) / 1000;
+      // ★★ ขั้นต่ำ 3 วิ — ให้เวลา acquireTarget หามอนใหม่ก่อนวาร์ป (กันวาร์ปทันทีตอนเพิ่ง abandon)
+      const effectiveWarpSec = Math.max(CFG.noMonsterWarpSec, 3);
       // warp-find — มี cooldown กัน spam (วาร์ป fail ก็ต้องรอ ไม่ยิงทุก tick)
       // ★★ ห้ามวาร์ปถ้า player.x == null (ตำแหน่งค้าง/ไม่รู้ตำแหน่ง → วาร์ปไปก็ไม่รู้ว่าได้ผลไหม)
-      if (CFG.warpFindEnabled && noMonSec >= CFG.noMonsterWarpSec && now - lastWarpFindAt > 3000 && player.x != null) {
+      if (CFG.warpFindEnabled && noMonSec >= effectiveWarpSec && now - lastWarpFindAt > 3000 && player.x != null) {
         lastWarpFindAt = now;
         if (currentMap) {
           log('🌀 ไม่เจอมอน', noMonSec.toFixed(0) + 's → วาร์ปสุ่ม');
@@ -4172,7 +4174,7 @@
     { name: 'Charge Arrow', skillId: 25, level: 1, targeted: true, maxUsesPerTarget: 1, maxDistance: 10, spMin: 20, cooldownMs: 60000, job: 'Archer/Hunter', desc: 'ดันมอนออกไกล' },
     { name: 'Arrow Shower', skillId: 26, level: 5, ground: true, maxUsesPerTarget: 1, maxDistance: 10, mobCountMin: 2, spMin: 20, cooldownMs: 60000, job: 'Hunter', desc: 'AoE ธนู (เลือกพื้นที่)' },
     // ---- Thief/Assassin/Rogue (จาก packet capture) ----
-    { name: 'Steal', skillId: 61, level: 10, targeted: true, maxUsesPerTarget: 1, maxDistance: 2, spMin: 10, cooldownMs: 1, job: 'Thief/Assassin/Rogue', desc: 'ขโมยของจากมอน (ใช้ที่เลเวลสูงสุด)' },
+    { name: 'Steal', skillId: 61, level: 10, targeted: true, maxUsesPerTarget: 2, maxDistance: 2, spMin: 10, cooldownMs: 30000, job: 'Thief/Assassin/Rogue', desc: 'ขโมยของจากมอน (ใช้ที่เลเวลสูงสุด)' },
   ];
   function skillPresetGroups() {
     const groups = {};
