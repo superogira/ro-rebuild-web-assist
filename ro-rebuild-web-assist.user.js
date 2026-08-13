@@ -2207,7 +2207,7 @@
       if (e.kind !== 0 || !e.alive || e.x == null) continue;
       if (e.id === playerId) continue;       // ยกเว้นตัวเอง
       if (isStaleId(e.id, now)) continue;
-      if (Math.hypot(e.x - player.x, e.y - player.y) <= radius) n++;
+      if (radius > 0 && Math.hypot(e.x - player.x, e.y - player.y) > radius) continue;  // radius=0 = นับทุกคนในแมป
     }
     return n;
   }
