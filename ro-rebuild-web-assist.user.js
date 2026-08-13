@@ -132,7 +132,7 @@
     'combatEnabled', 'targetWhitelist', 'targetBlacklist', 'attackRange', 'rangedAttackRange',
     'maxAcquireDistance', 'searchRadii', 'maxChaseDistance', 'antiKS', 'avoidOtherPlayers', 'targetLowestHpFirst',
     'fleeOnMobCount', 'fleeOnAggroCount', 'fleeOnProximityCount', 'fleeOnProximityRadius', 'fleeMonsters', 'fleeMonsterRadius', 'maxEngageSecSlow', 'slowMonsterSubIds',
-    'wanderEnabled', 'warpFindEnabled', 'warpToMonster', 'stuckWarpOnAbandon', 'warpToBoss', 'bossAlertRadius',
+    'wanderEnabled', 'warpFindEnabled', 'warpToMonster', 'stuckWarpOnAbandon', 'warpToBoss', 'warpToMiniBoss', 'bossAlertRadius',
     'restEnabled', 'restHpPercent', 'restUntilPercent', 'restMaxSec', 'postCombatDelayMs', 'autoRespawnEnabled', 'autoRespawnDelayMs', 'telegramAlertCard', 'telegramAlertFlee', 'telegramAlertBotMention', 'telegramAlertNearby', 'telegramAlertWhisper', 'telegramBotToken', 'telegramChatId',
     'sellEnabled', 'sellNpcName', 'sellNpcMap', 'sellNpcX', 'sellNpcY', 'sellIntervalMin', 'sellOnFull', 'sellItemIds',
     'storageEnabled', 'kafraName', 'kafraMap', 'kafraMapX', 'kafraMapY', 'kafraChoice', 'depositOnFull', 'depositAfterSell', 'depositItemIds',
@@ -451,7 +451,8 @@
     warpToMonsterCooldownMs: 10000,
     warpToMonsterMaxPerEntity: 2,
     stuckWarpOnAbandon: 0,        // abandon 3 ครั้งใน 60s → วาร์ปสุ่ม
-    warpToBoss: false,            // ★ วาร์ปไปสู้ mini-boss เมื่อตรวจจับได้ (toggle, default OFF)
+    warpToBoss: false,            // ★ วาร์ปไปสู้ Boss เมื่อตรวจจับได้ (flag=4, toggle, default OFF)
+    warpToMiniBoss: false,        // ★ วาร์ปไปสู้ Mini Boss เมื่อตรวจจับได้ (flag=3, toggle, default OFF)
     bossAlertRadius: 0,           // ★ ระยะที่จะ alert mini-boss (0 = ทุกระยะ)
     bossAlertRadius: 0,           // ★ ระยะที่จะ alert boss (0 = ทุกระยะ, เช่น 50 = ภายใน 50 ช่อง)
     // หามอน
@@ -1274,8 +1275,9 @@
               log(label + '! entity', id.toString(16), '@(', x, y, ') ห่าง', dist, 'ช่อง');
               logImportant('card', label + ' ที่ (' + x + ', ' + y + ') ห่าง ' + dist + ' ช่อง');
             }
-            // ★ auto-warp (ถ้าเปิด toggle)
-            if (CFG.warpToBoss && player.x != null && now - lastBossWarpAt > 10000) {
+            // ★ auto-warp — แยก toggle สำหรับ Boss และ Mini Boss
+            const warpEnabled = isRealBoss ? CFG.warpToBoss : CFG.warpToMiniBoss;
+            if (warpEnabled && player.x != null && now - lastBossWarpAt > 10000) {
               const d = Math.hypot(x - player.x, y - player.y);
               if (d > 10) {
                 const label = isRealBoss ? '👑 Boss' : '👹 Mini Boss';
@@ -4596,7 +4598,8 @@
             </div>
             <div class="field"><label>stuck abandon N ครั้งใน 60s → วาร์ปสุ่ม (0=ปิด)</label><input type="number" id="__assist_stuckwarp" min="0" max="20"></div>
             <div class="btns">
-              <button id="__assist_t_warptoboss" class="off">👹 วาร์ปไปสู้ Mini Boss</button>
+              <button id="__assist_t_warptoboss" class="off">👑 วาร์ปไปสู้ Boss</button>
+              <button id="__assist_t_warptominiboss" class="off">👹 วาร์ปไปสู้ Mini Boss</button>
             </div>
             <div class="btns"><button id="__assist_applycombat">ใช้ค่า combat</button></div>
           </div>
@@ -4996,7 +4999,8 @@
       const sw = parseInt(root.querySelector('#__assist_stuckwarp').value, 10);
       if (!isNaN(sw)) { CFG.stuckWarpOnAbandon = sw; log('⚔️ stuck abandon → วาร์ปสุ่ม =', sw === 0 ? 'ปิด' : sw + 'ครั้ง'); }
     });
-    root.querySelector('#__assist_t_warptoboss').addEventListener('click', () => { CFG.warpToBoss = !CFG.warpToBoss; saveConfigDebounced(); log('👹 วาร์ปไปสู้ Mini Boss:', CFG.warpToBoss ? 'เปิด' : 'ปิด'); });
+    root.querySelector('#__assist_t_warptoboss').addEventListener('click', () => { CFG.warpToBoss = !CFG.warpToBoss; saveConfigDebounced(); log('👑 วาร์ปไปสู้ Boss:', CFG.warpToBoss ? 'เปิด' : 'ปิด'); });
+    root.querySelector('#__assist_t_warptominiboss').addEventListener('click', () => { CFG.warpToMiniBoss = !CFG.warpToMiniBoss; saveConfigDebounced(); log('👹 วาร์ปไปสู้ Mini Boss:', CFG.warpToMiniBoss ? 'เปิด' : 'ปิด'); });
     // ---- flee wires (แยกจาก combat) ----
     root.querySelector('#__assist_applyflee').addEventListener('click', () => {
       const fm = parseInt(root.querySelector('#__assist_fleemob').value, 10);
@@ -5954,6 +5958,7 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
     syncInput('#__assist_fleeprox', CFG.fleeOnProximityCount);
     syncInput('#__assist_stuckwarp', CFG.stuckWarpOnAbandon);
     syncToggle('#__assist_t_warptoboss', CFG.warpToBoss === true);
+    syncToggle('#__assist_t_warptominiboss', CFG.warpToMiniBoss === true);
     syncInput('#__assist_fleemonsters', (CFG.fleeMonsters || []).join(','));
     syncInput('#__assist_fleemonsterradius', CFG.fleeMonsterRadius);
     syncToggle('#__assist_t_antiks', CFG.antiKS);
