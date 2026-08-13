@@ -5010,6 +5010,19 @@
     // จัดการ key ให้ input เอง (เพราะ Unity กลืน keydown)
     function handleInputKey(inp, e) {
       const k = e.key;
+      // ★★ number input — ใช้วิธีง่าย (selection API ไม่รองรับ type=number)
+      if (inp.type === 'number') {
+        if (k === 'Backspace') inp.value = inp.value.slice(0, -1);
+        else if (k === 'Delete') inp.value = inp.value.slice(1);
+        else if (k === 'Enter') {
+          if (inp.closest('#__assist_chatroom_modal')) { const b = inp.closest('#__assist_chatroom_modal').querySelector('button[data-send]'); if (b) b.click(); return; }
+          inp.blur();
+        }
+        else if (k === 'Escape') { const m = inp.closest('#__assist_feedback_modal') || inp.closest('#__assist_chatroom_modal'); if (m) m.remove(); return; }
+        else if (k.length === 1 && /[\d.\-]/.test(k)) inp.value += k;
+        inp.dispatchEvent(new Event('input', { bubbles: true }));
+        return;
+      }
       const s = inp.selectionStart, en = inp.selectionEnd;
       // ★ Escape → ปิด modal (feedback หรือ chatroom)
       if (k === 'Escape') {
