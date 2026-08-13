@@ -98,6 +98,7 @@ wss.on('connection', (ws, req) => {
     if (msg.type === 'register' && msg.playerId) {
       ws.role = 'bot';
       ws.playerId = String(msg.playerId);
+      ws.playerName = msg.playerName || ws.playerName || null;   // ★ เก็บ playerName จาก register
       let entry = bots.get(ws.playerId);
       if (!entry) {
         entry = { botWs: null, lastData: null, monitors: new Set() };
@@ -189,7 +190,8 @@ wss.on('connection', (ws, req) => {
     // ---- Bot client setTelegram config (เก็บ botToken + chatId per playerName) ----
     if (msg.type === 'setTelegram' && ws.role === 'bot' && ws.playerId) {
       const entry = bots.get(ws.playerId);
-      const playerName = entry?.lastData?.player?.name;
+      // ★ เอา playerName จาก lastData ก่อน ถ้าไม่มี → เอาจาก ws (register ส่งมาแล้ว)
+      const playerName = entry?.lastData?.player?.name || ws.playerName || null;
       if (!playerName) { try { ws.send(JSON.stringify({ type: 'telegramSaved', ok: false, error: 'ยังไม่รู้ชื่อตัวละคร' })); } catch (_) {} return; }
       // ★ เก็บ token + chatId (ถ้าส่งมาว่าง = ลบ config)
       if (msg.botToken && msg.chatId) {
@@ -215,7 +217,7 @@ wss.on('connection', (ws, req) => {
     // ---- Bot client alert → forward ไป Telegram (ถ้ามี config) ----
     if (msg.type === 'alert' && ws.role === 'bot' && ws.playerId) {
       const entry = bots.get(ws.playerId);
-      const playerName = entry?.lastData?.player?.name || '?';
+      const playerName = entry?.lastData?.player?.name || ws.playerName || '?';
       const cfg = telegramConfigs[playerName];
       if (cfg && cfg.botToken && cfg.chatId && msg.msg) {
         const text = `<b>${playerName}</b>\n${msg.msg}`;
