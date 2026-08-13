@@ -2607,7 +2607,11 @@
   const combatLoop = setInterval(() => {
     const now = nowMs();
     // ★★ Flee from players — ทำงานไม่สน combat on/off (priority สูงสุด)
-    if (CFG.fleeFromPlayers && CFG.fleeMaps && CFG.fleeMaps.length > 0 && activeWS && activeWS.readyState === 1) {
+    //   ★★ ยกเว้นตอนกำลังขายของ/ฝากของ (ในเมืองมีผู้เล่นเยอะ → ห้ามวาร์ปหนี!)
+    const _inSellRoutine = typeof sellState !== 'undefined' && sellState !== 'IDLE';
+    const _inStorageRoutine = typeof storageState !== 'undefined' && storageState !== 'IDLE';
+    if (CFG.fleeFromPlayers && CFG.fleeMaps && CFG.fleeMaps.length > 0 && activeWS && activeWS.readyState === 1
+        && !_inSellRoutine && !_inStorageRoutine) {
       if (now >= fleeCooldownUntil) {
         // sync pos ก่อน
         if (player.x == null && playerId != null) {
