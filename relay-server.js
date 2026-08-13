@@ -49,6 +49,7 @@ let telegramConfigs = {};
 try {
   telegramConfigs = JSON.parse(fs.readFileSync(TELEGRAM_CONFIG_FILE, 'utf8'));
   log('📨 Telegram configs loaded:', Object.keys(telegramConfigs).length, 'users');
+  cleanupTelegramConfigs();
 } catch (_) { telegramConfigs = {}; }
 
 function saveTelegramConfigs() {
@@ -80,6 +81,37 @@ function log(...args) {
   console.log(`[${new Date().toLocaleTimeString()}]`, ...args);
 }
 
+// ★ sanitize playerName — ตัด null bytes + control characters
+//   ปัญหา: SPAWN packet parse ดึง bytes เกินมา → ชื่อมี garbage (\x00\x05\x00...)
+//   ทำให้ key ใน telegramConfigs ซ้ำซ้อน (ชื่อเดียวกันแต่ garbage ต่างกัน)
+function cleanPlayerName(name) {
+  if (!name) return null;
+  const cleaned = String(name).replace(/[\x00-\x1f\x7f]/g, '').trim();
+  return cleaned || null;
+}
+
+// ★ cleanup telegramConfigs — merge entries ที่มี garbage ลงในชื่อสะอาด
+//   รันครั้งเดียวตอน start (ป้องกันขยะสะสม)
+function cleanupTelegramConfigs() {
+  let merged = {};
+  let removed = 0;
+  for (const [name, cfg] of Object.entries(telegramConfigs)) {
+    const clean = cleanPlayerName(name);
+    if (clean && clean !== name) {
+      // garbage name → merge เข้าชื่อสะอาด (ถ้ายังไม่มี)
+      if (!merged[clean]) merged[clean] = cfg;
+      removed++;
+    } else if (clean) {
+      merged[clean] = cfg;
+    }
+  }
+  if (removed > 0) {
+    telegramConfigs = merged;
+    saveTelegramConfigs();
+    log(`📨 Telegram configs cleanup: removed ${removed} garbage entries`);
+  }
+}
+
 wss.on('connection', (ws, req) => {
   const ip = req.socket.remoteAddress;
   const origin = req.headers.origin || req.headers['x-forwarded-origin'] || 'unknown';
@@ -98,7 +130,7 @@ wss.on('connection', (ws, req) => {
     if (msg.type === 'register' && msg.playerId) {
       ws.role = 'bot';
       ws.playerId = String(msg.playerId);
-      ws.playerName = msg.playerName || ws.playerName || null;   // ★ เก็บ playerName จาก register
+      ws.playerName = cleanPlayerName(msg.playerName) || ws.playerName || null;   // ★ เก็บ playerName (sanitize)
       let entry = bots.get(ws.playerId);
       if (!entry) {
         entry = { botWs: null, lastData: null, monitors: new Set() };
@@ -191,7 +223,7 @@ wss.on('connection', (ws, req) => {
     if (msg.type === 'setTelegram' && ws.role === 'bot' && ws.playerId) {
       const entry = bots.get(ws.playerId);
       // ★ เอา playerName จาก lastData ก่อน ถ้าไม่มี → เอาจาก ws (register ส่งมาแล้ว)
-      const playerName = entry?.lastData?.player?.name || ws.playerName || null;
+      const playerName = cleanPlayerName(entry?.lastData?.player?.name) || ws.playerName || null;
       if (!playerName) { try { ws.send(JSON.stringify({ type: 'telegramSaved', ok: false, error: 'ยังไม่รู้ชื่อตัวละคร' })); } catch (_) {} return; }
       // ★ เก็บ token + chatId (ถ้าส่งมาว่าง = ลบ config)
       if (msg.botToken && msg.chatId) {
@@ -208,7 +240,7 @@ wss.on('connection', (ws, req) => {
     // ---- Bot client request current telegram config (สำหรับแสดงใน UI) ----
     if (msg.type === 'getTelegram' && ws.role === 'bot' && ws.playerId) {
       const entry = bots.get(ws.playerId);
-      const playerName = entry?.lastData?.player?.name;
+      const playerName = cleanPlayerName(entry?.lastData?.player?.name) || ws.playerName || null;
       const cfg = playerName ? telegramConfigs[playerName] : null;
       try { ws.send(JSON.stringify({ type: 'telegramConfig', configured: !!cfg, chatId: cfg?.chatId || null })); } catch (_) {}
       return;
@@ -217,7 +249,7 @@ wss.on('connection', (ws, req) => {
     // ---- Bot client alert → forward ไป Telegram (ถ้ามี config) ----
     if (msg.type === 'alert' && ws.role === 'bot' && ws.playerId) {
       const entry = bots.get(ws.playerId);
-      const playerName = entry?.lastData?.player?.name || ws.playerName || '?';
+      const playerName = cleanPlayerName(entry?.lastData?.player?.name) || ws.playerName || '?';
       const cfg = telegramConfigs[playerName];
       if (cfg && cfg.botToken && cfg.chatId && msg.msg) {
         const text = `<b>${playerName}</b>\n${msg.msg}`;
