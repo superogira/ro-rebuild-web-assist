@@ -2579,6 +2579,7 @@
   // ★★ Flee from players — วาร์ปหนีผู้เล่นไปแผนที่สำรอง
   let fleeMapIdx = 0;
   let fleeCooldownUntil = 0;
+  let lastFleeDebugAt = 0;
   const combatLoop = setInterval(() => {
     const now = nowMs();
     // ★★ Flee from players — ทำงานไม่สน combat on/off (priority สูงสุด)
@@ -2591,6 +2592,12 @@
         }
         if (player.x != null && currentMap) {
           const nearby = countNearbyPlayers(CFG.fleePlayerRadius);
+          // ★ debug log ทุก 5s — เช็คว่าระบบทำงานไหม
+          if (now - (lastFleeDebugAt || 0) > 5000) {
+            lastFleeDebugAt = now;
+            const totalP = [...entities.values()].filter(e => e.kind === 0 && e.id !== playerId && e.alive).length;
+            log('🔍 flee: nearby=' + nearby + ' players=' + totalP + ' r=' + CFG.fleePlayerRadius + ' maps=' + CFG.fleeMaps.length);
+          }
           if (nearby > 0) {
             const next = pickNextFleeMap();
             if (next) {
