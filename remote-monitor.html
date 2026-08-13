@@ -113,6 +113,8 @@
   #chatroom-msg { flex: 1; }
   #chatroom-popup .cr-input button { background: #1a73e8; color: #fff; border: none; border-radius: 6px; padding: 8px 16px; font-size: 12px; cursor: pointer; font-weight: 600; white-space: nowrap; font-family: inherit; }
 
+  /* ★ map click marker pulse */
+  @keyframes crPulse { 0%,100% { transform: translate(-50%,-50%) scale(1); opacity: .8; } 50% { transform: translate(-50%,-50%) scale(1.8); opacity: .3; } }
   /* chat + alert lines */
   .chat-line { padding: 2px 4px; border-bottom: 1px solid #1a1a2a; line-height: 1.4; word-break: break-word; }
   .chat-line .ctype { display: inline-block; padding: 0 3px; border-radius: 2px; font-size: 9px; font-weight: bold; min-width: 28px; text-align: center; margin-right: 3px; }
@@ -564,6 +566,24 @@ function tileToPixel(tx, ty, img) {
   const ratio = img.clientWidth / (img.naturalWidth || 1);
   return { x: (t.scaleX * tx + t.offsetX) * ratio, y: (t.scaleY * ty + t.offsetY) * ratio };
 }
+// ★★ pixelToTile — inverse ของ tileToPixel (คลิกแผนที่ → พิกัด tile)
+function pixelToTile(px, py, img) {
+  if (!_calibData || !_calibData.transform || !img || !img.clientWidth) return null;
+  const t = _calibData.transform;
+  const ratio = img.clientWidth / (img.naturalWidth || 1);
+  const tx = Math.round((px / ratio - t.offsetX) / t.scaleX);
+  const ty = Math.round((py / ratio - t.offsetY) / t.scaleY);
+  return { x: tx, y: ty };
+}
+// ★★ map click marker — แสดงจุดเป้าหมายบนแผนที่
+let _mapClickMarker = null;
+function showMapClickMarker(px, py, box) {
+  if (_mapClickMarker) _mapClickMarker.remove();
+  _mapClickMarker = document.createElement('div');
+  _mapClickMarker.style.cssText = 'position:absolute;left:' + px + 'px;top:' + py + 'px;width:14px;height:14px;border-radius:50%;background:rgba(231,126,34,.6);border:2px solid #e67e22;transform:translate(-50%,-50%);z-index:20;pointer-events:none;animation:crPulse 1s infinite';
+  box.appendChild(_mapClickMarker);
+  setTimeout(() => { if (_mapClickMarker) { _mapClickMarker.remove(); _mapClickMarker = null; } }, 8000);
+}
 
 function renderMap(d) {
   const box = document.getElementById('map-box');
@@ -599,6 +619,8 @@ function renderMap(d) {
     box.innerHTML = '';
     box.appendChild(img);
     renderMapDots(box, img, d);
+    // ★★ wire map click → walk / long-click → warp
+    wireMapClick(box, img);
   };
   img.onerror = () => {
     box.innerHTML = `<div class="map-empty">❌ ไม่มีรูปแผนที่ ${mapName}<br><span style="font-size:9px;color:#555">(รูปจะถูก cache อัตโนมัติเมื่อมีใน repo)</span></div>`;
@@ -698,6 +720,61 @@ function createMapDot(box, x, y, color, size, tooltipHtml, isTarget, z) {
   el.onmouseenter = (e) => showMapTooltip(tooltipHtml, e);
   el.onmouseleave = () => hideMapTooltip();
   box.appendChild(el);
+}
+
+// ★★ wireMapClick — คลิกแผนที่ = เดิน, กดค้าง 500ms = วาร์ป
+function wireMapClick(box, img) {
+  let pressTimer = null;
+  let pressed = false;
+  let longTriggered = false;
+
+  img.onmousedown = (e) => {
+    if (e.button !== 0) return;   // ซ้ายเท่านั้น
+    if (!_calibData || !_calibData.transform) return;   // เฉพาะแมปที่ calibration แล้ว
+    pressed = true;
+    longTriggered = false;
+    const rect = img.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+    // ตรวจเวลากดค้าง 500ms → warp
+    pressTimer = setTimeout(() => {
+      if (!pressed) return;
+      longTriggered = true;
+      const tile = pixelToTile(px, py, img);
+      if (!tile) return;
+      showMapClickMarker(px, py, box);
+      if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({ type: 'command', playerId: playerId, system: 'move', action: 'warp', x: tile.x, y: tile.y }));
+        console.log('[monitor] move warp →', tile.x, tile.y);
+      }
+    }, 500);
+  };
+
+  img.onmouseup = (e) => {
+    pressed = false;
+    if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+    if (longTriggered) return;   // วาร์ปไปแล้ว → ไม่ต้องเดิน
+    if (e.button !== 0) return;
+    if (!_calibData || !_calibData.transform) return;
+    const rect = img.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+    const tile = pixelToTile(px, py, img);
+    if (!tile) return;
+    showMapClickMarker(px, py, box);
+    if (ws && ws.readyState === 1) {
+      ws.send(JSON.stringify({ type: 'command', playerId: playerId, system: 'move', action: 'walk', x: tile.x, y: tile.y }));
+      console.log('[monitor] move walk →', tile.x, tile.y);
+    }
+  };
+
+  img.onmouseleave = () => {
+    pressed = false;
+    if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+  };
+
+  // ★ กัน browser context menu บนแผนที่
+  img.oncontextmenu = (e) => e.preventDefault();
 }
 
 function showMapTooltip(html, e) {

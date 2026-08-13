@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.63.0
+// @version      4.64.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,7 +116,7 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.63.0';
+  const VERSION = '4.64.0';
   const GITHUB_RAW = 'https://raw.githubusercontent.com/superogira/ro-rebuild-web-assist/main/ro-rebuild-web-assist.user.js';
   // ★ Feedback — ส่งปัญหา/ข้อเสนอแนะถึงผู้พัฒนาผ่าน Telegram
   const FEEDBACK_BOT_TOKEN = '7932077955:AAEc2u3FaKLY-6iY6VjseK5_GPJXgYK3ORA';
@@ -2548,8 +2548,12 @@
   }
 
   let combatCooldownUntil = 0;   // ★ หยุด combat ชั่วคราวจนกว่าจะถึงเวลานี้ (post-combat delay)
+  // ★★ Remote walk — คำสั่งเดินจาก remote monitor (คลิกแผนที่)
+  let remoteWalkTarget = null;    // { x, y } — เป้าหมายเดินจาก remote
   const combatLoop = setInterval(() => {
     if (!CFG.combatEnabled) return;
+    // ★★ ถ้ากำลังเดินตามคำสั่ง remote → หยุดตีตอนเดิน
+    if (remoteWalkTarget) return;
     const now = nowMs();
     // ★★ sync player position จาก entities map — fallback สำคัญ!
     //   หลังล็อกอิน server อาจไม่ส่ง pos ของเราโดยตรง → player.x/y เป็น null → bot ยืนนิ่ง
@@ -2957,6 +2961,36 @@
       }
     }
   }, CFG.combatTickMs);
+
+  // ★★ Remote walk loop — เดินไปเป้าหมายจาก remote monitor (คลิกแผนที่)
+  //   เช็คทุก 1s: ระยะเหลือเท่าไหร่ → เดินต่อ 20 ช่องจนถึง
+  const remoteWalkLoop = setInterval(() => {
+    if (!remoteWalkTarget) return;
+    if (!activeWS || activeWS.readyState !== 1) return;
+    const now = nowMs();
+    // sync player position จาก entities map (ถ้ายังไม่มี)
+    if (player.x == null && playerId != null) {
+      const me = entities.get(playerId);
+      if (me && me.x != null) { player.x = me.x; player.y = me.y; }
+    }
+    if (player.x == null) return;   // ยังไม่รู้ตำแหน่ง → รอ
+    // warp guard — รอ pos อัปเดตหลังวาร์ป
+    if (now < warpGuardUntil) return;
+    const dist = Math.hypot(remoteWalkTarget.x - player.x, remoteWalkTarget.y - player.y);
+    if (dist <= 2) {
+      log('📍 ถึงเป้าหมายแล้ว @(', player.x, player.y, ')');
+      remoteWalkTarget = null;
+      return;
+    }
+    // เดินไปทิศทางเป้าหมาย — step ≤ 20 ช่อง
+    const step = Math.min(dist, CFG.walkStepDistance);
+    const angle = Math.atan2(remoteWalkTarget.y - player.y, remoteWalkTarget.x - player.x);
+    const tx = player.x + Math.cos(angle) * step;
+    const ty = player.y + Math.sin(angle) * step;
+    if (sendMove(tx, ty)) {
+      log('🚶 Remote walk: @(', Math.round(tx), Math.round(ty), ') เหลือ', dist.toFixed(0), 'ช่อง');
+    }
+  }, 1000);
 
   // ============================================================
   //  NAVIGATION — บันทึกเส้นทางเดิน + สร้าง waypoint graph
@@ -3892,7 +3926,7 @@
     getImportantLogs() { return importantLogBuf.slice(); },
     clearImportantLogs() { importantLogBuf.length = 0; log('🧹 ล้าง log สำคัญ'); },
     stopAll() {
-      clearInterval(healLoop); clearInterval(lootLoop); clearInterval(warpLoop); clearInterval(combatLoop); clearInterval(sellLoop); clearInterval(storageLoop); clearInterval(buffLoop); clearInterval(consoleClearLoop);
+      clearInterval(healLoop); clearInterval(lootLoop); clearInterval(warpLoop); clearInterval(combatLoop); clearInterval(sellLoop); clearInterval(storageLoop); clearInterval(buffLoop); clearInterval(consoleClearLoop); clearInterval(remoteWalkLoop);
       if (typeof uiLoop !== 'undefined') clearInterval(uiLoop);
       log('⏹ หยุดระบบทั้งหมดแล้ว');
     },
@@ -5659,6 +5693,20 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
           } else {
             updateTelegramStatus('⚠️ ยังไม่ได้ตั้งค่า — กรอก Bot Token + Chat ID แล้วกด บันทึก', '#f39c12');
           }
+        }
+        // ★★ move command จาก remote monitor → เดิน/วาร์ป ไปพิกัด (คลิกแผนที่)
+        else if (m.type === 'command' && m.system === 'move' && m.action && m.x != null && m.y != null) {
+          if (m.action === 'warp') {
+            if (currentMap && sendTeleport(currentMap, m.x, m.y)) {
+              target = null;   // ยกเลิก target เดิม
+              log('🌀 Remote warp → (', m.x, m.y, ')');
+            }
+          } else if (m.action === 'walk') {
+            remoteWalkTarget = { x: m.x, y: m.y };
+            target = null;   // ยกเลิก target เดิม (กัน combat แย่ง)
+            log('🚶 Remote walk → (', m.x, m.y, ')');
+          }
+          try { relayWs.send(JSON.stringify({ type: 'commandAck', system: 'move', action: m.action, ok: true })); } catch (_) {}
         }
         // ★ command จาก remote monitor → toggle on/off หรือ action (sellNow, depositNow)
         else if (m.type === 'command' && m.system && m.action) {
