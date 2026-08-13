@@ -1481,6 +1481,10 @@
             if (v3 > 0 && v3 <= v4) { hp = v3; hpMax = v4; }
           }
           const existing = entities.get(id) || {};
+          // ★★ DEBUG: log SPAWN ของ kind=0 (ผู้เล่น) — เช็คว่า server ส่ง player ผ่าน SPAWN ไหม
+          if (kind === 0 && id !== playerId) {
+            log('👤 SPAWN player: id=' + id.toString(16) + ' name="' + name + '" @(' + x + ',' + y + ') flag=' + flag);
+          }
           entities.set(id, {
             id, kind, sub, name,
             x: x != null ? x : (existing.x != null ? existing.x : null),
