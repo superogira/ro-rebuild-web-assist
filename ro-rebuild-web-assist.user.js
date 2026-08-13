@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.50.0
+// @version      4.51.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,7 +116,7 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.50.0';
+  const VERSION = '4.51.0';
   const GITHUB_RAW = 'https://raw.githubusercontent.com/superogira/ro-rebuild-web-assist/main/ro-rebuild-web-assist.user.js';
   const CFG_STORAGE_KEY = 'roAssistConfig_v1';
   // keys ที่บันทึก/โหลด (boolean/number/array/string — ไม่เก็บ function หรือ object ซ้อน)
@@ -445,6 +445,7 @@
     warpToMonsterMaxPerEntity: 2,
     stuckWarpOnAbandon: 0,        // abandon 3 ครั้งใน 60s → วาร์ปสุ่ม
     warpToBoss: false,            // ★ วาร์ปไปสู้ mini-boss เมื่อตรวจจับได้ (toggle, default OFF)
+    bossAlertRadius: 0,           // ★ ระยะที่จะ alert mini-boss (0 = ทุกระยะ)
     bossAlertRadius: 0,           // ★ ระยะที่จะ alert boss (0 = ทุกระยะ, เช่น 50 = ภายใน 50 ช่อง)
     // หามอน
     wanderEnabled: true,          // ไม่เจอมอน → สุ่มเดิน
@@ -1213,10 +1214,10 @@
             // ★ warp portal → track as entity kind=2 (NPC) + _isWarp flag
             entities.set(eid, { id: eid, kind: 2, x: ex, y: ey, alive: true, _lastSeenAt: now, _isWarp: true, name: 'Warp' });
           } else if (eflag === 1 || eflag === 3) {
-            // ★ boss/player position (same as sub=1 single)
+            // ★ mini boss/player position
             let m = entities.get(eid);
-            if (m) { m.x = ex; m.y = ey; m._lastSeenAt = now; m._isBoss = true; }
-            else { entities.set(eid, { id: eid, kind: 1, x: ex, y: ey, alive: true, _lastSeenAt: now, _isBoss: true, name: 'Boss' }); }
+            if (m) { m.x = ex; m.y = ey; m._lastSeenAt = now; m._isMiniBoss = true; }
+            else { entities.set(eid, { id: eid, kind: 1, x: ex, y: ey, alive: true, _lastSeenAt: now, _isMiniBoss: true, name: 'Mini Boss' }); }
           }
         }
       } else if (sub === 1 && u.length >= 12) {
@@ -1226,20 +1227,20 @@
         const flag = u[11];
         if (id && x >= -500 && x <= 1000 && y >= -500 && y <= 1000 && (flag === 1 || flag === 3)) {
           let m = entities.get(id);
-          if (m) { m.x = x; m.y = y; m._lastSeenAt = now; m._isBoss = true; }
-          else { m = { id, kind: 1, x, y, alive: true, _lastSeenAt: now, _isBoss: true, name: 'Boss' }; entities.set(id, m); }
-          // ★ alert boss (ครั้งเดียวต่อ entity ID)
+          if (m) { m.x = x; m.y = y; m._lastSeenAt = now; m._isMiniBoss = true; }
+          else { m = { id, kind: 1, x, y, alive: true, _lastSeenAt: now, _isMiniBoss: true, name: 'Mini Boss' }; entities.set(id, m); }
+          // ★ alert mini boss (ครั้งเดียวต่อ entity ID — แต่ล้างเมื่อตาย/หายไป 2 นาที เพื่อ alert ใหม่ตอนเกิดใหม่)
           if (!bossAlertedIds.has(id)) {
             bossAlertedIds.add(id);
             const dist = (player.x != null) ? Math.hypot(x - player.x, y - player.y).toFixed(0) : '?';
-            log('👑 ตรวจจับ Boss! entity', id.toString(16), '@(', x, y, ') ห่าง', dist, 'ช่อง');
-            logImportant('card', '👑 ตรวจจับ Boss ที่ (' + x + ', ' + y + ') ห่าง ' + dist + ' ช่อง');
+            log('👹 ตรวจจับ Mini Boss! entity', id.toString(16), '@(', x, y, ') ห่าง', dist, 'ช่อง');
+            logImportant('card', '👹 ตรวจจับ Mini Boss ที่ (' + x + ', ' + y + ') ห่าง ' + dist + ' ช่อง');
           }
-          // ★ auto-warp to boss (ถ้าเปิด toggle)
+          // ★ auto-warp to mini boss (ถ้าเปิด toggle)
           if (CFG.warpToBoss && player.x != null && now - lastBossWarpAt > 10000) {
             const d = Math.hypot(x - player.x, y - player.y);
             if (d > 10) {
-              log('👑 วาร์ปไปสู้ Boss @(', x, y, ') ห่าง', d.toFixed(0), 'ช่อง');
+              log('👹 วาร์ปไปสู้ Mini Boss @(', x, y, ') ห่าง', d.toFixed(0), 'ช่อง');
               sendTeleport(currentMap, x, y);
               lastBossWarpAt = now;
             }
@@ -1617,7 +1618,11 @@
     else if (op === 0x0f && u.length >= 6 && u[5] === 3) {
       const id = u32(u, 1);
       const e = entities.get(id);
-      if (e) { e.alive = false; }
+      if (e) {
+        e.alive = false;
+        // ★ ถ้าเป็น mini boss ที่ตาย → ล้าง bossAlertedIds เพื่อ alert ใหม่ตอนเกิดใหม่
+        if (e._isMiniBoss) { bossAlertedIds.delete(id); log('👹 Mini Boss ตาย — จะ alert ใหม่เมื่อเกิดใหม่'); }
+      }
       entities.delete(id);
       // ★ นับ kill — ถ้าเป็นมอน (kind=1) และเรามี target หรือ mobAttacker ตัวนี้
       if (e && e.kind === 1) {
@@ -4504,7 +4509,7 @@
             </div>
             <div class="field"><label>stuck abandon N ครั้งใน 60s → วาร์ปสุ่ม (0=ปิด)</label><input type="number" id="__assist_stuckwarp" min="0" max="20"></div>
             <div class="btns">
-              <button id="__assist_t_warptoboss" class="off">👑 วาร์ปไปสู้ Boss</button>
+              <button id="__assist_t_warptoboss" class="off">👹 วาร์ปไปสู้ Mini Boss</button>
             </div>
             <div class="btns"><button id="__assist_applycombat">ใช้ค่า combat</button></div>
           </div>
@@ -4873,7 +4878,7 @@
       const sw = parseInt(root.querySelector('#__assist_stuckwarp').value, 10);
       if (!isNaN(sw)) { CFG.stuckWarpOnAbandon = sw; log('⚔️ stuck abandon → วาร์ปสุ่ม =', sw === 0 ? 'ปิด' : sw + 'ครั้ง'); }
     });
-    root.querySelector('#__assist_t_warptoboss').addEventListener('click', () => { CFG.warpToBoss = !CFG.warpToBoss; saveConfigDebounced(); log('👑 วาร์ปไปสู้ Boss:', CFG.warpToBoss ? 'เปิด' : 'ปิด'); });
+    root.querySelector('#__assist_t_warptoboss').addEventListener('click', () => { CFG.warpToBoss = !CFG.warpToBoss; saveConfigDebounced(); log('👹 วาร์ปไปสู้ Mini Boss:', CFG.warpToBoss ? 'เปิด' : 'ปิด'); });
     // ---- flee wires (แยกจาก combat) ----
     root.querySelector('#__assist_applyflee').addEventListener('click', () => {
       const fm = parseInt(root.querySelector('#__assist_fleemob').value, 10);
@@ -5212,7 +5217,7 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
           }
           // จำกัดจำนวน (กัน payload ใหญ่เกิน)
           if (out.length >= 50) break;
-          out.push({ id: e.id.toString(16), kind: e.kind || 0, x: e.x, y: e.y, name: e.name || '', hp: e.hp, hpMax: e.hpMax, isBoss: !!e._isBoss, isWarp: !!e._isWarp });
+          out.push({ id: e.id.toString(16), kind: e.kind || 0, x: e.x, y: e.y, name: e.name || '', hp: e.hp, hpMax: e.hpMax, isBoss: !!e._isMiniBoss, isWarp: !!e._isWarp });
         }
         return out;
       })(),
