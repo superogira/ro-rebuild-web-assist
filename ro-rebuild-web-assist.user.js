@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.59.0
+// @version      4.60.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,7 +116,7 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.59.0';
+  const VERSION = '4.60.0';
   const GITHUB_RAW = 'https://raw.githubusercontent.com/superogira/ro-rebuild-web-assist/main/ro-rebuild-web-assist.user.js';
   // ★ Feedback — ส่งปัญหา/ข้อเสนอแนะถึงผู้พัฒนาผ่าน Telegram
   const FEEDBACK_BOT_TOKEN = '7932077955:AAEc2u3FaKLY-6iY6VjseK5_GPJXgYK3ORA';
@@ -2549,6 +2549,13 @@
   const combatLoop = setInterval(() => {
     if (!CFG.combatEnabled) return;
     const now = nowMs();
+    // ★★ sync player position จาก entities map — fallback สำคัญ!
+    //   หลังล็อกอิน server อาจไม่ส่ง pos ของเราโดยตรง → player.x/y เป็น null → bot ยืนนิ่ง
+    //   แต่ SPAWN สร้าง entity ของเราไว้ใน map แล้ว → ดึง pos จากนั้น
+    if (player.x == null && playerId != null) {
+      const me = entities.get(playerId);
+      if (me && me.x != null) { player.x = me.x; player.y = me.y; }
+    }
     // ★★★ AUTO-RESPAWN — priority สูงสุด: ถ้าตาย → respawn กลับจุด save (mirror bot.js:1404-1406)
     if (isDead) {
       if (CFG.autoRespawnEnabled && activeWS && activeWS.readyState === 1) {
@@ -5172,7 +5179,9 @@
     });
     root.querySelector('#__assist_clearlog').addEventListener('click', () => ASSIST.clearLogs());
     // ★ คัดลอก log — ใช้ navigator.clipboard ถ้าได้ ไม่งั้นใช้ textarea fallback
-    root.querySelector('#__assist_copylog').addEventListener('click', () => {
+    root.querySelector('#__assist_copylog').addEventListener('click', (e) => {
+      // ★ stopPropagation — กัน Unity ตอบสนองต่อ click นี้
+      e.stopPropagation(); if (e.stopImmediatePropagation) e.stopImmediatePropagation();
       const logs = ASSIST.getLogs();
       if (!logs.length) { log('⚠️ ไม่มี log ให้คัดลอก'); return; }
       const text = logs.map(l => {
@@ -5180,20 +5189,20 @@
         const ts = d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0')+':'+d.getSeconds().toString().padStart(2,'0');
         return `[${ts}] ${l.msg}`;
       }).join('\n');
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(
-          () => { log('📋 คัดลอก log แล้ว (' + logs.length + ' บรรทัด) — ไปวางได้เลย'); },
-          () => { fallbackCopy(text); }
-        );
-      } else { fallbackCopy(text); }
-      function fallbackCopy(txt) {
-        const ta = document.createElement('textarea');
-        ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
-        document.body.appendChild(ta); ta.select();
-        try { document.execCommand('copy'); log('📋 คัดลอก log แล้ว (' + logs.length + ' บรรทัด)'); }
-        catch (_) { log('❌ คัดลอกไม่สำเร็จ — ลองเลือกข้อความเอง'); }
-        document.body.removeChild(ta);
-      }
+      // ★ ใช้ execCommand('copy') แบบ synchronous — ทำทันทีใน click handler
+      //   navigator.clipboard.writeText() เป็น async → Unity ขโมย focus ระหว่างรอ → ล้มเงียบ
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;top:0;left:0;width:2em;height:2em;padding:0;border:none;outline:none;box-shadow:none;background:transparent;font-size:1px;opacity:0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      ta.setSelectionRange(0, text.length);
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (_) {}
+      document.body.removeChild(ta);
+      if (ok) log('📋 คัดลอก log แล้ว (' + logs.length + ' บรรทัด) — ไปวางได้เลย');
+      else log('❌ คัดลอกไม่สำเร็จ — คลิกที่ logbox + Ctrl+A แล้ว Ctrl+C เอง');
     });
     root.querySelector('#__assist_clearalert')?.addEventListener('click', () => ASSIST.clearImportantLogs());
     const updBtn = root.querySelector('#__assist_updatebtn');
