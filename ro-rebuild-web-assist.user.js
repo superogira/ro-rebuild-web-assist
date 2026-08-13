@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.54.0
+// @version      4.55.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,7 +116,7 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.54.0';
+  const VERSION = '4.55.0';
   const GITHUB_RAW = 'https://raw.githubusercontent.com/superogira/ro-rebuild-web-assist/main/ro-rebuild-web-assist.user.js';
   const CFG_STORAGE_KEY = 'roAssistConfig_v1';
   // keys ที่บันทึก/โหลด (boolean/number/array/string — ไม่เก็บ function หรือ object ซ้อน)
@@ -1218,11 +1218,16 @@
             let m = entities.get(eid);
             if (m) { m.x = ex; m.y = ey; m._lastSeenAt = now; m._isBoss = true; }
             else { entities.set(eid, { id: eid, kind: 1, x: ex, y: ey, alive: true, _lastSeenAt: now, _isBoss: true, name: 'Boss' }); }
-          } else if (eflag === 1 || eflag === 3) {
-            // ★ flag=1/3 = Mini Boss → track as _isMiniBoss
+          } else if (eflag === 3) {
+            // ★ flag=3 = Mini Boss
             let m = entities.get(eid);
             if (m) { m.x = ex; m.y = ey; m._lastSeenAt = now; m._isMiniBoss = true; }
             else { entities.set(eid, { id: eid, kind: 1, x: ex, y: ey, alive: true, _lastSeenAt: now, _isMiniBoss: true, name: 'Mini Boss' }); }
+          } else if (eflag === 1) {
+            // ★ flag=1 = ผู้เล่นหรือมินิบอส (แยกไม่ได้) → อัปเดตแค่ตำแหน่ง ไม่ mark เป็น boss
+            let m = entities.get(eid);
+            if (m) { m.x = ex; m.y = ey; m._lastSeenAt = now; }
+            // entity ใหม่ → ไม่สร้าง (รอ SPAWN มาบอก kind ก่อน)
           }
         }
       } else if (sub === 1 && u.length >= 12) {
@@ -1231,31 +1236,39 @@
         const x = i16(u, 7), y = i16(u, 9);
         const flag = u[11];
         if (id && x >= -500 && x <= 1000 && y >= -500 && y <= 1000 && (flag === 1 || flag === 3 || flag === 4)) {
-          const isRealBoss = (flag === 4);
-          let m = entities.get(id);
-          if (isRealBoss) {
-            if (m) { m.x = x; m.y = y; m._lastSeenAt = now; m._isBoss = true; }
-            else { m = { id, kind: 1, x, y, alive: true, _lastSeenAt: now, _isBoss: true, name: 'Boss' }; entities.set(id, m); }
+          if (flag === 1) {
+            // ★ flag=1 = ผู้เล่นหรือมินิบอส (แยกไม่ได้) → อัปเดตแค่ตำแหน่ง ไม่ mark/alert
+            let m = entities.get(id);
+            if (m) { m.x = x; m.y = y; m._lastSeenAt = now; }
+            // entity ใหม่ → ไม่สร้าง (รอ SPAWN มาบอก kind ก่อน)
           } else {
-            if (m) { m.x = x; m.y = y; m._lastSeenAt = now; m._isMiniBoss = true; }
-            else { m = { id, kind: 1, x, y, alive: true, _lastSeenAt: now, _isMiniBoss: true, name: 'Mini Boss' }; entities.set(id, m); }
-          }
-          // ★ alert (ครั้งเดียวต่อ entity ID — ล้างเมื่อตาย/หายไป เพื่อ alert ใหม่ตอนเกิดใหม่)
-          if (!bossAlertedIds.has(id)) {
-            bossAlertedIds.add(id);
-            const dist = (player.x != null) ? Math.hypot(x - player.x, y - player.y).toFixed(0) : '?';
-            const label = isRealBoss ? '👑 Boss' : '👹 Mini Boss';
-            log(label + '! entity', id.toString(16), '@(', x, y, ') ห่าง', dist, 'ช่อง');
-            logImportant('card', label + ' ที่ (' + x + ', ' + y + ') ห่าง ' + dist + ' ช่อง');
-          }
-          // ★ auto-warp to boss/mini boss (ถ้าเปิด toggle)
-          if (CFG.warpToBoss && player.x != null && now - lastBossWarpAt > 10000) {
-            const d = Math.hypot(x - player.x, y - player.y);
-            if (d > 10) {
+            // ★ flag=3 = Mini Boss, flag=4 = Boss
+            const isRealBoss = (flag === 4);
+            let m = entities.get(id);
+            if (isRealBoss) {
+              if (m) { m.x = x; m.y = y; m._lastSeenAt = now; m._isBoss = true; }
+              else { m = { id, kind: 1, x, y, alive: true, _lastSeenAt: now, _isBoss: true, name: 'Boss' }; entities.set(id, m); }
+            } else {
+              if (m) { m.x = x; m.y = y; m._lastSeenAt = now; m._isMiniBoss = true; }
+              else { m = { id, kind: 1, x, y, alive: true, _lastSeenAt: now, _isMiniBoss: true, name: 'Mini Boss' }; entities.set(id, m); }
+            }
+            // ★ alert (ครั้งเดียวต่อ entity ID)
+            if (!bossAlertedIds.has(id)) {
+              bossAlertedIds.add(id);
+              const dist = (player.x != null) ? Math.hypot(x - player.x, y - player.y).toFixed(0) : '?';
               const label = isRealBoss ? '👑 Boss' : '👹 Mini Boss';
-              log(label + ' → วาร์ปไปสู้ @(', x, y, ') ห่าง', d.toFixed(0), 'ช่อง');
-              sendTeleport(currentMap, x, y);
-              lastBossWarpAt = now;
+              log(label + '! entity', id.toString(16), '@(', x, y, ') ห่าง', dist, 'ช่อง');
+              logImportant('card', label + ' ที่ (' + x + ', ' + y + ') ห่าง ' + dist + ' ช่อง');
+            }
+            // ★ auto-warp (ถ้าเปิด toggle)
+            if (CFG.warpToBoss && player.x != null && now - lastBossWarpAt > 10000) {
+              const d = Math.hypot(x - player.x, y - player.y);
+              if (d > 10) {
+                const label = isRealBoss ? '👑 Boss' : '👹 Mini Boss';
+                log(label + ' → วาร์ปไปสู้ @(', x, y, ') ห่าง', d.toFixed(0), 'ช่อง');
+                sendTeleport(currentMap, x, y);
+                lastBossWarpAt = now;
+              }
             }
           }
         }
