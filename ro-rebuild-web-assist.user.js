@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.58.0
+// @version      4.59.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,7 +116,7 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.58.0';
+  const VERSION = '4.59.0';
   const GITHUB_RAW = 'https://raw.githubusercontent.com/superogira/ro-rebuild-web-assist/main/ro-rebuild-web-assist.user.js';
   // ★ Feedback — ส่งปัญหา/ข้อเสนอแนะถึงผู้พัฒนาผ่าน Telegram
   const FEEDBACK_BOT_TOKEN = '7932077955:AAEc2u3FaKLY-6iY6VjseK5_GPJXgYK3ORA';
@@ -827,10 +827,17 @@
     writeI16LE(b, p, Math.round(y)); p += 2;
     b[p] = 0x00;
     activeWS.send(b);
-    // ★ ตั้ง warp guard — หลังวาร์ป player.x/y จะค้างจนกว่า server จะส่ง MOVE_UPDATE ใหม่
-    //   combatLoop จะรอจนกว่า player pos จะเปลี่ยนจากก่อนวาร์ป ก่อนคำนวณ dist/ตี
-    warpGuardUntil = nowMs() + 3000;          // หมดเวลา 3s กันค้าง (ถ้า server ไม่ส่ง pos ใหม่)
-    lastWarpPlayerPos = (player.x != null) ? { x: player.x, y: player.y } : null;
+    // ★★★ อัปเดต player.x/y หลังวาร์ป — กันตำแหน่งค้างตลอดกาล
+    //   กรณี 1: วาร์ปไปพิกัดเฉพาะ (x,y ≠ -999) → อัปเดตทันที (เรารู้ปลายทาง)
+    //   กรณี 2: วาร์ปสุ่ม (-999) → null ตำแหน่ง (ไม่รู้ปลายทาง → รอ server ส่ง pos ใหม่)
+    if (x !== -999 && y !== -999 && x >= -500 && x <= 1000 && y >= -500 && y <= 1000) {
+      player.x = Math.round(x); player.y = Math.round(y);
+      warpGuardUntil = 0; lastWarpPlayerPos = null;   // รู้พิกัด → ไม่ต้อง guard
+    } else {
+      // วาร์ปสุ่ม → ตั้ง guard รอ server ส่ง pos ใหม่ (หมดเวลา 3s)
+      warpGuardUntil = nowMs() + 3000;
+      lastWarpPlayerPos = (player.x != null) ? { x: player.x, y: player.y } : null;
+    }
     return true;
   }
 
@@ -1403,6 +1410,9 @@
               // ★ grace period 3s — ข้าม STAT HP ที่อาจผิดหลัง ID เปลี่ยน (mirror world.js:1265)
               hpStatGraceUntil = nowMs() + 3000;
               hp.cur = null; hp.max = null;   // reset กันค่าเก่าทับ
+              // ★★ รีเซ็ตตำแหน่ง — ID เปลี่ยน = อยู่ที่ใหม่แน่ๆ ตำแหน่งเดิมใช้ไม่ได้แล้ว
+              player.x = null; player.y = null;
+              warpGuardUntil = nowMs() + 3000; lastWarpPlayerPos = null;
             }
           }
         }
@@ -1697,8 +1707,16 @@
     // ★ ดัก click-move (0x07) ของผู้เล่น → บันทึก trail (ถ้า navRecording=on)
     //   บอทสั่งเอง (sendMove) จะตั้ง navBotMoving=true ก่อน → ข้ามไม่บันทึก
     if (u[0] === 0x07 && u.length >= 5) {
+      const mx = i16(u, 1), my = i16(u, 3);
+      // ★★★ อัปเดต player.x/y จาก outgoing MOVE — สำคัญมาก!
+      //   เกมส่ง move packet = player กำลังไปที่ (mx,my) → อัปเดตทันที
+      //   แก้ปัญหาตำแหน่งค้างหลังวาร์ป (server ไม่ส่ง pos กลับ)
+      if (mx >= -500 && mx <= 1000 && my >= -500 && my <= 1000) {
+        player.x = mx; player.y = my;
+        warpGuardUntil = 0; lastWarpPlayerPos = null;   // ★ เคลียร์ warp guard (pos อัปเดตแล้ว)
+      }
       if (!navBotMoving && CFG.navRecording) {
-        navRecordMove(i16(u, 1), i16(u, 3));
+        navRecordMove(mx, my);
       }
       navBotMoving = false;   // reset flag (บอทสั่งครั้งเดียว)
     }
@@ -2671,6 +2689,14 @@
       warpGuardUntil = 0;
       lastWarpPlayerPos = null;
     }
+    // ★★ หลังหมดเวลา warp guard (3s) — ถ้าตำแหน่งยังเดิม → null ทิ้ง กันใช้ค่าเก่าไปตลอด
+    //   ถ้าใช้ค่าเก่า → bot จะคำนวณ dist ผิด → ไม่เจอมอน → วาร์ปสุ่มซ้ำๆ → ตำแหน่งค้างตลอด
+    if (now >= warpGuardUntil && lastWarpPlayerPos && player.x === lastWarpPlayerPos.x && player.y === lastWarpPlayerPos.y) {
+      log('⚠️ ตำแหน่งค้างหลังวาร์ป 3s → รอ server ส่ง pos ใหม่');
+      player.x = null; player.y = null;
+      lastWarpPlayerPos = null;
+      return;
+    }
 
     // === 1b. Defensive retarget === ถ้าโดนมอนตี (ที่ไม่ใช่ target ปัจจุบัน) → สลับมาตีตัวนั้น
     //   สำคัญ: ถ้ามอน aggro เรา ต้องสู้กลับ ไม่ใช่เดินหาตัวอื่น
@@ -2876,7 +2902,8 @@
       if (!noMonsterSince) noMonsterSince = now;
       const noMonSec = (now - noMonsterSince) / 1000;
       // warp-find — มี cooldown กัน spam (วาร์ป fail ก็ต้องรอ ไม่ยิงทุก tick)
-      if (CFG.warpFindEnabled && noMonSec >= CFG.noMonsterWarpSec && now - lastWarpFindAt > 3000) {
+      // ★★ ห้ามวาร์ปถ้า player.x == null (ตำแหน่งค้าง/ไม่รู้ตำแหน่ง → วาร์ปไปก็ไม่รู้ว่าได้ผลไหม)
+      if (CFG.warpFindEnabled && noMonSec >= CFG.noMonsterWarpSec && now - lastWarpFindAt > 3000 && player.x != null) {
         lastWarpFindAt = now;
         if (currentMap) {
           log('🌀 ไม่เจอมอน', noMonSec.toFixed(0) + 's → วาร์ปสุ่ม');
@@ -5344,8 +5371,13 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
         const nowA = nowMs();
         const out = [];
         const seen = new Set();
-        // เป้าหมายปัจจุบันก่อน
-        if (tgt) { out.push({ id: tgt.id, name: tgt.name || tgt.id?.toString(16), hp: tgt.hp, hpMax: tgt.hpMax, isTarget: true }); seen.add(tgt.id); }
+        // เป้าหมายปัจจุบันก่อน — ★ resolve entity จริงเพื่อเอา name/hp (tgt.id เป็น hex string)
+        if (tgt) {
+          const tid = parseInt(tgt.id, 16);
+          const m = entities.get(tid);
+          out.push({ id: tid, name: (m && m.name) || tgt.id, hp: m ? m.hp : null, hpMax: m ? m.hpMax : null, isTarget: true });
+          seen.add(tid);
+        }
         for (const [id, t] of mobAttackers) {
           if (seen.has(id)) continue;
           if (nowA - t >= CFG.fleeMobWindowMs) continue;
