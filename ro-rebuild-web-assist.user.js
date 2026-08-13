@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.70.0
+// @version      4.71.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,7 +116,7 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.70.0';
+  const VERSION = '4.71.0';
   const GITHUB_RAW = 'https://raw.githubusercontent.com/superogira/ro-rebuild-web-assist/main/ro-rebuild-web-assist.user.js';
   // ★ Feedback — ส่งปัญหา/ข้อเสนอแนะถึงผู้พัฒนาผ่าน Telegram
   const FEEDBACK_BOT_TOKEN = '7932077955:AAEc2u3FaKLY-6iY6VjseK5_GPJXgYK3ORA';
@@ -914,7 +914,10 @@
       } else {
         const e = entities.get(id);
         if (e) { e.x = x; e.y = y; e._lastSeenAt = nowMs(); }
-        else { entities.set(id, { id, kind: 1, x, y, alive: true, _lastSeenAt: nowMs() }); }   // assume monster
+        // ★★ entity ใหม่จาก MOVE_UPDATE ที่ไม่เคย SPAWN = ผู้เล่นคนอื่น
+        //   (monster/NPC จะได้ SPAWN ก่อนเสมอ — server ไม่ส่ง SPAWN สำหรับผู้เล่นคนอื่น)
+        //   ถ้าเป็น monster จริงๆ SPAWN จะมาแก้ kind=1 ภายหลัง
+        else { entities.set(id, { id, kind: 0, x, y, alive: true, _lastSeenAt: nowMs(), name: '' }); }
       }
     }
     // 0x0b ATTACK_RESULT: ถ้าตัวเราเป็นคนตี → กำลังสู้
