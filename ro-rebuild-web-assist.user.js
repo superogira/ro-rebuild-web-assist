@@ -1219,6 +1219,13 @@
     else if (op === 0x3c && u.length >= 3) {
       const sub = u16(u, 1);
       const now = nowMs();
+      // ★★ DEBUG: log 0x3c packets เพื่อดูว่ามี player data มาไหม
+      if (now - (last3cDebugAt || 0) > 3000) {
+        last3cDebugAt = now;
+        const flags = [];
+        if (sub === 7) { let pp = 3; while (pp + 9 <= u.length) { flags.push(u[pp+8]); pp += 9; } }
+        log('📡 0x3c sub=' + sub + ' len=' + u.length + ' flags=[' + flags.join(',') + ']');
+      }
       if (sub === 7 && u.length >= 5) {
         // ★ sub=7: multi-entity list (warp portals + positions)
         //   format: [3c][0700] then repeating [id:4][x:2][y:2][flag:1] (9 bytes each)
@@ -2581,6 +2588,7 @@
   let fleeMapIdx = 0;
   let fleeCooldownUntil = 0;
   let lastFleeDebugAt = 0;
+  let last3cDebugAt = 0;
   const combatLoop = setInterval(() => {
     const now = nowMs();
     // ★★ Flee from players — ทำงานไม่สน combat on/off (priority สูงสุด)
