@@ -291,13 +291,17 @@ wss.on('connection', (ws, req) => {
       return;
     }
 
-    // ---- Monitor client → command (toggle on/off) ไป bot ----
+    // ---- Monitor client → command (toggle on/off / move) ไป bot ----
     if (msg.type === 'command' && msg.playerId && ws.role === 'monitor') {
       const entry = bots.get(String(msg.playerId));
       if (entry && entry.botWs && entry.botWs.readyState === 1) {
         // ★ ฝัง sourceMonitorId เพื่อ forward ack กลับไป monitor ที่สั่ง
-        entry.botWs.send(JSON.stringify({ type: 'command', system: msg.system, action: msg.action, _fromMonitor: ws._monitorId || null }));
-        log(`🎮 Command → bot ${msg.playerId}: ${msg.system} ${msg.action}`);
+        // ★★ forward x, y ด้วย (สำหรับ move command — คลิกแผนที่)
+        const fwd = { type: 'command', system: msg.system, action: msg.action, _fromMonitor: ws._monitorId || null };
+        if (msg.x != null) fwd.x = msg.x;
+        if (msg.y != null) fwd.y = msg.y;
+        entry.botWs.send(JSON.stringify(fwd));
+        log(`🎮 Command → bot ${msg.playerId}: ${msg.system} ${msg.action}` + (msg.x != null ? ` (${msg.x},${msg.y})` : ''));
       }
       return;
     }
