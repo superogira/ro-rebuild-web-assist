@@ -661,7 +661,7 @@ function renderMapDots(box, img, d) {
     } else if (e.kind === 2) {
       html = `<b style="color:#4caf50">🟢 ${escapeHtml(e.name || 'NPC')}</b><br><span style="color:#888">(${Math.round(e.x)},${Math.round(e.y)})</span>`;
     } else {
-      html = `<b style="color:#aaa">${escapeHtml(e.name || 'ผู้เล่น')}</b><br><span style="color:#888">(${Math.round(e.x)},${Math.round(e.y)})</span>`;
+      html = `<b style="color:#aaa">👤 ${escapeHtml(e.name || 'ผู้เล่น')}</b><br><span style="color:#888">(${Math.round(e.x)},${Math.round(e.y)})</span>`;
     }
 
     createMapDot(box, p.x, p.y, color, size, html, isTarget, isTarget ? 6 : 4);

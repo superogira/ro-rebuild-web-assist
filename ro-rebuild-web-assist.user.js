@@ -1224,10 +1224,10 @@
             if (m) { m.x = ex; m.y = ey; m._lastSeenAt = now; m._isMiniBoss = true; }
             else { entities.set(eid, { id: eid, kind: 1, x: ex, y: ey, alive: true, _lastSeenAt: now, _isMiniBoss: true, name: 'Mini Boss' }); }
           } else if (eflag === 1) {
-            // ★ flag=1 = ผู้เล่นหรือมินิบอส (แยกไม่ได้) → อัปเดตแค่ตำแหน่ง ไม่ mark เป็น boss
+            // ★ flag=1 = ผู้เล่นอื่นบนแมป (minimap marker) → track เป็น kind=0
             let m = entities.get(eid);
             if (m) { m.x = ex; m.y = ey; m._lastSeenAt = now; }
-            // entity ใหม่ → ไม่สร้าง (รอ SPAWN มาบอก kind ก่อน)
+            else { entities.set(eid, { id: eid, kind: 0, x: ex, y: ey, alive: true, _lastSeenAt: now, name: '' }); }
           }
         }
       } else if (sub === 1 && u.length >= 12) {
@@ -1237,10 +1237,10 @@
         const flag = u[11];
         if (id && x >= -500 && x <= 1000 && y >= -500 && y <= 1000 && (flag === 1 || flag === 3 || flag === 4)) {
           if (flag === 1) {
-            // ★ flag=1 = ผู้เล่นหรือมินิบอส (แยกไม่ได้) → อัปเดตแค่ตำแหน่ง ไม่ mark/alert
+            // ★ flag=1 = ผู้เล่นอื่นบนแมป (minimap marker) → track เป็น kind=0
             let m = entities.get(id);
             if (m) { m.x = x; m.y = y; m._lastSeenAt = now; }
-            // entity ใหม่ → ไม่สร้าง (รอ SPAWN มาบอก kind ก่อน)
+            else { entities.set(id, { id, kind: 0, x, y, alive: true, _lastSeenAt: now, name: '' }); }
           } else {
             // ★ flag=3 = Mini Boss, flag=4 = Boss
             const isRealBoss = (flag === 4);
