@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.64.0
+// @version      4.65.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,7 +116,7 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.64.0';
+  const VERSION = '4.65.0';
   const GITHUB_RAW = 'https://raw.githubusercontent.com/superogira/ro-rebuild-web-assist/main/ro-rebuild-web-assist.user.js';
   // ★ Feedback — ส่งปัญหา/ข้อเสนอแนะถึงผู้พัฒนาผ่าน Telegram
   const FEEDBACK_BOT_TOKEN = '7932077955:AAEc2u3FaKLY-6iY6VjseK5_GPJXgYK3ORA';
@@ -2973,7 +2973,14 @@
       const me = entities.get(playerId);
       if (me && me.x != null) { player.x = me.x; player.y = me.y; }
     }
-    if (player.x == null) return;   // ยังไม่รู้ตำแหน่ง → รอ
+    // ★★ ถ้ายังไม่รู้ตำแหน่ง → ส่ง move ตรงไปเป้าหมายเลย
+    //   outgoing 0x07 จะอัปเดต player.x/y → tick ถัดไปจะคำนวณระยะได้
+    if (player.x == null) {
+      if (sendMove(remoteWalkTarget.x, remoteWalkTarget.y)) {
+        log('🚶 Remote walk (pos ยังไม่รู้ → ส่งตรงไปเป้าหมาย)');
+      }
+      return;
+    }
     // warp guard — รอ pos อัปเดตหลังวาร์ป
     if (now < warpGuardUntil) return;
     const dist = Math.hypot(remoteWalkTarget.x - player.x, remoteWalkTarget.y - player.y);
@@ -5707,6 +5714,24 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
             log('🚶 Remote walk → (', m.x, m.y, ')');
           }
           try { relayWs.send(JSON.stringify({ type: 'commandAck', system: 'move', action: m.action, ok: true })); } catch (_) {}
+        }
+        // ★★ attack command จาก remote monitor → โจมตีมอนที่คลิก (คลิก dot บนแผนที่)
+        else if (m.type === 'command' && m.system === 'attack' && m.action === 'target' && m.targetId != null) {
+          const eid = typeof m.targetId === 'string' ? parseInt(m.targetId, 16) : Number(m.targetId);
+          const m2 = entities.get(eid);
+          if (m2 && m2.alive && m2.x != null) {
+            // ยกเลิก remote walk (ถ้ากำลังเดินอยู่)
+            remoteWalkTarget = null;
+            // ตั้งเป็น target ใหม่
+            target = { id: eid, x: m2.x, y: m2.y, acquiredAt: nowMs(), engageAt: 0, lastAttackAt: 0, lastAttackResultAt: 0, pendingAttacks: 0, firstAttackAt: 0, stuckCount: 0, warpCount: 0 };
+            lastTargetSwitchAt = nowMs();
+            // เปิด combat ให้อัตโนมัติ (ถ้ายังปิดอยู่)
+            if (!CFG.combatEnabled) { CFG.combatEnabled = true; log('⚔️ Auto-Combat: ON (จาก remote attack)'); }
+            log('🎯 Remote attack →', m2.name || eid.toString(16), '@(', m2.x, m2.y, ')');
+          } else {
+            log('⚠️ Remote attack: ไม่พบมอน ID', m.targetId);
+          }
+          try { relayWs.send(JSON.stringify({ type: 'commandAck', system: 'attack', action: 'target', ok: !!m2 })); } catch (_) {}
         }
         // ★ command จาก remote monitor → toggle on/off หรือ action (sellNow, depositNow)
         else if (m.type === 'command' && m.system && m.action) {

@@ -704,12 +704,12 @@ function renderMapDots(box, img, d) {
       html = `<b style="color:#aaa">👤 ${escapeHtml(e.name || 'ผู้เล่น')}</b><br><span style="color:#888">(${Math.round(e.x)},${Math.round(e.y)})</span>`;
     }
 
-    createMapDot(box, p.x, p.y, color, size, html, isTarget, isTarget ? 6 : 4);
+    createMapDot(box, p.x, p.y, color, size, html, isTarget, isTarget ? 6 : 4, e.id, e.kind);
   }
 }
 
-// ★ สร้าง dot element + hover tooltip
-function createMapDot(box, x, y, color, size, tooltipHtml, isTarget, z) {
+// ★ สร้าง dot element + hover tooltip + click to attack (monster)
+function createMapDot(box, x, y, color, size, tooltipHtml, isTarget, z, entityId, entityKind) {
   const el = document.createElement('div');
   el.className = 'map-dot';
   if (isTarget) {
@@ -719,6 +719,20 @@ function createMapDot(box, x, y, color, size, tooltipHtml, isTarget, z) {
   }
   el.onmouseenter = (e) => showMapTooltip(tooltipHtml, e);
   el.onmouseleave = () => hideMapTooltip();
+  // ★★ กัน mousedown ลงไป map image (กัน walk/warp ตอนคลิก dot)
+  el.onmousedown = (e) => { e.stopPropagation(); };
+  // ★★ คลิก dot มอน/บอส → สั่งโจมตี
+  if (entityId != null && (entityKind === 1 || isTarget)) {
+    el.style.cursor = 'crosshair';
+    el.style.title = 'คลิกเพื่อโจมตี';
+    el.onclick = (e) => {
+      e.stopPropagation();
+      if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({ type: 'command', playerId: playerId, system: 'attack', action: 'target', targetId: entityId }));
+        console.log('[monitor] attack →', entityId);
+      }
+    };
+  }
   box.appendChild(el);
 }
 

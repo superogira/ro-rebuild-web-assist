@@ -300,6 +300,7 @@ wss.on('connection', (ws, req) => {
         const fwd = { type: 'command', system: msg.system, action: msg.action, _fromMonitor: ws._monitorId || null };
         if (msg.x != null) fwd.x = msg.x;
         if (msg.y != null) fwd.y = msg.y;
+        if (msg.targetId != null) fwd.targetId = msg.targetId;
         entry.botWs.send(JSON.stringify(fwd));
         log(`🎮 Command → bot ${msg.playerId}: ${msg.system} ${msg.action}` + (msg.x != null ? ` (${msg.x},${msg.y})` : ''));
       }
