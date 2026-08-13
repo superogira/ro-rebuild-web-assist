@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.60.0
+// @version      4.61.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,7 +116,7 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.60.0';
+  const VERSION = '4.61.0';
   const GITHUB_RAW = 'https://raw.githubusercontent.com/superogira/ro-rebuild-web-assist/main/ro-rebuild-web-assist.user.js';
   // ★ Feedback — ส่งปัญหา/ข้อเสนอแนะถึงผู้พัฒนาผ่าน Telegram
   const FEEDBACK_BOT_TOKEN = '7932077955:AAEc2u3FaKLY-6iY6VjseK5_GPJXgYK3ORA';
@@ -4508,6 +4508,7 @@
         <span class="pill" data-monitor style="background:#1a237e;color:#90caf9">🖥️</span>
         <span class="pill" data-remote style="background:#1a3a1a;color:#81c784;display:none">🌐</span>
         <span class="pill" data-feedback style="background:#4a3a1a;color:#ffd54f" title="แจ้งปัญหา/ข้อเสนอแนะ">💬</span>
+        <span class="pill" data-chatroom style="background:#1a3a4a;color:#4fc3f7;position:relative" title="ห้องแชท">🗨️<span id="__assist_chatbadge" style="position:absolute;top:-4px;right:-4px;background:#e74c3c;color:#fff;font-size:8px;border-radius:50%;width:14px;height:14px;display:none;align-items:center;justify-content:center;font-weight:bold"></span></span>
         <span class="expand">⚙</span>
       </div>
       <div id="__assist_popup">
@@ -4793,7 +4794,8 @@
       return root.contains(t)
         || (t.closest && t.closest('#__assist_itempopup'))
         || (t.closest && t.closest('#__assist_skillpopup'))
-        || (t.closest && t.closest('#__assist_feedback_modal'));
+        || (t.closest && t.closest('#__assist_feedback_modal'))
+        || (t.closest && t.closest('#__assist_chatroom_modal'));
     }
     function ourActiveInput() {
       const ae = document.activeElement;
@@ -4828,9 +4830,9 @@
     function handleInputKey(inp, e) {
       const k = e.key;
       const s = inp.selectionStart, en = inp.selectionEnd;
-      // ★ Escape → ปิด feedback modal (ถ้าอยู่ใน modal)
+      // ★ Escape → ปิด modal (feedback หรือ chatroom)
       if (k === 'Escape') {
-        const modal = inp.closest && inp.closest('#__assist_feedback_modal');
+        const modal = inp.closest && (inp.closest('#__assist_feedback_modal') || inp.closest('#__assist_chatroom_modal'));
         if (modal) { modal.remove(); return; }
       }
       if (k === 'Backspace') {
@@ -4844,17 +4846,25 @@
       else if (k === 'Home') { inp.selectionStart = inp.selectionEnd = 0; }
       else if (k === 'End') { inp.selectionStart = inp.selectionEnd = inp.value.length; }
       else if (k === 'Enter') {
-        // ★ textarea: Enter = ขึ้นบรรทัด, Ctrl+Enter = ส่ง (feedback modal)
-        //   input (1 บรรทัด): Enter = blur (เหมือนเดิม)
+        // ★ textarea: Enter = ขึ้นบรรทัด, Ctrl+Enter = ส่ง (feedback/chatroom modal)
+        //   input (1 บรรทัด): Enter = blur หรือ Ctrl+Enter = ส่ง (chatroom)
         if (inp.tagName === 'TEXTAREA') {
           if (e.ctrlKey || e.metaKey) {
-            const modal = inp.closest('#__assist_feedback_modal');
-            if (modal) { const b = modal.querySelector('#__assist_feedback_send'); if (b) b.click(); }
+            const modal = inp.closest('#__assist_feedback_modal') || inp.closest('#__assist_chatroom_modal');
+            if (modal) { const b = modal.querySelector('button[data-send]'); if (b) b.click(); }
             return;
           }
           inp.value = inp.value.slice(0, s) + '\n' + inp.value.slice(en);
           inp.selectionStart = inp.selectionEnd = s + 1;
         } else {
+          // ★ input 1 บรรทัด: Ctrl+Enter = ส่ง (chatroom), Enter = ส่ง (chatroom) หรือ blur
+          if (inp.closest('#__assist_chatroom_modal')) {
+            const modal = inp.closest('#__assist_chatroom_modal');
+            if (e.ctrlKey || e.metaKey || inp.id === '__assist_chatroom_msg') {
+              const b = modal.querySelector('button[data-send]'); if (b) b.click();
+              return;
+            }
+          }
           inp.blur();
         }
       }
@@ -4897,6 +4907,7 @@
         if (pill.hasAttribute('data-monitor')) { openMonitor(); }
         if (pill.hasAttribute('data-remote')) { openRemoteMonitor(); }
         if (pill.hasAttribute('data-feedback')) { openFeedbackModal(); }
+        if (pill.hasAttribute('data-chatroom')) { openChatRoomModal(); }
         return;
       }
       popup.classList.toggle('open');
@@ -5342,12 +5353,89 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
       if (e.key === 'Escape') close();
     });
   }
+  // ★★ Chat Room modal — ห้องแชทสำหรับผู้ใช้บอท (คุยกันผ่าน relay server)
+  function renderChatRoomMessages(modal) {
+    const box = modal.querySelector('#__assist_chatroom_msgs');
+    if (!box) return;
+    box.innerHTML = chatMessages.map(m => {
+      const d = new Date(m.t);
+      const ts = d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0');
+      const name = (m.displayName || '?').replace(/</g,'&lt;');
+      const text = (m.text || '').replace(/</g,'&lt;');
+      return `<div style="margin-bottom:4px"><span style="color:#666;font-size:10px">${ts}</span> <span style="color:#4fc3f7;font-weight:600">${name}</span><span style="color:#888">: </span><span style="color:#e8e8e8">${text}</span></div>`;
+    }).join('');
+    box.scrollTop = box.scrollHeight;
+  }
+  function openChatRoomModal() {
+    const old = document.getElementById('__assist_chatroom_modal');
+    if (old) old.remove();
+    // ★ reset unread badge
+    chatUnread = 0;
+    const badge = root.querySelector('#__assist_chatbadge');
+    if (badge) badge.style.display = 'none';
+    // ★ โหลด displayName จาก localStorage
+    let savedName = '';
+    try { savedName = localStorage.getItem('roAssistChatName') || ''; } catch (_) {}
+    const overlay = document.createElement('div');
+    overlay.id = '__assist_chatroom_modal';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:999999;display:flex;align-items:center;justify-content:center';
+    overlay.innerHTML = `
+      <div style="background:#1e1e2e;color:#e8e8e8;border-radius:12px;padding:16px;width:480px;max-width:90vw;height:500px;max-height:85vh;display:flex;flex-direction:column;font-family:sans-serif;box-shadow:0 8px 32px rgba(0,0,0,.5)">
+        <div style="font-size:15px;font-weight:700;margin-bottom:8px;color:#4fc3f7">🗨️ ห้องแชท</div>
+        <div id="__assist_chatroom_msgs" style="flex:1;overflow-y:auto;background:#15151f;border-radius:8px;padding:10px;font-size:12px;line-height:1.5;margin-bottom:8px"></div>
+        <div style="display:flex;gap:6px;margin-bottom:6px">
+          <input id="__assist_chatroom_name" type="text" value="${savedName.replace(/"/g,'&quot;')}" placeholder="ชื่อที่จะใช้คุย" style="flex:0 0 130px;background:#2a2d35;color:#e8e8e8;border:1px solid #444;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box" maxlength="30">
+          <input id="__assist_chatroom_msg" type="text" placeholder="พิมพ์ข้อความ... (Enter = ส่ง)" style="flex:1;background:#2a2d35;color:#e8e8e8;border:1px solid #444;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box" maxlength="200">
+          <button data-send style="padding:8px 16px;border:none;border-radius:6px;background:#1a73e8;color:#fff;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap">ส่ง</button>
+        </div>
+        <div style="font-size:10px;color:#666;text-align:center">Enter = ส่ง · Esc = ปิด</div>
+      </div>`;
+    document.body.appendChild(overlay);
+    renderChatRoomMessages(overlay);
+    // ★ focus message input (ถ้ามีชื่อแล้ว) หรือ name input (ถ้ายังไม่มีชื่อ)
+    setTimeout(() => { try { (savedName ? overlay.querySelector('#__assist_chatroom_msg') : overlay.querySelector('#__assist_chatroom_name')).focus(); } catch (_) {} }, 0);
+    const close = () => overlay.remove();
+    overlay.onclick = (e) => { if (e.target === overlay) close(); };
+    // ★ กัน Unity ขโมย focus
+    overlay.addEventListener('mousedown', (e) => {
+      if (e.target.matches && e.target.matches('input, select, textarea, button')) {
+        e.stopPropagation();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+          setTimeout(() => { try { e.target.focus(); } catch (_) {} }, 0);
+        }
+      }
+    }, true);
+    // ★ ปุ่มส่ง
+    overlay.querySelector('button[data-send]').onclick = () => {
+      const nameEl = overlay.querySelector('#__assist_chatroom_name');
+      const msgEl = overlay.querySelector('#__assist_chatroom_msg');
+      const displayName = nameEl.value.trim();
+      const msg = msgEl.value.trim();
+      if (!displayName) { nameEl.focus(); return; }
+      if (!msg) { msgEl.focus(); return; }
+      // ★ persist displayName
+      try { localStorage.setItem('roAssistChatName', displayName); } catch (_) {}
+      if (relayWs && relayWs.readyState === 1) {
+        try {
+          relayWs.send(JSON.stringify({ type: 'roomSend', message: msg, displayName }));
+          msgEl.value = '';
+          msgEl.focus();
+        } catch (_) {}
+      } else {
+        log('⚠️ ยังไม่ได้เชื่อม relay — เปิด Monitor ก่อน');
+      }
+    };
+  }
   // ★ Remote relay WebSocket state (ประกาศก่อนใช้ — กัน TDZ)
   let relayWs = null;
   let relayReconnectAt = 0;
   let relayStatus = 'disabled';        // 'disabled' | 'connecting' | 'connected' | 'reconnecting' | 'error'
   let relayStatusText = 'ปิด';          // ข้อความสั้น
   let relayConnectedAt = 0;             // เวลาที่เชื่อมต่อสำเร็จ
+  // ★★ Chat Room state
+  let chatMessages = [];                // ข้อความล่าสุด 100 จาก relay
+  let chatUnread = 0;                   // จำนวนข้อความใหม่ที่ยังไม่ได้อ่าน
   let relayLastDataAt = 0;              // เวลาส่งข้อมูลล่าสุด
   let relayDataCount = 0;               // จำนวนครั้งที่ส่งข้อมูลแล้ว
   function sendMonitorData() {
@@ -5524,6 +5612,8 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
           sendRelayAlert('🌐 เชื่อมต่อระบบ Remote Monitor แล้ว');
         } else {
           log('⚠️ ยังไม่มี player_id — ระบบจะ register ทันทีเมื่อ SPAWN มา');
+          // ★★ เข้าห้องแชทได้แม้ยังไม่มี player_id
+          try { relayWs.send(JSON.stringify({ type: 'roomJoin' })); } catch (_) {}
         }
       };
       relayWs.onclose = (ev) => {
@@ -5595,6 +5685,26 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
             try { relayWs.send(JSON.stringify({ type: 'chatAck', ok: false, error: 'not connected' })); } catch (_) {}
           }
         }
+        // ★★ Chat Room — รับประวัติแชท (100 ข้อความล่าสุด)
+        else if (m.type === 'roomHistory' && Array.isArray(m.messages)) {
+          chatMessages = m.messages.slice(-100);
+          const modal = document.getElementById('__assist_chatroom_modal');
+          if (modal) renderChatRoomMessages(modal);
+        }
+        // ★★ Chat Room — รับข้อความใหม่ (broadcast)
+        else if (m.type === 'roomMessage' && m.message) {
+          chatMessages.push(m.message);
+          if (chatMessages.length > 100) chatMessages = chatMessages.slice(-100);
+          const modal = document.getElementById('__assist_chatroom_modal');
+          if (modal) {
+            renderChatRoomMessages(modal);
+          } else {
+            // modal ปิดอยู่ → เพิ่ม badge
+            chatUnread++;
+            const badge = root.querySelector('#__assist_chatbadge');
+            if (badge) { badge.textContent = chatUnread > 99 ? '99+' : chatUnread; badge.style.display = 'flex'; }
+          }
+        }
       };
     } catch (e) {
       setRelayStatus('error', 'สร้าง WS ไม่ได้');
@@ -5615,6 +5725,8 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
         }
         // ★ ขอ telegram config status หลัง register (เพื่อแสดงใน UI ว่าตั้งไว้แล้วหรือยัง)
         relayWs.send(JSON.stringify({ type: 'getTelegram' }));
+        // ★★ เข้าห้องแชท — ขอประวัติ 100 ข้อความล่าสุด
+        relayWs.send(JSON.stringify({ type: 'roomJoin' }));
         // ★ ส่งแจ้งเตือนยืนยันการเชื่อมต่อ
         sendRelayAlert('🌐 เชื่อมต่อระบบ Remote Monitor แล้ว');
       } catch (_) {}

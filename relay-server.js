@@ -56,6 +56,32 @@ function saveTelegramConfigs() {
   try { fs.writeFileSync(TELEGRAM_CONFIG_FILE, JSON.stringify(telegramConfigs, null, 2)); } catch (_) {}
 }
 
+// ★★★ Chat Room — เก็บประวัติแชททั้งหมด (global, ไม่แบ่ง per player)
+//   persist ลง chat-history.json (ข้าม restart) — rotate ที่ 10000 ข้อความ
+const CHAT_HISTORY_FILE = path.join(__dirname, 'chat-history.json');
+const CHAT_HISTORY_MAX = 10000;
+const CHAT_SEND_MAX = 100;   // ส่งให้ client สูงสุด 100 ข้อความล่าสุด
+let chatHistory = [];
+try {
+  chatHistory = JSON.parse(fs.readFileSync(CHAT_HISTORY_FILE, 'utf8'));
+  if (!Array.isArray(chatHistory)) chatHistory = [];
+  log('🗨️ Chat history loaded:', chatHistory.length, 'messages');
+} catch (_) { chatHistory = []; }
+
+function saveChatHistory() {
+  try { fs.writeFileSync(CHAT_HISTORY_FILE, JSON.stringify(chatHistory.slice(-CHAT_HISTORY_MAX))); } catch (_) {}
+}
+
+// ★ broadcast ข้อความไปทุก client ที่เชื่อมต่ออยู่ (bot + monitor)
+function broadcastToAll(msg) {
+  const str = JSON.stringify(msg);
+  let count = 0;
+  wss.clients.forEach((ws) => {
+    if (ws.readyState === 1) { try { ws.send(str); count++; } catch (_) {} }
+  });
+  return count;
+}
+
 // ★ ส่งข้อความไป Telegram (เรียก Telegram Bot API ผ่าน HTTPS)
 function sendTelegram(botToken, chatId, text) {
   return new Promise((resolve) => {
@@ -295,6 +321,31 @@ wss.on('connection', (ws, req) => {
           if (mon.readyState === 1) { try { mon.send(ack); } catch (_) {} }
         }
       }
+      return;
+    }
+
+    // ---- ★★★ Chat Room (global — ทุก client คุยกันได้) ----
+    //   roomJoin: ขอประวัติ 100 ข้อความล่าสุด
+    if (msg.type === 'roomJoin') {
+      const recent = chatHistory.slice(-CHAT_SEND_MAX);
+      try { ws.send(JSON.stringify({ type: 'roomHistory', messages: recent })); } catch (_) {}
+      return;
+    }
+    //   roomSend: ส่งข้อความใหม่ → store + broadcast ทุก client
+    if (msg.type === 'roomSend') {
+      const text = String(msg.message || '').trim().slice(0, 200);
+      const displayName = String(msg.displayName || 'ผู้ไม่ประสงค์ออกนาม').trim().slice(0, 30) || 'ผู้ไม่ประสงค์ออกนาม';
+      if (!text) return;
+      // ★ เติม metadata ฝั่ง relay: botName + version จากข้อมูลที่ register ไว้
+      const entry = ws.playerId ? bots.get(ws.playerId) : null;
+      const botName = cleanPlayerName(entry?.lastData?.player?.name) || ws.playerName || '';
+      const version = entry?.lastData?.version || '';
+      const msgObj = { t: Date.now(), displayName, botName, version, text };
+      chatHistory.push(msgObj);
+      if (chatHistory.length > CHAT_HISTORY_MAX) chatHistory = chatHistory.slice(-CHAT_HISTORY_MAX);
+      saveChatHistory();
+      broadcastToAll({ type: 'roomMessage', message: msgObj });
+      log(`🗨️ RoomChat [${displayName}] (${botName || ws.role}): ${text.slice(0, 60)}`);
       return;
     }
   });
