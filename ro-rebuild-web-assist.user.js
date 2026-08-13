@@ -3768,6 +3768,8 @@
     warpToBossOff()    { CFG.warpToBoss = false;    saveConfigDebounced(); log('👑 วาร์ปไปสู้ Boss: ปิด'); },
     warpToMiniBossOn() { CFG.warpToMiniBoss = true; saveConfigDebounced(); log('👹 วาร์ปไปสู้ Mini Boss: เปิด'); },
     warpToMiniBossOff(){ CFG.warpToMiniBoss = false;saveConfigDebounced(); log('👹 วาร์ปไปสู้ Mini Boss: ปิด'); },
+    fleeFromPlayersOn()  { CFG.fleeFromPlayers = true;  saveConfigDebounced(); log('🏃 หนีผู้เล่น: เปิด'); },
+    fleeFromPlayersOff() { CFG.fleeFromPlayers = false; saveConfigDebounced(); log('🏃 หนีผู้เล่น: ปิด'); },
     setDepositItems(...ids) { CFG.depositItemIds = ids; log('🏦 ฝาก item:', ids.map(nameOf).join(', ')); },
     addDepositItem(id) { if (!CFG.depositItemIds.includes(id)) CFG.depositItemIds.push(id); log('🏦 เพิ่มฝาก:', nameOf(id)); },
     removeDepositItem(id) { CFG.depositItemIds = CFG.depositItemIds.filter(x => x !== id); log('🏦 เลิกฝาก:', nameOf(id)); },
@@ -5591,7 +5593,7 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
         return { name: (m && m.name) || tgt.id, dist: target ? target.lastDist : null, hp: m ? m.hp : null, hpMax: m ? m.hpMax : null, id: tid };
       })(),
       stats: { kills: s.kills, itemsLooted: s.itemsLooted, expPerMin: s.expPerMin, expGained: s.expGained, baseExpGained: s.baseExpGained, jobExpGained: s.jobExpGained, dps: s.dps, aspd: s.aspd, goldRatePerHour: s.goldRatePerHour, deaths: s.deaths, elapsedMs: s.elapsedMs },
-      toggles: { loot: CFG.lootEnabled, heal: CFG.healEnabled, rest: CFG.restEnabled, combat: CFG.combatEnabled, skill: CFG.skillEnabled, buff: CFG.buffEnabled, sell: CFG.sellEnabled, storage: CFG.storageEnabled, warpToBoss: CFG.warpToBoss, warpToMiniBoss: CFG.warpToMiniBoss },
+      toggles: { loot: CFG.lootEnabled, heal: CFG.healEnabled, rest: CFG.restEnabled, combat: CFG.combatEnabled, skill: CFG.skillEnabled, buff: CFG.buffEnabled, sell: CFG.sellEnabled, storage: CFG.storageEnabled, warpToBoss: CFG.warpToBoss, warpToMiniBoss: CFG.warpToMiniBoss, fleeFromPlayers: CFG.fleeFromPlayers },
       mobAttackers: getMobAttackerCount(),
       // ★ mobAttackerList — สำหรับแสดงรูปมอน + HP bar ใน monitor (mirror dashboard mobAttackerList)
       mobAttackerList: (() => {
