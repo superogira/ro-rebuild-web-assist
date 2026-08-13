@@ -131,7 +131,7 @@
     'warpLootEnabled',
     'combatEnabled', 'targetWhitelist', 'targetBlacklist', 'attackRange', 'rangedAttackRange',
     'maxAcquireDistance', 'searchRadii', 'maxChaseDistance', 'antiKS', 'avoidOtherPlayers', 'targetLowestHpFirst',
-    'fleeOnMobCount', 'fleeOnAggroCount', 'fleeOnProximityCount', 'fleeOnProximityRadius', 'fleeMonsters', 'fleeMonsterRadius', 'maxEngageSecSlow', 'slowMonsterSubIds',
+    'fleeOnMobCount', 'fleeOnAggroCount', 'fleeOnProximityCount', 'fleeOnProximityRadius', 'fleeMonsters', 'fleeMonsterRadius', 'maxEngageSec', 'maxEngageSecSlow', 'slowMonsterSubIds',
     'wanderEnabled', 'warpFindEnabled', 'warpToMonster', 'stuckWarpOnAbandon', 'warpToBoss', 'warpToMiniBoss', 'bossAlertRadius',
     'restEnabled', 'restHpPercent', 'restUntilPercent', 'restMaxSec', 'postCombatDelayMs', 'autoRespawnEnabled', 'autoRespawnDelayMs', 'telegramAlertCard', 'telegramAlertFlee', 'telegramAlertBotMention', 'telegramAlertNearby', 'telegramAlertWhisper', 'telegramBotToken', 'telegramChatId',
     'sellEnabled', 'sellNpcName', 'sellNpcMap', 'sellNpcX', 'sellNpcY', 'sellIntervalMin', 'sellOnFull', 'sellItemIds',
@@ -430,7 +430,7 @@
     attackAbandonMs: 5000,       // ★ ส่ง attack แล้ว server ไม่ตอบ N ms → abandon (เพิ่มจาก 8s → 20s รองรับ reset ล่าช้า)
     attackPendingMax: 3,          // ★ abandon ถ้า pending ≥ N (ลดจาก 8 → 4 ใกล้บอทหลัก ตัดมอนตีไม่ได้เร็วขึ้น)
     aggroKeepAliveMs: 15000,      // ★ มอน aggro เรา → ถือว่ายังสู้อยู่ N ms (กัน abandon ตอนมอนเดินมาหา)
-    maxEngageSec: 30,             // abandon target ถ้า engage นานกว่านี้
+    maxEngageSec: 40,             // abandon target ถ้า engage นานกว่านี้
     maxEngageSecSlow: 180,        // ★ abandon มอน "ตีช้า/เจาะไม่เข้า" (เห็ด/พืช) ถ้านานกว่านี้ (3 นาที)
     slowMonsterSubIds: [4010, 4011, 4013, 4017, 4041, 4030, 4106, 4153],  // ★ sub-ID ที่ตี damage 1
     // flee (วาร์ปหนี)
@@ -4770,6 +4770,8 @@
             </div>
             <div class="field"><label>วาร์ปหามอนเมื่อไม่เจอมอน (วินาที) — 0 = วาร์ปทันทีหลังตีมอนเสร็จ</label><input type="number" id="__assist_nowarpsec" min="0" max="120" placeholder="30"></div>
             <div class="field"><label>stuck abandon N ครั้งใน 60s → วาร์ปสุ่ม (0=ปิด)</label><input type="number" id="__assist_stuckwarp" min="0" max="20"></div>
+            <div class="field"><label>เลิกตีมอนถ้าสู้นานเกิน (วินาที) — หันไปตีตัวอื่น</label><input type="number" id="__assist_engagesec" min="5" max="600" placeholder="40"></div>
+            <div class="field"><label>เลิกตีมอนตีช้า (เห็ด/พืช) ถ้านานเกิน (วินาที)</label><input type="number" id="__assist_engageslow" min="30" max="600" placeholder="180"></div>
             <div class="btns">
               <button id="__assist_t_warptoboss" class="off">👑 วาร์ปไปสู้ Boss</button>
               <button id="__assist_t_warptominiboss" class="off">👹 วาร์ปไปสู้ Mini Boss</button>
@@ -5191,7 +5193,14 @@
       if (!isNaN(sw)) { CFG.stuckWarpOnAbandon = sw; log('⚔️ stuck abandon → วาร์ปสุ่ม =', sw === 0 ? 'ปิด' : sw + 'ครั้ง'); }
       const nws = parseInt(root.querySelector('#__assist_nowarpsec')?.value, 10);
       if (!isNaN(nws)) { CFG.noMonsterWarpSec = nws; log('🌀 วาร์ปหามอนหลังไม่เจอ', nws === 0 ? 'ทันที' : nws + 'วิ'); }
+      const es = parseInt(root.querySelector('#__assist_engagesec')?.value, 10);
+      if (!isNaN(es)) CFG.maxEngageSec = es;
+      const esl = parseInt(root.querySelector('#__assist_engageslow')?.value, 10);
+      if (!isNaN(esl)) CFG.maxEngageSecSlow = esl;
     });
+    // ★ populate engage inputs ครั้งเดียว
+    const _es = root.querySelector('#__assist_engagesec'); if (_es) _es.value = CFG.maxEngageSec;
+    const _esl = root.querySelector('#__assist_engageslow'); if (_esl) _esl.value = CFG.maxEngageSecSlow;
     // ★ populate noMonsterWarpSec ครั้งเดียว
     const _nws = root.querySelector('#__assist_nowarpsec');
     if (_nws) _nws.value = CFG.noMonsterWarpSec;
