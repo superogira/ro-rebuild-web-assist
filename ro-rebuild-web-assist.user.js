@@ -4907,6 +4907,11 @@
               <button id="__assist_importall">📥 import</button>
             </div>
             <div style="font-size:10px;color:#9aa0a6;margin-top:4px;">★ export รวม config + buff/skill times + nav data<br>★ import = ทับค่าปัจจุบัน</div>
+            <h4 style="color:#e74c3c">⚠️ Reset</h4>
+            <div class="btns">
+              <button id="__assist_resetconfig" class="danger">🔄 รีเซ็ตค่าทั้งหมดกลับเป็น Default</button>
+            </div>
+            <div style="font-size:10px;color:#9aa0a6;margin-top:4px;">★ ล้างค่าทั้งหมดที่บันทึกไว้ กลับเป็นค่าเริ่มต้น<br>★ ต้องเข้าเกมใหม่หลังรีเซ็ต</div>
           </div>
           <!-- 📨 Telegram -->
           <div class="__assist_subpage" data-sub="telegram">
@@ -5410,6 +5415,13 @@
         reader.readAsText(file);
       };
       inp.click();
+    });
+    // ★ Reset config กลับเป็น default
+    root.querySelector('#__assist_resetconfig').addEventListener('click', () => {
+      if (!confirm('รีเซ็ตค่าทั้งหมดกลับเป็น Default?\n\nค่าที่กำหนดเองทั้งหมดจะหายไป\nต้องเข้าเกมใหม่หลักรีเซ็ต')) return;
+      try { localStorage.removeItem(CFG_STORAGE_KEY); } catch (_) {}
+      log('🔄 รีเซ็ตค่าทั้งหมด — รีเฟรชหน้าเว็บ...');
+      setTimeout(() => location.reload(), 1000);
     });
     root.querySelector('#__assist_clearlog').addEventListener('click', () => ASSIST.clearLogs());
     // ★ คัดลอก log — ใช้ navigator.clipboard ถ้าได้ ไม่งั้นใช้ textarea fallback
