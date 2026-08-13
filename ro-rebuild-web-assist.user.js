@@ -2550,6 +2550,8 @@
   let combatCooldownUntil = 0;   // ★ หยุด combat ชั่วคราวจนกว่าจะถึงเวลานี้ (post-combat delay)
   // ★★ Remote walk — คำสั่งเดินจาก remote monitor (คลิกแผนที่)
   let remoteWalkTarget = null;    // { x, y } — เป้าหมายเดินจาก remote
+  // ★★ Manual mode — คลิกมอนจาก monitor ตอน combat off → เปิด combat ชั่วคราว ตีตัวเดียวแล้วปิด
+  let manualMode = false;
   const combatLoop = setInterval(() => {
     if (!CFG.combatEnabled) return;
     // ★★ ถ้ากำลังเดินตามคำสั่ง remote → หยุดตีตอนเดิน
@@ -2909,6 +2911,13 @@
 
     // === 4. Acquire new target ===
     if (!target) {
+      // ★★ Manual mode: ตีตัวเดียว — target ตาย/หาย → ปิด combat + หยุด (ไม่หาตัวใหม่)
+      if (manualMode) {
+        manualMode = false;
+        CFG.combatEnabled = false;
+        log('✅ ฆ่ามอน (manual) เสร็จ — หยุด combat');
+        return;
+      }
       const t = acquireTarget(now);
       if (t) { target = t; noMonsterSince = 0; return; }
       // ไม่เจอมอน
@@ -3830,6 +3839,7 @@
     // ---------- Auto-Combat ----------
     combatOn() {
       CFG.combatEnabled = true;
+      manualMode = false;   // ★ ผู้ใช้เปิดเอง → ยกเลิก manual mode (auto หาตัวใหม่)
       if (!CFG.targetWhitelist.length && !CFG.targetBlacklist.length) console.warn('⚠️ whitelist + blacklist ว่าง = ตีทุกมอน (รวม MVP/มอนแรง) — ควรตั้ง whitelist หรือ blacklist กันตาย');
       log('⚔️ Auto-Combat: ON');
     },
@@ -5725,8 +5735,11 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
             // ตั้งเป็น target ใหม่
             target = { id: eid, x: m2.x, y: m2.y, acquiredAt: nowMs(), engageAt: 0, lastAttackAt: 0, lastAttackResultAt: 0, pendingAttacks: 0, firstAttackAt: 0, stuckCount: 0, warpCount: 0 };
             lastTargetSwitchAt = nowMs();
-            // ★ คลิกมอน = เปิด combat + ตั้ง target (เริ่มตีเลย)
-            if (!CFG.combatEnabled) { CFG.combatEnabled = true; log('⚔️ Auto-Combat: ON (คลิกโจมตีจาก monitor)'); }
+            // ★ คลิกมอน: ถ้า combat off → เปิดชั่วคราว (manual mode) ตีตัวเดียวแล้วปิด
+            if (!CFG.combatEnabled) {
+              CFG.combatEnabled = true; manualMode = true;
+              log('🎯 Manual attack: เปิด combat ชั่วคราว (ตีตัวเดียวแล้วหยุด)');
+            }
             log('🎯 Remote attack →', m2.name || eid.toString(16), '@(', m2.x, m2.y, ')');
           } else {
             log('⚠️ Remote attack: ไม่พบมอน ID', m.targetId);
