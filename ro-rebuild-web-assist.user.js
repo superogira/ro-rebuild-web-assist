@@ -5371,7 +5371,7 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
     if (old) old.remove();
     // ★ reset unread badge
     chatUnread = 0;
-    const badge = root.querySelector('#__assist_chatbadge');
+    const badge = document.getElementById('__assist_chatbadge');
     if (badge) badge.style.display = 'none';
     // ★ โหลด displayName จาก localStorage
     let savedName = '';
@@ -5701,7 +5701,7 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
           } else {
             // modal ปิดอยู่ → เพิ่ม badge
             chatUnread++;
-            const badge = root.querySelector('#__assist_chatbadge');
+            const badge = document.getElementById('__assist_chatbadge');
             if (badge) { badge.textContent = chatUnread > 99 ? '99+' : chatUnread; badge.style.display = 'flex'; }
           }
         }
