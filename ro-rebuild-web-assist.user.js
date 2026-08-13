@@ -6122,8 +6122,7 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
     syncToggle('#__assist_t_warptoboss', CFG.warpToBoss === true);
     syncToggle('#__assist_t_warptominiboss', CFG.warpToMiniBoss === true);
     syncToggle('#__assist_t_fleeplayers', CFG.fleeFromPlayers === true);
-    syncInput('#__assist_fleemaps', (CFG.fleeMaps || []).join(','));
-    syncInput('#__assist_fleeradius', CFG.fleePlayerRadius);
+    // ★ ไม่ sync fleemaps/fleeradius — กันเขียนทับค่าที่กำลังแก้ (Unity แย่ง focus → isEditing คืน false)
     syncInput('#__assist_fleemonsters', (CFG.fleeMonsters || []).join(','));
     syncInput('#__assist_fleemonsterradius', CFG.fleeMonsterRadius);
     syncToggle('#__assist_t_antiks', CFG.antiKS);
