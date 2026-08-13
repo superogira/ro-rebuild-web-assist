@@ -2595,8 +2595,9 @@
           // ★ debug log ทุก 5s — เช็คว่าระบบทำงานไหม
           if (now - (lastFleeDebugAt || 0) > 5000) {
             lastFleeDebugAt = now;
-            const totalP = [...entities.values()].filter(e => e.kind === 0 && e.id !== playerId && e.alive).length;
-            log('🔍 flee: nearby=' + nearby + ' players=' + totalP + ' r=' + CFG.fleePlayerRadius + ' maps=' + CFG.fleeMaps.length);
+            const pes = [...entities.values()].filter(e => e.kind === 0 && e.id !== playerId && e.alive);
+            const detail = pes.map(e => `${e.id.toString(16)}@(${e.x},${e.y})`).join(' ') || '(none)';
+            log('🔍 flee: nearby=' + nearby + ' players=' + pes.length + ' r=' + CFG.fleePlayerRadius + ' [' + detail + ']');
           }
           if (nearby > 0) {
             const next = pickNextFleeMap();
