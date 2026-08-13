@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.49.0
+// @version      4.50.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,7 +116,7 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.49.0';
+  const VERSION = '4.50.0';
   const GITHUB_RAW = 'https://raw.githubusercontent.com/superogira/ro-rebuild-web-assist/main/ro-rebuild-web-assist.user.js';
   const CFG_STORAGE_KEY = 'roAssistConfig_v1';
   // keys ที่บันทึก/โหลด (boolean/number/array/string — ไม่เก็บ function หรือ object ซ้อน)
@@ -1193,38 +1193,56 @@
         playerZeny = zeny;
       }
     }
-    // ★ 0x3c MINIMAP_MARKER: server ส่งตำแหน่ง boss/mini-boss สำหรับแสดงใน minimap
-    //   format: [3c][sub:2][id:4][x:2][y:2][flag:1] (12 bytes)
-    //   ★ มีแค่ entity ID + X/Y — ไม่มีชื่อ/sub/kind/HP (เพราะอยู่ไกล)
-    //   ★ server ส่งต่อเนื่อง (เหมือน MOVE แต่สำหรับ boss โดยเฉพาะ)
-    else if (op === 0x3c && u.length >= 12) {
-      const id = u32(u, 3);            // offset 3 = entity ID (หลัง sub 2 bytes)
-      const x = i16(u, 7), y = i16(u, 9);  // offset 7,9 = x, y (i16 LE)
-      if (id && x >= -500 && x <= 1000 && y >= -500 && y <= 1000) {
-        const now = nowMs();
-        let m = entities.get(id);
-        if (m) {
-          // entity มีอยู่แล้ว → อัปเดตตำแหน่ง
-          m.x = x; m.y = y; m._lastSeenAt = now; m._isBoss = true;
-        } else {
-          // ★ entity ใหม่ → สร้างเป็น boss (kind=1 monster + _isBoss=true)
-          m = { id, kind: 1, x, y, alive: true, _lastSeenAt: now, _isBoss: true, name: 'Boss' };
-          entities.set(id, m);
+    // ★ 0x3c MINIMAP_MARKER: 2 โหมด
+    //   sub=1: [3c][0100][id:4][x:2][y:2][flag:1] — boss/player position (single, 12 bytes)
+    //   sub=7: [3c][0700][id:4][x:2][y:2][flag:1] × N — warp portals + entities (multi)
+    //   flag=1/3 = boss/player, flag=5 = warp portal
+    else if (op === 0x3c && u.length >= 3) {
+      const sub = u16(u, 1);
+      const now = nowMs();
+      if (sub === 7 && u.length >= 5) {
+        // ★ sub=7: multi-entity list (warp portals + positions)
+        //   format: [3c][0700] then repeating [id:4][x:2][y:2][flag:1] (9 bytes each)
+        let p = 3;
+        while (p + 9 <= u.length) {
+          const eid = u32(u, p); p += 4;
+          const ex = i16(u, p), ey = i16(u, p + 2); p += 4;
+          const eflag = u[p]; p += 1;
+          if (!eid || ex < -500 || ex > 1000 || ey < -500 || ey > 1000) continue;
+          if (eflag === 5) {
+            // ★ warp portal → track as entity kind=2 (NPC) + _isWarp flag
+            entities.set(eid, { id: eid, kind: 2, x: ex, y: ey, alive: true, _lastSeenAt: now, _isWarp: true, name: 'Warp' });
+          } else if (eflag === 1 || eflag === 3) {
+            // ★ boss/player position (same as sub=1 single)
+            let m = entities.get(eid);
+            if (m) { m.x = ex; m.y = ey; m._lastSeenAt = now; m._isBoss = true; }
+            else { entities.set(eid, { id: eid, kind: 1, x: ex, y: ey, alive: true, _lastSeenAt: now, _isBoss: true, name: 'Boss' }); }
+          }
         }
-        // ★ alert boss (ครั้งเดียวต่อ entity ID — กันสแปม)
-        if (!bossAlertedIds.has(id)) {
-          bossAlertedIds.add(id);
-          const dist = (player.x != null) ? Math.hypot(x - player.x, y - player.y).toFixed(0) : '?';
-          log('👑 ตรวจจับ Boss! entity', id.toString(16), '@(', x, y, ') ห่าง', dist, 'ช่อง');
-          logImportant('card', '👑 ตรวจจับ Boss ที่ (' + x + ', ' + y + ') ห่าง ' + dist + ' ช่อง');
-        }
-        // ★ auto-warp to boss (ถ้าเปิด toggle)
-        if (CFG.warpToBoss && player.x != null && now - lastBossWarpAt > 10000) {
-          const d = Math.hypot(x - player.x, y - player.y);
-          if (d > 10) {   // ห่างเกิน 10 ช่อง → วาร์ป
-            log('👑 วาร์ปไปสู้ Boss @(', x, y, ') ห่าง', d.toFixed(0), 'ช่อง');
-            sendTeleport(currentMap, x, y);
-            lastBossWarpAt = now;
+      } else if (sub === 1 && u.length >= 12) {
+        // ★ sub=1: single boss/player position
+        const id = u32(u, 3);
+        const x = i16(u, 7), y = i16(u, 9);
+        const flag = u[11];
+        if (id && x >= -500 && x <= 1000 && y >= -500 && y <= 1000 && (flag === 1 || flag === 3)) {
+          let m = entities.get(id);
+          if (m) { m.x = x; m.y = y; m._lastSeenAt = now; m._isBoss = true; }
+          else { m = { id, kind: 1, x, y, alive: true, _lastSeenAt: now, _isBoss: true, name: 'Boss' }; entities.set(id, m); }
+          // ★ alert boss (ครั้งเดียวต่อ entity ID)
+          if (!bossAlertedIds.has(id)) {
+            bossAlertedIds.add(id);
+            const dist = (player.x != null) ? Math.hypot(x - player.x, y - player.y).toFixed(0) : '?';
+            log('👑 ตรวจจับ Boss! entity', id.toString(16), '@(', x, y, ') ห่าง', dist, 'ช่อง');
+            logImportant('card', '👑 ตรวจจับ Boss ที่ (' + x + ', ' + y + ') ห่าง ' + dist + ' ช่อง');
+          }
+          // ★ auto-warp to boss (ถ้าเปิด toggle)
+          if (CFG.warpToBoss && player.x != null && now - lastBossWarpAt > 10000) {
+            const d = Math.hypot(x - player.x, y - player.y);
+            if (d > 10) {
+              log('👑 วาร์ปไปสู้ Boss @(', x, y, ') ห่าง', d.toFixed(0), 'ช่อง');
+              sendTeleport(currentMap, x, y);
+              lastBossWarpAt = now;
+            }
           }
         }
       }
@@ -5194,7 +5212,7 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
           }
           // จำกัดจำนวน (กัน payload ใหญ่เกิน)
           if (out.length >= 50) break;
-          out.push({ id: e.id.toString(16), kind: e.kind || 0, x: e.x, y: e.y, name: e.name || '', hp: e.hp, hpMax: e.hpMax, isBoss: !!e._isBoss });
+          out.push({ id: e.id.toString(16), kind: e.kind || 0, x: e.x, y: e.y, name: e.name || '', hp: e.hp, hpMax: e.hpMax, isBoss: !!e._isBoss, isWarp: !!e._isWarp });
         }
         return out;
       })(),
