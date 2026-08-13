@@ -168,7 +168,7 @@
       <span id="last-update">—</span>
       <span id="relay-status" style="color:#9aa0a6">relay: —</span>
       <button id="btn-fullscreen">⛶ เต็มจอ</button>
-      <button id="btn-chatroom">🗨️ แชท</button>
+      <button id="btn-chatroom" style="position:relative">🗨️ แชท<span id="cr-badge" style="position:absolute;top:-4px;right:-4px;background:#e74c3c;color:#fff;font-size:8px;border-radius:50%;width:14px;height:14px;display:none;align-items:center;justify-content:center;font-weight:bold"></span></button>
       <button id="back-btn">← เปลี่ยน player_id</button>
     </div>
   </div>
@@ -940,19 +940,30 @@ if (m) { document.getElementById('pid-input').value = m[1]; connect(m[1]); }
 // ★★ Chat Room logic (remote-monitor side)
 (function() {
   let chatMsgs = [];
+  let chatUnread = 0;
   const popup = document.getElementById('chatroom-popup');
   const msgsEl = document.getElementById('cr-msgs');
   const nameEl = document.getElementById('chatroom-name');
   const msgEl = document.getElementById('chatroom-msg');
   const sendBtn = document.getElementById('chatroom-send');
+  const badgeEl = document.getElementById('cr-badge');
 
   // ★ โหลด displayName จาก localStorage
   try { nameEl.value = localStorage.getItem('roMonitorChatName') || ''; } catch (_) {}
 
+  function updateBadge() {
+    if (chatUnread > 0) {
+      badgeEl.textContent = chatUnread > 99 ? '99+' : chatUnread;
+      badgeEl.style.display = 'flex';
+    } else {
+      badgeEl.style.display = 'none';
+    }
+  }
+
   // ★ toggle popup
   document.getElementById('btn-chatroom').onclick = () => {
     popup.classList.toggle('open');
-    if (popup.classList.contains('open')) { renderMsgs(); msgEl.focus(); }
+    if (popup.classList.contains('open')) { chatUnread = 0; updateBadge(); renderMsgs(); msgEl.focus(); }
   };
   document.getElementById('cr-close').onclick = () => popup.classList.remove('open');
 
@@ -978,7 +989,12 @@ if (m) { document.getElementById('pid-input').value = m[1]; connect(m[1]); }
     } else if (m.type === 'roomMessage' && m.message) {
       chatMsgs.push(m.message);
       if (chatMsgs.length > 100) chatMsgs = chatMsgs.slice(-100);
-      if (popup.classList.contains('open')) renderMsgs();
+      if (popup.classList.contains('open')) {
+        renderMsgs();
+      } else {
+        chatUnread++;
+        updateBadge();
+      }
     }
   };
   window.__chatRoomSend = function(msg) {
