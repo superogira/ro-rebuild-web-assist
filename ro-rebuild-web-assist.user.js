@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.51.0
+// @version      4.52.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,7 +116,7 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.51.0';
+  const VERSION = '4.52.0';
   const GITHUB_RAW = 'https://raw.githubusercontent.com/superogira/ro-rebuild-web-assist/main/ro-rebuild-web-assist.user.js';
   const CFG_STORAGE_KEY = 'roAssistConfig_v1';
   // keys ที่บันทึก/โหลด (boolean/number/array/string — ไม่เก็บ function หรือ object ซ้อน)
@@ -1213,8 +1213,13 @@
           if (eflag === 5) {
             // ★ warp portal → track as entity kind=2 (NPC) + _isWarp flag
             entities.set(eid, { id: eid, kind: 2, x: ex, y: ey, alive: true, _lastSeenAt: now, _isWarp: true, name: 'Warp' });
+          } else if (eflag === 4) {
+            // ★ flag=4 = Boss (จริง) → track as _isBoss
+            let m = entities.get(eid);
+            if (m) { m.x = ex; m.y = ey; m._lastSeenAt = now; m._isBoss = true; }
+            else { entities.set(eid, { id: eid, kind: 1, x: ex, y: ey, alive: true, _lastSeenAt: now, _isBoss: true, name: 'Boss' }); }
           } else if (eflag === 1 || eflag === 3) {
-            // ★ mini boss/player position
+            // ★ flag=1/3 = Mini Boss → track as _isMiniBoss
             let m = entities.get(eid);
             if (m) { m.x = ex; m.y = ey; m._lastSeenAt = now; m._isMiniBoss = true; }
             else { entities.set(eid, { id: eid, kind: 1, x: ex, y: ey, alive: true, _lastSeenAt: now, _isMiniBoss: true, name: 'Mini Boss' }); }
@@ -1225,22 +1230,30 @@
         const id = u32(u, 3);
         const x = i16(u, 7), y = i16(u, 9);
         const flag = u[11];
-        if (id && x >= -500 && x <= 1000 && y >= -500 && y <= 1000 && (flag === 1 || flag === 3)) {
+        if (id && x >= -500 && x <= 1000 && y >= -500 && y <= 1000 && (flag === 1 || flag === 3 || flag === 4)) {
+          const isRealBoss = (flag === 4);
           let m = entities.get(id);
-          if (m) { m.x = x; m.y = y; m._lastSeenAt = now; m._isMiniBoss = true; }
-          else { m = { id, kind: 1, x, y, alive: true, _lastSeenAt: now, _isMiniBoss: true, name: 'Mini Boss' }; entities.set(id, m); }
-          // ★ alert mini boss (ครั้งเดียวต่อ entity ID — แต่ล้างเมื่อตาย/หายไป 2 นาที เพื่อ alert ใหม่ตอนเกิดใหม่)
+          if (isRealBoss) {
+            if (m) { m.x = x; m.y = y; m._lastSeenAt = now; m._isBoss = true; }
+            else { m = { id, kind: 1, x, y, alive: true, _lastSeenAt: now, _isBoss: true, name: 'Boss' }; entities.set(id, m); }
+          } else {
+            if (m) { m.x = x; m.y = y; m._lastSeenAt = now; m._isMiniBoss = true; }
+            else { m = { id, kind: 1, x, y, alive: true, _lastSeenAt: now, _isMiniBoss: true, name: 'Mini Boss' }; entities.set(id, m); }
+          }
+          // ★ alert (ครั้งเดียวต่อ entity ID — ล้างเมื่อตาย/หายไป เพื่อ alert ใหม่ตอนเกิดใหม่)
           if (!bossAlertedIds.has(id)) {
             bossAlertedIds.add(id);
             const dist = (player.x != null) ? Math.hypot(x - player.x, y - player.y).toFixed(0) : '?';
-            log('👹 ตรวจจับ Mini Boss! entity', id.toString(16), '@(', x, y, ') ห่าง', dist, 'ช่อง');
-            logImportant('card', '👹 ตรวจจับ Mini Boss ที่ (' + x + ', ' + y + ') ห่าง ' + dist + ' ช่อง');
+            const label = isRealBoss ? '👑 Boss' : '👹 Mini Boss';
+            log(label + '! entity', id.toString(16), '@(', x, y, ') ห่าง', dist, 'ช่อง');
+            logImportant('card', label + ' ที่ (' + x + ', ' + y + ') ห่าง ' + dist + ' ช่อง');
           }
-          // ★ auto-warp to mini boss (ถ้าเปิด toggle)
+          // ★ auto-warp to boss/mini boss (ถ้าเปิด toggle)
           if (CFG.warpToBoss && player.x != null && now - lastBossWarpAt > 10000) {
             const d = Math.hypot(x - player.x, y - player.y);
             if (d > 10) {
-              log('👹 วาร์ปไปสู้ Mini Boss @(', x, y, ') ห่าง', d.toFixed(0), 'ช่อง');
+              const label = isRealBoss ? '👑 Boss' : '👹 Mini Boss';
+              log(label + ' → วาร์ปไปสู้ @(', x, y, ') ห่าง', d.toFixed(0), 'ช่อง');
               sendTeleport(currentMap, x, y);
               lastBossWarpAt = now;
             }
@@ -1620,8 +1633,8 @@
       const e = entities.get(id);
       if (e) {
         e.alive = false;
-        // ★ ถ้าเป็น mini boss ที่ตาย → ล้าง bossAlertedIds เพื่อ alert ใหม่ตอนเกิดใหม่
-        if (e._isMiniBoss) { bossAlertedIds.delete(id); log('👹 Mini Boss ตาย — จะ alert ใหม่เมื่อเกิดใหม่'); }
+        // ★ ถ้าเป็น boss/mini boss ที่ตาย → ล้าง bossAlertedIds เพื่อ alert ใหม่ตอนเกิดใหม่
+        if (e._isMiniBoss || e._isBoss) { bossAlertedIds.delete(id); log((e._isBoss ? '👑 Boss' : '👹 Mini Boss') + ' ตาย — จะ alert ใหม่เมื่อเกิดใหม่'); }
       }
       entities.delete(id);
       // ★ นับ kill — ถ้าเป็นมอน (kind=1) และเรามี target หรือ mobAttacker ตัวนี้
@@ -5215,7 +5228,7 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
             if (!e._lastSeenAt) e._lastSeenAt = now;   // stamp ครั้งแรก
             if (now - e._lastSeenAt > STALE_MS) {
               // ★★ mini boss ที่หายไป (0x3c หยุดส่ง = ตาย/ถูกฆ่า) → ล้าง bossAlertedIds เพื่อ alert ใหม่ตอนเกิดใหม่
-              if (e._isMiniBoss && bossAlertedIds.has(e.id)) {
+              if ((e._isMiniBoss || e._isBoss) && bossAlertedIds.has(e.id)) {
                 bossAlertedIds.delete(e.id);
                 entities.delete(e.id);
                 log('👹 Mini Boss หายไป (ไม่ได้รับตำแหน่ง 60s) — จะ alert ใหม่เมื่อเกิดใหม่');
@@ -5225,7 +5238,7 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
           }
           // จำกัดจำนวน (กัน payload ใหญ่เกิน)
           if (out.length >= 50) break;
-          out.push({ id: e.id.toString(16), kind: e.kind || 0, x: e.x, y: e.y, name: e.name || '', hp: e.hp, hpMax: e.hpMax, isBoss: !!e._isMiniBoss, isWarp: !!e._isWarp });
+          out.push({ id: e.id.toString(16), kind: e.kind || 0, x: e.x, y: e.y, name: e.name || '', hp: e.hp, hpMax: e.hpMax, isBoss: !!e._isBoss, isMiniBoss: !!e._isMiniBoss, isWarp: !!e._isWarp });
         }
         return out;
       })(),

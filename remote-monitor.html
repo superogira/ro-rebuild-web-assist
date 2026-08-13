@@ -623,7 +623,8 @@ function renderMapDots(box, img, d) {
     if (!p) continue;
     const isTarget = d.targetId && e.id === d.targetId;
     let color = '#666', size = 4;
-    if (e.isBoss) { color = '#ff4081'; size = 9; }              // ★ mini boss = ชมพู ใหญ่ (ทองเก็บไว้สำหรับ Boss จริง)
+    if (e.isBoss) { color = '#f1c40f'; size = 11; }             // ★ Boss = ทอง ใหญ่สุด
+    else if (e.isMiniBoss) { color = '#ff4081'; size = 9; }     // ★ Mini Boss = ชมพู
     else if (e.isWarp) { color = '#9b59b6'; size = 8; }         // ★ warp = ม่วง
     else if (e.kind === 1) { color = '#e74c3c'; size = 6; }     // monster = แดง
     else if (e.kind === 2) { color = '#4caf50'; size = 5; }     // NPC = เขียว
@@ -633,7 +634,13 @@ function renderMapDots(box, img, d) {
 
     // tooltip HTML
     let html = '';
-    if (e.isWarp) {
+    if (e.isBoss) {
+      const mobImg = e.name && e.name !== 'Boss' ? `<img src="${mobIconUrl(e.name)}" style="width:32px;height:32px;border-radius:4px;vertical-align:middle" onerror="this.style.display='none'"> ` : '👑 ';
+      html = `${mobImg}<b style="color:#f1c40f">👑 ${escapeHtml(e.name || 'Boss')}</b><br><span style="color:#888">(${Math.round(e.x)},${Math.round(e.y)})</span>`;
+    } else if (e.isMiniBoss) {
+      const mobImg = e.name && e.name !== 'Mini Boss' ? `<img src="${mobIconUrl(e.name)}" style="width:32px;height:32px;border-radius:4px;vertical-align:middle" onerror="this.style.display='none'"> ` : '👹 ';
+      html = `${mobImg}<b style="color:#ff4081">👹 ${escapeHtml(e.name || 'Mini Boss')}</b><br><span style="color:#888">(${Math.round(e.x)},${Math.round(e.y)})</span>`;
+    } else if (e.isWarp) {
       html = `<b style="color:#9b59b6">🌀 Warp Portal</b><br><span style="color:#888">(${Math.round(e.x)},${Math.round(e.y)})</span>`;
     } else if (e.isBoss) {
       const mobImg = e.name && e.name !== 'Boss' ? `<img src="${mobIconUrl(e.name)}" style="width:32px;height:32px;border-radius:4px;vertical-align:middle" onerror="this.style.display='none'"> ` : '👑 ';
