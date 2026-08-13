@@ -4392,7 +4392,7 @@
       #__assist_bar .expand { color: #8ab4f8; font-weight: 700; }
       /* popup */
       #__assist_popup {
-        display: none; margin-top: 6px; width: 340px; max-height: 70vh;
+        display: none; margin-top: 6px; width: 440px; max-height: 70vh;
         background: rgba(20,22,28,.97); border: 1px solid #3a3f4b; border-radius: 10px;
         box-shadow: 0 8px 32px rgba(0,0,0,.6); overflow: hidden; flex-direction: column;
       }
