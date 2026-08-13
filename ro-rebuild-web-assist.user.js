@@ -5725,8 +5725,9 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
             // ตั้งเป็น target ใหม่
             target = { id: eid, x: m2.x, y: m2.y, acquiredAt: nowMs(), engageAt: 0, lastAttackAt: 0, lastAttackResultAt: 0, pendingAttacks: 0, firstAttackAt: 0, stuckCount: 0, warpCount: 0 };
             lastTargetSwitchAt = nowMs();
+            // ★ คลิกมอน = เปิด combat + ตั้ง target (เริ่มตีเลย)
+            if (!CFG.combatEnabled) { CFG.combatEnabled = true; log('⚔️ Auto-Combat: ON (คลิกโจมตีจาก monitor)'); }
             log('🎯 Remote attack →', m2.name || eid.toString(16), '@(', m2.x, m2.y, ')');
-            if (!CFG.combatEnabled) log('⚠️ Combat ปิดอยู่ — เปิด Combat ก่อนถึงจะตี');
           } else {
             log('⚠️ Remote attack: ไม่พบมอน ID', m.targetId);
           }
