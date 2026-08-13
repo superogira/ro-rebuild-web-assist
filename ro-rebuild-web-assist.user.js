@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.65.0
+// @version      4.66.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,7 +116,7 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.65.0';
+  const VERSION = '4.66.0';
   const GITHUB_RAW = 'https://raw.githubusercontent.com/superogira/ro-rebuild-web-assist/main/ro-rebuild-web-assist.user.js';
   // ★ Feedback — ส่งปัญหา/ข้อเสนอแนะถึงผู้พัฒนาผ่าน Telegram
   const FEEDBACK_BOT_TOKEN = '7932077955:AAEc2u3FaKLY-6iY6VjseK5_GPJXgYK3ORA';
@@ -5725,9 +5725,8 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
             // ตั้งเป็น target ใหม่
             target = { id: eid, x: m2.x, y: m2.y, acquiredAt: nowMs(), engageAt: 0, lastAttackAt: 0, lastAttackResultAt: 0, pendingAttacks: 0, firstAttackAt: 0, stuckCount: 0, warpCount: 0 };
             lastTargetSwitchAt = nowMs();
-            // เปิด combat ให้อัตโนมัติ (ถ้ายังปิดอยู่)
-            if (!CFG.combatEnabled) { CFG.combatEnabled = true; log('⚔️ Auto-Combat: ON (จาก remote attack)'); }
             log('🎯 Remote attack →', m2.name || eid.toString(16), '@(', m2.x, m2.y, ')');
+            if (!CFG.combatEnabled) log('⚠️ Combat ปิดอยู่ — เปิด Combat ก่อนถึงจะตี');
           } else {
             log('⚠️ Remote attack: ไม่พบมอน ID', m.targetId);
           }
