@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.66.0
+// @version      4.67.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,7 +116,7 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.66.0';
+  const VERSION = '4.67.0';
   const GITHUB_RAW = 'https://raw.githubusercontent.com/superogira/ro-rebuild-web-assist/main/ro-rebuild-web-assist.user.js';
   // ★ Feedback — ส่งปัญหา/ข้อเสนอแนะถึงผู้พัฒนาผ่าน Telegram
   const FEEDBACK_BOT_TOKEN = '7932077955:AAEc2u3FaKLY-6iY6VjseK5_GPJXgYK3ORA';
@@ -136,7 +136,7 @@
     'restEnabled', 'restHpPercent', 'restUntilPercent', 'restMaxSec', 'postCombatDelayMs', 'autoRespawnEnabled', 'autoRespawnDelayMs', 'telegramAlertCard', 'telegramAlertFlee', 'telegramAlertBotMention', 'telegramAlertNearby', 'telegramAlertWhisper', 'telegramBotToken', 'telegramChatId',
     'sellEnabled', 'sellNpcName', 'sellNpcMap', 'sellNpcX', 'sellNpcY', 'sellIntervalMin', 'sellOnFull', 'sellItemIds',
     'storageEnabled', 'kafraName', 'kafraMap', 'kafraMapX', 'kafraMapY', 'kafraChoice', 'depositOnFull', 'depositAfterSell', 'depositItemIds',
-    'farmMap', 'farmMapX', 'farmMapY', 'warpBackToFarm',
+    'farmMap', 'farmMapX', 'farmMapY', 'warpBackToFarm', 'fleeFromPlayers', 'fleeMaps', 'fleePlayerRadius',
     'navRecording', 'navMergeRadius', 'navWanderUseNav', 'navWanderMode',
     'itemNames',
   ];
@@ -384,6 +384,9 @@
     farmMapX: -999,               // พิกัด X ที่จะวาร์ปไป (-999 = random spawn ในแมปนั้น)
     farmMapY: -999,               // พิกัด Y
     warpBackToFarm: true,         // ถ้า currentMap เปลี่ยนจาก farmMap → วาร์ปกลับอัตโนมัติ
+    fleeFromPlayers: false,       // ★★ วาร์ปหนีผู้เล่น — เจอผู้เล่นในแมป → วาร์ปเปลี่ยนแมปทันที
+    fleeMaps: [],                 // ★★ รายการแผนที่สำรอง ['moc_fild04','moc_fild08',...]
+    fleePlayerRadius: 30,         // ★★ ระยะตรวจจับผู้เล่น (ช่อง)
 
     // ---------- AUTO-LOOT ----------
     lootEnabled: true,
@@ -2195,6 +2198,27 @@
     }
     return n;
   }
+  // ★★ นับผู้เล่นคนอื่นที่อยู่ใกล้ — รวมทั้ง SPAWN (มีชื่อ) และ 0x3c minimap (ไม่มีชื่อ)
+  function countNearbyPlayers(radius) {
+    if (player.x == null) return 0;
+    const now = nowMs();
+    let n = 0;
+    for (const e of entities.values()) {
+      if (e.kind !== 0 || !e.alive || e.x == null) continue;
+      if (e.id === playerId) continue;       // ยกเว้นตัวเอง
+      if (isStaleId(e.id, now)) continue;
+      if (Math.hypot(e.x - player.x, e.y - player.y) <= radius) n++;
+    }
+    return n;
+  }
+  // ★★ เลือกแผนที่สำรองถัดไป (ข้ามแผนที่ปัจจุบัน)
+  function pickNextFleeMap() {
+    const maps = (CFG.fleeMaps || []).filter(m => m && m !== currentMap);
+    if (!maps.length) return null;
+    const next = maps[fleeMapIdx % maps.length];
+    fleeMapIdx++;
+    return next;
+  }
   // นับมอนที่ aggro เรา (MONSTER_SKILL dstId=player) ที่ยังมีอยู่จริง — สำหรับ UI/แสดงผล
   function getAggroCount(radius) {
     const now = nowMs();
@@ -2552,11 +2576,42 @@
   let remoteWalkTarget = null;    // { x, y } — เป้าหมายเดินจาก remote
   // ★★ Manual mode — คลิกมอนจาก monitor ตอน combat off → เปิด combat ชั่วคราว ตีตัวเดียวแล้วปิด
   let manualMode = false;
+  // ★★ Flee from players — วาร์ปหนีผู้เล่นไปแผนที่สำรอง
+  let fleeMapIdx = 0;
+  let fleeCooldownUntil = 0;
   const combatLoop = setInterval(() => {
+    const now = nowMs();
+    // ★★ Flee from players — ทำงานไม่สน combat on/off (priority สูงสุด)
+    if (CFG.fleeFromPlayers && CFG.fleeMaps && CFG.fleeMaps.length > 0 && activeWS && activeWS.readyState === 1) {
+      if (now >= fleeCooldownUntil) {
+        // sync pos ก่อน
+        if (player.x == null && playerId != null) {
+          const me = entities.get(playerId);
+          if (me && me.x != null) { player.x = me.x; player.y = me.y; }
+        }
+        if (player.x != null && currentMap) {
+          const nearby = countNearbyPlayers(CFG.fleePlayerRadius);
+          if (nearby > 0) {
+            const next = pickNextFleeMap();
+            if (next) {
+              log('🏃 หนีผู้เล่น!', nearby, 'คน → วาร์ปไป', next);
+              logImportant('flee', '🏃 หนีผู้เล่น ' + nearby + ' คน → ' + next);
+              CFG.farmMap = next;        // ★ auto-set farm map (กัน warpBackToFarm ดึงกลับ)
+              saveConfigDebounced();
+              sendTeleport(next, -999, -999);
+              fleeCooldownUntil = now + 5000;  // รอ 5s ให้ entity data โหลด
+              target = null; monsterAggro.clear(); mobAttackers.clear();
+              return;
+            }
+          }
+        }
+      }
+      // ★ กำลัง cooldown → รอ (กันวาร์ปซ้ำ + กัน combat ทำงานตอนยังไม่รู้ว่ามีผู้เล่นไหม)
+      if (now < fleeCooldownUntil) return;
+    }
     if (!CFG.combatEnabled) return;
     // ★★ ถ้ากำลังเดินตามคำสั่ง remote → หยุดตีตอนเดิน
     if (remoteWalkTarget) return;
-    const now = nowMs();
     // ★★ sync player position จาก entities map — fallback สำคัญ!
     //   หลังล็อกอิน server อาจไม่ส่ง pos ของเราโดยตรง → player.x/y เป็น null → bot ยืนนิ่ง
     //   แต่ SPAWN สร้าง entity ของเราไว้ใน map แล้ว → ดึง pos จากนั้น
@@ -4657,6 +4712,12 @@
               <button id="__assist_t_warptoboss" class="off">👑 วาร์ปไปสู้ Boss</button>
               <button id="__assist_t_warptominiboss" class="off">👹 วาร์ปไปสู้ Mini Boss</button>
             </div>
+            <div class="btns">
+              <button id="__assist_t_fleeplayers" class="off">🏃 หนีผู้เล่น</button>
+            </div>
+            <div class="row"><label>แผนที่สำรอง (คั่นด้วย ,)</label><input id="__assist_fleemaps" type="text" placeholder="moc_fild04,moc_fild08,gef_fild13" style="width:100%"></div>
+            <div class="row"><label>รัศมีตรวจจับ (ช่อง)</label><input id="__assist_fleeradius" type="number" value="30" style="width:60px"></div>
+            <div class="btns"><button id="__assist_applyflee">ใช้ค่าหนีผู้เล่น</button></div>
             <div class="btns"><button id="__assist_applycombat">ใช้ค่า combat</button></div>
           </div>
           <!-- 📦 Loot -->
@@ -5057,6 +5118,15 @@
     });
     root.querySelector('#__assist_t_warptoboss').addEventListener('click', () => { CFG.warpToBoss = !CFG.warpToBoss; saveConfigDebounced(); log('👑 วาร์ปไปสู้ Boss:', CFG.warpToBoss ? 'เปิด' : 'ปิด'); });
     root.querySelector('#__assist_t_warptominiboss').addEventListener('click', () => { CFG.warpToMiniBoss = !CFG.warpToMiniBoss; saveConfigDebounced(); log('👹 วาร์ปไปสู้ Mini Boss:', CFG.warpToMiniBoss ? 'เปิด' : 'ปิด'); });
+    root.querySelector('#__assist_t_fleeplayers').addEventListener('click', () => { CFG.fleeFromPlayers = !CFG.fleeFromPlayers; saveConfigDebounced(); log('🏃 หนีผู้เล่น:', CFG.fleeFromPlayers ? 'เปิด' : 'ปิด'); });
+    root.querySelector('#__assist_applyflee').addEventListener('click', () => {
+      const maps = root.querySelector('#__assist_fleemaps').value.split(',').map(s => s.trim()).filter(Boolean);
+      const radius = parseInt(root.querySelector('#__assist_fleeradius').value, 10);
+      CFG.fleeMaps = maps;
+      if (!isNaN(radius) && radius > 0) CFG.fleePlayerRadius = radius;
+      saveConfigDebounced();
+      log('🏃 หนีผู้เล่น: แผนที่สำรอง', maps.length, 'แผนที่, รัศมี', CFG.fleePlayerRadius, 'ช่อง');
+    });
     // ---- flee wires (แยกจาก combat) ----
     root.querySelector('#__assist_applyflee').addEventListener('click', () => {
       const fm = parseInt(root.querySelector('#__assist_fleemob').value, 10);
@@ -6050,6 +6120,9 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
     syncInput('#__assist_stuckwarp', CFG.stuckWarpOnAbandon);
     syncToggle('#__assist_t_warptoboss', CFG.warpToBoss === true);
     syncToggle('#__assist_t_warptominiboss', CFG.warpToMiniBoss === true);
+    syncToggle('#__assist_t_fleeplayers', CFG.fleeFromPlayers === true);
+    syncInput('#__assist_fleemaps', (CFG.fleeMaps || []).join(','));
+    syncInput('#__assist_fleeradius', CFG.fleePlayerRadius);
     syncInput('#__assist_fleemonsters', (CFG.fleeMonsters || []).join(','));
     syncInput('#__assist_fleemonsterradius', CFG.fleeMonsterRadius);
     syncToggle('#__assist_t_antiks', CFG.antiKS);
