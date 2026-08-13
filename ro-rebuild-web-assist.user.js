@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.57.0
+// @version      4.58.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,8 +116,11 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.57.0';
+  const VERSION = '4.58.0';
   const GITHUB_RAW = 'https://raw.githubusercontent.com/superogira/ro-rebuild-web-assist/main/ro-rebuild-web-assist.user.js';
+  // ★ Feedback — ส่งปัญหา/ข้อเสนอแนะถึงผู้พัฒนาผ่าน Telegram
+  const FEEDBACK_BOT_TOKEN = '7932077955:AAEc2u3FaKLY-6iY6VjseK5_GPJXgYK3ORA';
+  const FEEDBACK_CHAT_ID = '-5021728172';
   const CFG_STORAGE_KEY = 'roAssistConfig_v1';
   // keys ที่บันทึก/โหลด (boolean/number/array/string — ไม่เก็บ function หรือ object ซ้อน)
   const PERSIST_KEYS = [
@@ -4470,6 +4473,7 @@
         <span class="pill" data-teleport style="background:#4a2c6a;color:#d1b3ff">🌀</span>
         <span class="pill" data-monitor style="background:#1a237e;color:#90caf9">🖥️</span>
         <span class="pill" data-remote style="background:#1a3a1a;color:#81c784;display:none">🌐</span>
+        <span class="pill" data-feedback style="background:#4a3a1a;color:#ffd54f" title="แจ้งปัญหา/ข้อเสนอแนะ">💬</span>
         <span class="expand">⚙</span>
       </div>
       <div id="__assist_popup">
@@ -4838,6 +4842,7 @@
         }
         if (pill.hasAttribute('data-monitor')) { openMonitor(); }
         if (pill.hasAttribute('data-remote')) { openRemoteMonitor(); }
+        if (pill.hasAttribute('data-feedback')) { openFeedbackModal(); }
         return;
       }
       popup.classList.toggle('open');
@@ -5211,6 +5216,65 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
     const fullUrl = proto + '//' + url + '/#pid=' + pidHex;
     log('🌐 เปิด Remote Monitor:', fullUrl);
     window.open(fullUrl, '_blank');
+  }
+  // ★ Feedback modal — แจ้งปัญหา/ข้อเสนอแนะ → ส่งถึงผู้พัฒนาผ่าน Telegram
+  function openFeedbackModal() {
+    const old = document.getElementById('__assist_feedback_modal');
+    if (old) old.remove();
+    const overlay = document.createElement('div');
+    overlay.id = '__assist_feedback_modal';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:999999;display:flex;align-items:center;justify-content:center';
+    overlay.innerHTML = `
+      <div style="background:#1e1e2e;color:#e8e8e8;border-radius:12px;padding:20px;width:420px;max-width:90vw;font-family:sans-serif;box-shadow:0 8px 32px rgba(0,0,0,.5)">
+        <div style="font-size:16px;font-weight:700;margin-bottom:4px">💬 แจ้งปัญหา / ข้อเสนอแนะ</div>
+        <div style="font-size:11px;color:#888;margin-bottom:10px">ข้อความจะส่งถึงผู้พัฒนาพร้อมข้อมูลเวอร์ชั่น/แมป</div>
+        <textarea id="__assist_feedback_text" style="width:100%;height:120px;background:#2a2d35;color:#e8e8e8;border:1px solid #444;border-radius:8px;padding:10px;font-size:13px;resize:vertical;box-sizing:border-box" placeholder="เขียนปัญหาหรือข้อเสนอแนะที่นี่... (Ctrl+Enter = ส่ง)"></textarea>
+        <div style="display:flex;gap:8px;margin-top:10px;justify-content:flex-end">
+          <button id="__assist_feedback_cancel" style="padding:8px 16px;border:none;border-radius:8px;background:#444;color:#ccc;cursor:pointer;font-size:13px">ยกเลิก</button>
+          <button id="__assist_feedback_send" style="padding:8px 16px;border:none;border-radius:8px;background:#1a73e8;color:#fff;cursor:pointer;font-size:13px;font-weight:600">📤 ส่ง</button>
+        </div>
+        <div id="__assist_feedback_status" style="font-size:11px;margin-top:8px;text-align:center;min-height:14px"></div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const box = overlay.querySelector('#__assist_feedback_text');
+    setTimeout(() => box.focus(), 0);
+    const close = () => overlay.remove();
+    overlay.querySelector('#__assist_feedback_cancel').onclick = close;
+    overlay.onclick = (e) => { if (e.target === overlay) close(); };
+    overlay.querySelector('#__assist_feedback_send').onclick = async () => {
+      const msg = box.value.trim();
+      if (!msg) { box.focus(); return; }
+      const statusEl = overlay.querySelector('#__assist_feedback_status');
+      const sendBtn = overlay.querySelector('#__assist_feedback_send');
+      sendBtn.disabled = true; sendBtn.textContent = 'กำลังส่ง...';
+      statusEl.style.color = '#f39c12'; statusEl.textContent = 'กำลังส่ง...';
+      const text = [
+        '💬 <b>Feedback</b>', '', msg, '',
+        '— — —',
+        '🤖 v' + VERSION,
+        '👤 ' + (playerName || '?'),
+        '🗺️ ' + (currentMap || '?'),
+      ].join('\n');
+      try {
+        const res = await fetch('https://api.telegram.org/bot' + FEEDBACK_BOT_TOKEN + '/sendMessage', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: FEEDBACK_CHAT_ID, text, parse_mode: 'HTML', disable_web_page_preview: true }),
+        });
+        if (res.ok) {
+          statusEl.style.color = '#4caf50'; statusEl.textContent = '✅ ส่งแล้ว — ขอบคุณมาก!';
+          log('💬 ส่ง feedback แล้ว');
+          setTimeout(close, 1500);
+        } else { throw new Error('HTTP ' + res.status); }
+      } catch (e) {
+        statusEl.style.color = '#f44336'; statusEl.textContent = '❌ ส่งไม่สำเร็จ: ' + e.message;
+        sendBtn.disabled = false; sendBtn.textContent = '📤 ส่ง';
+      }
+    };
+    box.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); overlay.querySelector('#__assist_feedback_send').click(); }
+      if (e.key === 'Escape') close();
+    });
   }
   // ★ Remote relay WebSocket state (ประกาศก่อนใช้ — กัน TDZ)
   let relayWs = null;
