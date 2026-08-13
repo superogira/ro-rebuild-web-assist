@@ -1621,5 +1621,286 @@
       "scaleY": -1.3006072874493928,
       "offsetY": 370.8906882591093
     }
+  },
+  "prt_fild04": {
+    "points": [
+      {
+        "tileX": 18,
+        "tileY": 133,
+        "pixelX": 20,
+        "pixelY": 256
+      },
+      {
+        "tileX": 189,
+        "tileY": 340,
+        "pixelX": 184,
+        "pixelY": 58
+      },
+      {
+        "tileX": 175,
+        "tileY": 97,
+        "pixelX": 169,
+        "pixelY": 289
+      }
+    ],
+    "transform": {
+      "scaleX": 0.954905151055726,
+      "offsetX": 2.7420774322375414,
+      "scaleY": -0.9526425954997384,
+      "offsetY": 382.0020931449503
+    }
+  },
+  "gef_fild01": {
+    "points": [
+      {
+        "tileX": 245,
+        "tileY": 168,
+        "pixelX": 238,
+        "pixelY": 221
+      },
+      {
+        "tileX": 48,
+        "tileY": 114,
+        "pixelX": 48,
+        "pixelY": 272
+      },
+      {
+        "tileX": 383,
+        "tileY": 147,
+        "pixelX": 367,
+        "pixelY": 244
+      }
+    ],
+    "transform": {
+      "scaleX": 0.9530744717129788,
+      "offsetX": 2.907219040675462,
+      "scaleY": -0.9358974358974359,
+      "offsetY": 379.5
+    }
+  },
+  "mjo_dun03": {
+    "points": [
+      {
+        "tileX": 50,
+        "tileY": 184,
+        "pixelX": 82,
+        "pixelY": 176
+      },
+      {
+        "tileX": 50,
+        "tileY": 184,
+        "pixelX": 123,
+        "pixelY": 207
+      },
+      {
+        "tileX": 50,
+        "tileY": 184,
+        "pixelX": 66,
+        "pixelY": 207
+      }
+    ],
+    "transform": null
+  },
+  "gl_knt02": {
+    "points": [
+      {
+        "tileX": 186,
+        "tileY": 67,
+        "pixelX": 238,
+        "pixelY": 298
+      },
+      {
+        "tileX": 175,
+        "tileY": 70,
+        "pixelX": 225,
+        "pixelY": 293
+      },
+      {
+        "tileX": 67,
+        "tileY": 114,
+        "pixelX": 85,
+        "pixelY": 239
+      },
+      {
+        "tileX": 149,
+        "tileY": 67,
+        "pixelX": 191,
+        "pixelY": 297
+      }
+    ],
+    "transform": {
+      "scaleX": 1.2900763358778626,
+      "offsetX": -1.3435114503816976,
+      "scaleY": -1.2401129943502824,
+      "offsetY": 380.33898305084745
+    }
+  },
+  "prt_fild02": {
+    "points": [
+      {
+        "tileX": 269,
+        "tileY": 197,
+        "pixelX": 260,
+        "pixelY": 191
+      },
+      {
+        "tileX": 191,
+        "tileY": 76,
+        "pixelX": 186,
+        "pixelY": 308
+      },
+      {
+        "tileX": 329,
+        "tileY": 92,
+        "pixelX": 318,
+        "pixelY": 292
+      }
+    ],
+    "transform": {
+      "scaleX": 0.956140350877193,
+      "offsetX": 3.2017543859649322,
+      "scaleY": -0.9651261476737906,
+      "offsetY": 381.09034796697784
+    }
+  },
+  "prt_fild10": {
+    "points": [
+      {
+        "tileX": 80,
+        "tileY": 51,
+        "pixelX": 88,
+        "pixelY": 303
+      },
+      {
+        "tileX": 254,
+        "tileY": 144,
+        "pixelX": 272,
+        "pixelY": 210
+      },
+      {
+        "tileX": 206,
+        "tileY": 135,
+        "pixelX": 223,
+        "pixelY": 218
+      }
+    ],
+    "transform": {
+      "scaleX": 1.0603021297672115,
+      "offsetX": 3.4789499752352717,
+      "scaleY": -1.0047510452299506,
+      "offsetY": 354.18928164196126
+    }
+  },
+  "moc_fild05": {
+    "points": [
+      {
+        "tileX": 78,
+        "tileY": 355,
+        "pixelX": 79,
+        "pixelY": 43
+      },
+      {
+        "tileX": 251,
+        "tileY": 203,
+        "pixelX": 243,
+        "pixelY": 187
+      },
+      {
+        "tileX": 64,
+        "tileY": 45,
+        "pixelX": 63,
+        "pixelY": 342
+      }
+    ],
+    "transform": {
+      "scaleX": 0.9564015116600608,
+      "offsetX": 3.044735305865364,
+      "scaleY": -0.9646246046279341,
+      "offsetY": 384.55621219688146
+    }
+  },
+  "moc_fild09": {
+    "points": [
+      {
+        "tileX": 333,
+        "tileY": 140,
+        "pixelX": 318,
+        "pixelY": 245
+      },
+      {
+        "tileX": 211,
+        "tileY": 157,
+        "pixelX": 203,
+        "pixelY": 234
+      },
+      {
+        "tileX": 177,
+        "tileY": 280,
+        "pixelX": 171,
+        "pixelY": 113
+      }
+    ],
+    "transform": {
+      "scaleX": 0.9423915197146819,
+      "offsetX": 4.178571428571445,
+      "scaleY": -0.9580787023816323,
+      "offsetY": 381.6038037580673
+    }
+  },
+  "moc_fild10": {
+    "points": [
+      {
+        "tileX": 122,
+        "tileY": 125,
+        "pixelX": 118,
+        "pixelY": 234
+      },
+      {
+        "tileX": 37,
+        "tileY": 184,
+        "pixelX": 38,
+        "pixelY": 160
+      },
+      {
+        "tileX": 349,
+        "tileY": 118,
+        "pixelX": 333,
+        "pixelY": 241
+      }
+    ],
+    "transform": {
+      "scaleX": 0.9458481210521595,
+      "offsetX": 2.836384835167659,
+      "scaleY": -1.2377631245244738,
+      "offsetY": 387.84161805731674
+    }
+  },
+  "pay_fild02": {
+    "points": [
+      {
+        "tileX": 62,
+        "tileY": 258,
+        "pixelX": 79,
+        "pixelY": 139
+      },
+      {
+        "tileX": 131,
+        "tileY": 86,
+        "pixelX": 168,
+        "pixelY": 301
+      },
+      {
+        "tileX": 154,
+        "tileY": 205,
+        "pixelX": 199,
+        "pixelY": 190
+      }
+    ],
+    "transform": {
+      "scaleX": 1.3010033444816054,
+      "offsetX": -1.81605351170568,
+      "scaleY": -0.9403273617734245,
+      "offsetY": 382.0799072045367
+    }
   }
 }
