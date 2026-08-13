@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.71.0
+// @version      4.72.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,7 +116,7 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.71.0';
+  const VERSION = '4.72.0';
   const GITHUB_RAW = 'https://raw.githubusercontent.com/superogira/ro-rebuild-web-assist/main/ro-rebuild-web-assist.user.js';
   // ★ Feedback — ส่งปัญหา/ข้อเสนอแนะถึงผู้พัฒนาผ่าน Telegram
   const FEEDBACK_BOT_TOKEN = '7932077955:AAEc2u3FaKLY-6iY6VjseK5_GPJXgYK3ORA';
@@ -876,6 +876,13 @@
   // ---------- ประมวลผล packet ----------
   function handleIn(u) {
     if (!u.length) return;
+    // ★★ Packet capture
+    if (ASSIST._captureUntil && Date.now() < ASSIST._captureUntil) {
+      ASSIST._captureBuf.push({ t: Date.now(), data: new Uint8Array(u) });
+    } else if (ASSIST._captureUntil && Date.now() >= ASSIST._captureUntil) {
+      ASSIST._captureUntil = 0;
+      log('📡 Capture หมดเวลา — พิมพ์ ASSIST.captureStop() เพื่อดูผล');
+    }
     const op = u[0];
 
     // 0x25 STAT: HP/SP ของ entity → [25][eid:4][statType:4][cur:4][max:4][flag:1]
@@ -3992,6 +3999,29 @@
     // ---------- ทั่วไป ----------
     name(id, label) { CFG.itemNames[id] = label; log('🏷️', id, '=', label); },
     config() { return CFG; },
+    // ★★ Packet capture — สำหรับวิเคราะห์ protocol
+    //   ASSIST.captureStart(10) → capture 10 วินาที → log hex ทุก packet ขาเข้า
+    //   ASSIST.captureStop() → หยุด + return array ของ packets ทั้งหมด
+    _captureBuf: [],
+    _captureUntil: 0,
+    captureStart(seconds) {
+      this._captureBuf = [];
+      this._captureUntil = Date.now() + (seconds || 10) * 1000;
+      log('📡 Packet capture เริ่ม — ' + (seconds || 10) + ' วินาที');
+    },
+    captureStop() {
+      this._captureUntil = 0;
+      const out = this._captureBuf.slice();
+      this._captureBuf = [];
+      log('📡 Packet capture หยุด — ' + out.length + ' packets');
+      // ★ print hex แบบสวยๆ ใน console
+      out.forEach((p, i) => {
+        const hex = Array.from(p.data).map(b => b.toString(16).padStart(2, '0')).join(' ');
+        console.log(`[${i}] op=0x${p.data[0].toString(16)} t=${p.t} | ${hex.slice(0, 120)}${hex.length > 120 ? '...' : ''}`);
+      });
+      console.log('★ ทั้งหมด ' + out.length + ' packets — ก๊อปปี้จาก console ได้เลย');
+      return out;
+    },
     // ---------- สถิติ + log (สำหรับ panel) ----------
     getStats() {
       const elapsed = Math.max(1, Date.now() - stats.startTime);
