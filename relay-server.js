@@ -211,6 +211,8 @@ wss.on('connection', (ws, req) => {
             elapsedMs: d.stats?.elapsedMs || 0,
             baseExp: d.stats?.baseExpGained || 0,
             zeny: d.zeny ?? null,
+            gameServer: d.gameServer || '',
+            hasTelegram: !!telegramConfigs[cleanPlayerName(d.player?.name)],
             viewers: entry.monitors ? entry.monitors.size : 0,
           });
         }

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.47.0
+// @version      4.48.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,7 +116,7 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.47.0';
+  const VERSION = '4.48.0';
   const GITHUB_RAW = 'https://raw.githubusercontent.com/superogira/ro-rebuild-web-assist/main/ro-rebuild-web-assist.user.js';
   const CFG_STORAGE_KEY = 'roAssistConfig_v1';
   // keys ที่บันทึก/โหลด (boolean/number/array/string — ไม่เก็บ function หรือ object ซ้อน)
@@ -470,6 +470,7 @@
 
   // ---------- state ทั่วไป ----------
   let activeWS = null;                 // game socket (ใช้ส่งคำสั่ง)
+  let gameServerUrl = '';              // ★ URL ของเซิร์ฟเวอร์เกม (เช่น wss://gamesea01.rayrag.com/ws)
   let playerId = null;                 // ไอดีตัวเรา
   let playerName = null;               // ★ ชื่อตัวเรา — guard กัน false ID change (mirror world.js:1235)
   let hpStatGraceUntil = 0;            // ★ grace period หลัง ID เปลี่ยน (ข้าม STAT HP ที่อาจผิด)
@@ -943,7 +944,9 @@
       const picker = u32(u, 1), dropId = u32(u, 5);
       const it = queue.get(dropId);
       const wit = warpQueue.get(dropId);   // ★ อาจมาจาก warpQueue หลังวาร์ปไปเก็บ
-      if (picker !== FAIL) {
+      // ★★ เช็คว่า "เรา" เป็นคนเก็บ (picker === playerId) ไม่ใช่แค่ "ใครบางคนเก็บ"
+      //   ปัญหา: คนอื่นเก็บการ์ด → server ส่ง picker = คนอื่น → บอทเข้าใจว่าเก็บได้เอง!
+      if (picker !== FAIL && picker === playerId) {
         if (it) { queue.delete(dropId); }
         if (wit) { warpQueue.delete(dropId); log('✨ วาร์ปไปเก็บสำเร็จ:', nameOf(wit.itemId), 'drop', dropId); }
         const itemId = (it || wit).itemId;
@@ -2561,7 +2564,8 @@
 
     // === 1b. Defensive retarget === ถ้าโดนมอนตี (ที่ไม่ใช่ target ปัจจุบัน) → สลับมาตีตัวนั้น
     //   สำคัญ: ถ้ามอน aggro เรา ต้องสู้กลับ ไม่ใช่เดินหาตัวอื่น
-    if (player.x != null) {
+    //   ★★ sticky target guard: ถ้ากำลังตีอยู่ + server ตอบกลับ < 5s → ไม่สลับ (กันสลับไปมา)
+    if (player.x != null && !(target && target.lastAttackResultAt && now - target.lastAttackResultAt < 5000)) {
       let attacker = null, attackerDist = Infinity;
       for (const [aid, at] of mobAttackers) {
         if (now - at > CFG.fleeMobWindowMs) { mobAttackers.delete(aid); continue; }
@@ -3235,6 +3239,7 @@
       }
     }
     activeWS = ws; log('🔌 ต่อ WebSocket แล้ว');
+    try { gameServerUrl = ws.url || ''; } catch (_) {}   // ★ เก็บ URL เซิร์ฟเวอร์เกม
     const origSend = ws.send.bind(ws);
     ws.send = function (data) {
       try { const u = syncU8(data); if (u) handleOut(u); } catch (e) {}
@@ -5089,7 +5094,7 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
       hp: hp.cur, hpMax: hp.max, hpPct: hpPct(),
       sp: sp.cur, spMax: sp.max,
       player: { x: player.x, y: player.y, name: playerName, id: playerId },
-      map: currentMap, farmMap: CFG.farmMap, zeny: playerZeny,
+      map: currentMap, farmMap: CFG.farmMap, zeny: playerZeny, gameServer: gameServerUrl,
       target: (() => {
         if (!tgt) return null;
         // ★ resolve entity จริงเพื่อเอา name/hp/hpMax (tgt จาก ASSIST.getTarget() มีแค่ id hex string)

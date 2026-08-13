@@ -402,11 +402,13 @@ function renderBotList(bots) {
     const elapsed = b.elapsedMs ? `<span>⏱ ${fmt(b.elapsedMs)}</span>` : '';
     const baseExp = b.baseExp ? `<span style="color:#4f4">EXP ${N(b.baseExp)}</span>` : '';
     const zeny = b.zeny != null ? `<span style="color:#f1c40f">${N(b.zeny)}z</span>` : '';
+    const tg = b.hasTelegram ? '<span style="color:#2ecc71">📨</span>' : '<span style="color:#555">📨</span>';
     const viewers = b.viewers > 0 ? `<span style="color:#3498db">👁 ${b.viewers}</span>` : '';
+    const server = b.gameServer ? `<span style="color:#666;font-size:8px">${b.gameServer.replace(/^wss?:\/\//,'').split('/')[0]}</span>` : '';
     return `<div class="bot-item" data-pid="${b.playerId}">
       <span class="pid">${b.playerId}</span>
-      <span class="nm">${b.name || '?'} ${viewers}</span>
-      <span class="mp">${b.map || '?'}</span>
+      <span class="nm">${b.name || '?'} ${tg} ${viewers}</span>
+      <span class="mp">${b.map || '?'} ${server}</span>
       <span class="extra">${elapsed} ${baseExp} ${zeny} ${ver}</span>
     </div>`;
   }).join('');
