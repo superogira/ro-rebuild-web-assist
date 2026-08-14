@@ -2489,10 +2489,11 @@
     activeWS.send(new Uint8Array([0x56, 0x00]));
     return true;
   }
-  // ★★ ปิด sell dialog / NPC dialog — ส่ง cancel (mirror storage close)
+  // ★★ ปิด sell dialog — ส่ง SELL_ITEMS ด้วย count=0 = cancel (จาก packet capture)
+  //   packet: [57][count:4 LE = 0] → server ตอบ 4d 03 (dialog closed)
   function sendSellClose() {
     if (!activeWS || activeWS.readyState !== 1) return false;
-    activeWS.send(new Uint8Array([0x56, 0x00]));   // ปิด dialog (เหมือน storage close)
+    activeWS.send(new Uint8Array([0x57, 0x00, 0x00, 0x00, 0x00]));   // sell 0 items = cancel
     return true;
   }
   function clearCombatThreat() { monsterAggro.clear(); mobAttackers.clear(); }
