@@ -4205,6 +4205,7 @@
     { name: 'Arrow Shower', skillId: 26, level: 5, ground: true, maxUsesPerTarget: 1, maxDistance: 10, mobCountMin: 2, spMin: 20, cooldownMs: 60000, job: 'Hunter', desc: 'AoE ธนู (เลือกพื้นที่)' },
     // ---- Thief/Assassin/Rogue (จาก packet capture) ----
     { name: 'Steal', skillId: 61, level: 10, targeted: true, maxUsesPerTarget: 2, maxDistance: 2, spMin: 10, cooldownMs: 30000, job: 'Thief/Assassin/Rogue', desc: 'ขโมยของจากมอน (ใช้ที่เลเวลสูงสุด)' },
+    { name: 'Sonic Blow', skillId: 126, level: 10, targeted: true, maxUsesPerTarget: 1, maxDistance: 2, spMin: 34, cooldownMs: 1, job: 'Assassin/SinX', desc: 'ฟัน 8 ครั้งรวด (ดาเมจหนัก)' },
   ];
   function skillPresetGroups() {
     const groups = {};
