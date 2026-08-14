@@ -2243,9 +2243,9 @@
     for (const e of entities.values()) {
       if (e.kind !== 0 || !e.alive || e.x == null) continue;
       if (e.id === playerId) continue;       // ยกเว้นตัวเอง
-      // ★★ ข้าม entity ที่อยู่ใกล้เกินไป (≤3 ช่อง) = น่าจะตัวเองจาก 0x3c/minimap
+      // ★★ ข้าม entity ที่อยู่ใกล้เกินไป (≤8 ช่อง) = น่าจะตัวเองจาก 0x3c/minimap
       //   สาเหตุ: หลังวาร์ป 0x3c sub=13 ส่งตัวเรามาด้วย + playerId อาจยังไม่อัปเดต
-      if (Math.abs(e.x - player.x) <= 3 && Math.abs(e.y - player.y) <= 3) continue;
+      if (Math.hypot(e.x - player.x, e.y - player.y) <= 8) continue;
       if (isStaleId(e.id, now)) continue;
       if (radius > 0 && Math.hypot(e.x - player.x, e.y - player.y) > radius) continue;  // radius=0 = นับทุกคนในแมป
       n++;
