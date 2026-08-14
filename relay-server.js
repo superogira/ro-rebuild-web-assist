@@ -26,7 +26,76 @@ const ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'ro-admin-2026';
 
 // ★ HTTP server — serve remote-monitor.html + relay.js (เปิดเว็บได้เลยไม่ต้องโหลดไฟล์)
 const MONITOR_HTML = fs.readFileSync(path.join(__dirname, 'remote-monitor.html'), 'utf8');
+
+// ★★ Chat files directory — เก็บรูป/ไฟล์ที่อัปโหลด
+const CHAT_FILES_DIR = path.join(__dirname, 'chat-files');
+try { fs.mkdirSync(CHAT_FILES_DIR, { recursive: true }); } catch (_) {}
+const MAX_FILE_SIZE = 1048576;   // 1 MB
+const MIME_MAP = {
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+  '.bmp': 'image/bmp', '.gif': 'image/gif', '.webp': 'image/webp',
+  '.json': 'application/json',
+};
+
 const server = http.createServer((req, res) => {
+  // ★★ CORS headers สำหรับทุก response
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+
+  // ★★ POST /upload — รับไฟล์เป็น base64 JSON
+  if (req.url === '/upload' && req.method === 'POST') {
+    let body = '';
+    let tooBig = false;
+    req.on('data', chunk => {
+      body += chunk;
+      if (body.length > 2 * 1024 * 1024) { tooBig = true; req.destroy(); }   // 2MB safety limit
+    });
+    req.on('end', () => {
+      try {
+        const { data, mimeType, filename } = JSON.parse(body);
+        if (!data || typeof data !== 'string') throw new Error('no data');
+        const sizeBytes = Math.ceil(data.length * 0.75);   // base64 → actual size
+        if (sizeBytes > MAX_FILE_SIZE) {
+          res.writeHead(413, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: 'ไฟล์ใหญ่เกิน 1MB (' + (sizeBytes / 1024).toFixed(0) + 'KB)' }));
+          return;
+        }
+        // หา extension จาก mimeType หรือ filename
+        let ext = '.bin';
+        if (filename) { const m = filename.match(/\.(png|jpe?g|bmp|gif|webp|json)$/i); if (m) ext = '.' + m[1].toLowerCase(); }
+        else if (mimeType) { for (const [e, mt] of Object.entries(MIME_MAP)) { if (mt === mimeType) { ext = e; break; } } }
+        const savedName = Date.now() + '-' + Math.random().toString(36).slice(2, 8) + ext;
+        fs.writeFileSync(path.join(CHAT_FILES_DIR, savedName), Buffer.from(data, 'base64'));
+        log('📎 File uploaded:', savedName, '(' + (sizeBytes / 1024).toFixed(0) + 'KB)');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, filename: savedName }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: e.message }));
+      }
+    });
+    if (tooBig) {
+      res.writeHead(413, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: 'ไฟล์ใหญ่เกิน limit' }));
+    }
+    return;
+  }
+
+  // ★★ GET /chat-files/:filename — ส่งไฟล์กลับ
+  if (req.url.startsWith('/chat-files/') && req.method === 'GET') {
+    const filename = path.basename(req.url.slice('/chat-files/'.length));
+    if (/[\/\\]/.test(filename)) { res.writeHead(403); res.end('Forbidden'); return; }
+    const filePath = path.join(CHAT_FILES_DIR, filename);
+    if (!fs.existsSync(filePath)) { res.writeHead(404); res.end('Not found'); return; }
+    const ext = path.extname(filename).toLowerCase();
+    const contentType = MIME_MAP[ext] || 'application/octet-stream';
+    res.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': 'public, max-age=604800, immutable' });
+    fs.createReadStream(filePath).pipe(res);
+    return;
+  }
+
   if (req.url === '/' || req.url === '/index.html') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(MONITOR_HTML);
@@ -340,17 +409,25 @@ wss.on('connection', (ws, req) => {
     if (msg.type === 'roomSend') {
       const text = String(msg.message || '').trim().slice(0, 200);
       const displayName = String(msg.displayName || 'ผู้ไม่ประสงค์ออกนาม').trim().slice(0, 30) || 'ผู้ไม่ประสงค์ออกนาม';
-      if (!text) return;
+      // ★★ attachment (รูป/ไฟล์) — ไม่ต้องมี text ถ้ามี attachment
+      let attachment = null;
+      if (msg.attachment && typeof msg.attachment === 'object') {
+        const at = msg.attachment;
+        if (at.filename && at.type) {
+          attachment = { type: at.type, filename: String(at.filename).slice(0, 100), mimeType: String(at.mimeType || '').slice(0, 50) };
+        }
+      }
+      if (!text && !attachment) return;   // ต้องมีอย่างน้อย text หรือ attachment
       // ★ เติม metadata ฝั่ง relay: botName + version จากข้อมูลที่ register ไว้
       const entry = ws.playerId ? bots.get(ws.playerId) : null;
       const botName = cleanPlayerName(entry?.lastData?.player?.name) || ws.playerName || '';
       const version = entry?.lastData?.version || '';
-      const msgObj = { t: Date.now(), displayName, botName, version, text };
+      const msgObj = { t: Date.now(), displayName, botName, version, text, attachment };
       chatHistory.push(msgObj);
       if (chatHistory.length > CHAT_HISTORY_MAX) chatHistory = chatHistory.slice(-CHAT_HISTORY_MAX);
       saveChatHistory();
       broadcastToAll({ type: 'roomMessage', message: msgObj });
-      log(`🗨️ RoomChat [${displayName}] (${botName || ws.role}): ${text.slice(0, 60)}`);
+      log(`🗨️ RoomChat [${displayName}] (${botName || ws.role}): ${attachment ? '[📎 ' + attachment.type + ']' : ''} ${text.slice(0, 60)}`);
       return;
     }
   });

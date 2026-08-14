@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.75.0
+// @version      4.76.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,7 +116,7 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.75.0';
+  const VERSION = '4.76.0';
   const GITHUB_RAW = 'https://raw.githubusercontent.com/superogira/ro-rebuild-web-assist/main/ro-rebuild-web-assist.user.js';
   // ★ Feedback — ส่งปัญหา/ข้อเสนอแนะถึงผู้พัฒนาผ่าน Telegram
   const FEEDBACK_BOT_TOKEN = '7932077955:AAEc2u3FaKLY-6iY6VjseK5_GPJXgYK3ORA';
@@ -5605,6 +5605,61 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
     });
   }
   // ★★ Chat Room modal — ห้องแชทสำหรับผู้ใช้บอท (คุยกันผ่าน relay server)
+  // ★★ Chat room upload URL — derive from relay server URL
+  function getChatUploadUrl() {
+    try {
+      const wsUrl = CFG.monitorServerUrl || '';
+      const httpUrl = wsUrl.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:');
+      return httpUrl.replace(/\/$/, '') + '/upload';
+    } catch (_) { return ''; }
+  }
+  function getChatFileUrl(filename) {
+    try {
+      const wsUrl = CFG.monitorServerUrl || '';
+      const httpUrl = wsUrl.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:');
+      return httpUrl.replace(/\/$/, '') + '/chat-files/' + filename;
+    } catch (_) { return '#'; }
+  }
+  // ★★ อัปโหลดไฟล์ → relay → ส่ง chat message พร้อม attachment
+  async function uploadChatFile(file) {
+    if (!file) return;
+    const allowed = ['image/jpeg','image/png','image/bmp','image/gif','image/webp','application/json'];
+    const ext = file.name.match(/\.(\w+)$/)?.[1]?.toLowerCase();
+    if (!allowed.includes(file.type) && !['json','jpg','jpeg','png','bmp','gif','webp'].includes(ext)) {
+      log('⚠️ ไม่รองรับไฟล์ประเภทนี้ — รับเฉพาะรูป (jpg/png/bmp/gif) และ .json'); return;
+    }
+    if (file.size > 1048576) {
+      log('⚠️ ไฟล์ใหญ่เกิน 1MB (' + (file.size/1024).toFixed(0) + 'KB)'); return;
+    }
+    const isJson = file.type === 'application/json' || ext === 'json';
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64 = reader.result.split(',')[1];
+      const uploadUrl = getChatUploadUrl();
+      if (!uploadUrl) { log('⚠️ ไม่รู้ URL relay server'); return; }
+      log('📎 กำลังอัปโหลด', file.name, '(' + (file.size/1024).toFixed(0) + 'KB)...');
+      try {
+        const res = await fetch(uploadUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: base64, mimeType: file.type, filename: file.name }),
+        });
+        const result = await res.json();
+        if (result.ok) {
+          if (relayWs && relayWs.readyState === 1) {
+            relayWs.send(JSON.stringify({
+              type: 'roomSend',
+              displayName: (localStorage.getItem('roAssistChatName') || 'ผู้ใช้'),
+              message: '',
+              attachment: { type: isJson ? 'file' : 'image', filename: result.filename, mimeType: file.type || (isJson ? 'application/json' : 'image/png') },
+            }));
+            log('📎 ส่งไฟล์สำเร็จ');
+          }
+        } else { log('⚠️ อัปโหลดล้มเหลว:', result.error); }
+      } catch (e) { log('⚠️ อัปโหลดล้มเหลว:', e.message); }
+    };
+    reader.readAsDataURL(file);
+  }
   function renderChatRoomMessages(modal) {
     const box = modal.querySelector('#__assist_chatroom_msgs');
     if (!box) return;
@@ -5613,9 +5668,29 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
       const ts = d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0');
       const name = (m.displayName || '?').replace(/</g,'&lt;');
       const text = (m.text || '').replace(/</g,'&lt;');
-      return `<div style="margin-bottom:4px"><span style="color:#666;font-size:10px">${ts}</span> <span style="color:#4fc3f7;font-weight:600">${name}</span><span style="color:#888">: </span><span style="color:#e8e8e8">${text}</span></div>`;
+      let attachHtml = '';
+      if (m.attachment) {
+        if (m.attachment.type === 'image' && m.attachment.filename) {
+          const imgUrl = getChatFileUrl(m.attachment.filename);
+          attachHtml = `<br><img src="${imgUrl}" style="max-width:200px;max-height:120px;border-radius:6px;cursor:pointer;margin-top:4px" data-full="${imgUrl}" onerror="this.style.display='none'">`;
+        } else if (m.attachment.type === 'file' && m.attachment.filename) {
+          const fileUrl = getChatFileUrl(m.attachment.filename);
+          attachHtml = `<br><a href="${fileUrl}" target="_blank" style="color:#8ab4f8;font-size:11px">📄 ${m.attachment.filename}</a>`;
+        }
+      }
+      return `<div style="margin-bottom:6px"><span style="color:#666;font-size:10px">${ts}</span> <span style="color:#4fc3f7;font-weight:600">${name}</span><span style="color:#888">: </span><span style="color:#e8e8e8">${text}</span>${attachHtml}</div>`;
     }).join('');
     box.scrollTop = box.scrollHeight;
+    // ★★ wire image click → fullscreen modal
+    box.querySelectorAll('img[data-full]').forEach(img => {
+      img.onclick = () => {
+        const ov = document.createElement('div');
+        ov.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.9);z-index:999999;display:flex;align-items:center;justify-content:center;cursor:zoom-out';
+        ov.innerHTML = `<img src="${img.dataset.full}" style="max-width:95vw;max-height:95vh;border-radius:8px">`;
+        ov.onclick = () => ov.remove();
+        document.body.appendChild(ov);
+      };
+    });
   }
   function openChatRoomModal() {
     const old = document.getElementById('__assist_chatroom_modal');
@@ -5637,9 +5712,10 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
         <div style="display:flex;gap:6px;margin-bottom:6px">
           <input id="__assist_chatroom_name" type="text" value="${savedName.replace(/"/g,'&quot;')}" placeholder="ชื่อที่จะใช้คุย" style="flex:0 0 130px;background:#2a2d35;color:#e8e8e8;border:1px solid #444;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box" maxlength="30">
           <input id="__assist_chatroom_msg" type="text" placeholder="พิมพ์ข้อความ... (Enter = ส่ง)" style="flex:1;background:#2a2d35;color:#e8e8e8;border:1px solid #444;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box" maxlength="200">
+          <button id="__assist_chatroom_attach" style="padding:8px 10px;border:none;border-radius:6px;background:#444;color:#ccc;cursor:pointer;font-size:14px" title="ส่งรูป/ไฟล์ (สูงสุด 1MB)">📎</button>
           <button data-send style="padding:8px 16px;border:none;border-radius:6px;background:#1a73e8;color:#fff;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap">ส่ง</button>
         </div>
-        <div style="font-size:10px;color:#666;text-align:center">Enter = ส่ง · Esc = ปิด</div>
+        <div style="font-size:10px;color:#666;text-align:center">Enter = ส่ง · Esc = ปิด · 📎 = รูป/ไฟล์ · Ctrl+V = วางรูป</div>
       </div>`;
     document.body.appendChild(overlay);
     renderChatRoomMessages(overlay);
@@ -5657,6 +5733,27 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
         }
       }
     }, true);
+    // ★★ ปุ่ม 📎 → file picker
+    overlay.querySelector('#__assist_chatroom_attach').onclick = () => {
+      const inp = document.createElement('input');
+      inp.type = 'file'; inp.accept = 'image/png,image/jpeg,image/bmp,image/gif,image/webp,.json';
+      inp.onchange = () => { if (inp.files[0]) uploadChatFile(inp.files[0]); };
+      inp.click();
+    };
+    // ★★ paste → ตรวจรูปจาก clipboard
+    const msgInput = overlay.querySelector('#__assist_chatroom_msg');
+    msgInput.addEventListener('paste', (e) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (file) uploadChatFile(file);
+          return;
+        }
+      }
+    });
     // ★ ปุ่มส่ง
     overlay.querySelector('button[data-send]').onclick = () => {
       const nameEl = overlay.querySelector('#__assist_chatroom_name');

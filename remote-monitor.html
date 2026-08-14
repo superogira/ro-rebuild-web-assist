@@ -1079,6 +1079,7 @@ if (m) { document.getElementById('pid-input').value = m[1]; connect(m[1]); }
   <div class="cr-input">
     <input type="text" id="chatroom-name" placeholder="ชื่อ" maxlength="30">
     <input type="text" id="chatroom-msg" placeholder="พิมพ์ข้อความ... (Enter = ส่ง)" maxlength="200">
+    <button id="chatroom-attach" style="background:#444;color:#ccc;border:none;border-radius:6px;padding:8px 10px;font-size:14px;cursor:pointer" title="ส่งรูป/ไฟล์ (สูงสุด 1MB)">📎</button>
     <button id="chatroom-send">ส่ง</button>
   </div>
 </div>
@@ -1120,9 +1121,28 @@ if (m) { document.getElementById('pid-input').value = m[1]; connect(m[1]); }
       const ts = String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
       const name = escapeHtml(m.displayName || '?');
       const text = escapeHtml(m.text || '');
-      return '<div style="margin-bottom:4px"><span style="color:#666;font-size:10px">' + ts + '</span> <span style="color:#4fc3f7;font-weight:600">' + name + '</span><span style="color:#888">: </span><span style="color:#e8e8e8">' + text + '</span></div>';
+      let attach = '';
+      if (m.attachment) {
+        const url = location.origin + '/chat-files/' + m.attachment.filename;
+        if (m.attachment.type === 'image') {
+          attach = '<br><img src="' + url + '" style="max-width:200px;max-height:120px;border-radius:6px;cursor:pointer;margin-top:4px" data-full="' + url + '" onerror="this.style.display=\'none\'">';
+        } else {
+          attach = '<br><a href="' + url + '" target="_blank" style="color:#8ab4f8;font-size:11px">📄 ' + escapeHtml(m.attachment.filename) + '</a>';
+        }
+      }
+      return '<div style="margin-bottom:6px"><span style="color:#666;font-size:10px">' + ts + '</span> <span style="color:#4fc3f7;font-weight:600">' + name + '</span><span style="color:#888">: </span><span style="color:#e8e8e8">' + text + '</span>' + attach + '</div>';
     }).join('');
     msgsEl.scrollTop = msgsEl.scrollHeight;
+    // ★ คลิกรูป → เต็มจอ
+    msgsEl.querySelectorAll('img[data-full]').forEach(img => {
+      img.onclick = () => {
+        const ov = document.createElement('div');
+        ov.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.9);z-index:10003;display:flex;align-items:center;justify-content:center;cursor:zoom-out';
+        ov.innerHTML = '<img src="' + img.dataset.full + '" style="max-width:95vw;max-height:95vh;border-radius:8px">';
+        ov.onclick = () => ov.remove();
+        document.body.appendChild(ov);
+      };
+    });
   }
 
   // ★ intercept ws.onmessage — จับ roomHistory + roomMessage
@@ -1168,6 +1188,46 @@ if (m) { document.getElementById('pid-input').value = m[1]; connect(m[1]); }
   }
   sendBtn.onclick = doSend;
   msgEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); doSend(); } });
+
+  // ★★ อัปโหลดไฟล์
+  async function uploadFile(file) {
+    if (!file) return;
+    if (file.size > 1048576) { alert('ไฟล์ใหญ่เกิน 1MB'); return; }
+    const isJson = file.type === 'application/json' || file.name.endsWith('.json');
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64 = reader.result.split(',')[1];
+      try {
+        const res = await fetch(location.origin + '/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: base64, mimeType: file.type, filename: file.name }),
+        });
+        const result = await res.json();
+        if (result.ok && window.__monitorWs && window.__monitorWs.readyState === 1) {
+          window.__monitorWs.send(JSON.stringify({
+            type: 'roomSend',
+            displayName: nameEl.value.trim() || 'ผู้ดู',
+            message: '',
+            attachment: { type: isJson ? 'file' : 'image', filename: result.filename, mimeType: file.type || 'image/png' },
+          }));
+        } else { alert('อัปโหลดล้มเหลว: ' + (result.error || '?')); }
+      } catch (e) { alert('อัปโหลดล้มเหลว: ' + e.message); }
+    };
+    reader.readAsDataURL(file);
+  }
+  document.getElementById('chatroom-attach').onclick = () => {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = 'image/png,image/jpeg,image/bmp,image/gif,image/webp,.json';
+    inp.onchange = () => { if (inp.files[0]) uploadFile(inp.files[0]); };
+    inp.click();
+  };
+  msgEl.addEventListener('paste', (e) => {
+    const items = e.clipboardData?.items; if (!items) return;
+    for (const item of items) {
+      if (item.type.startsWith('image/')) { e.preventDefault(); const f = item.getAsFile(); if (f) uploadFile(f); return; }
+    }
+  });
 
   // ★ drag popup
   let dragging = false, dx = 0, dy = 0;
