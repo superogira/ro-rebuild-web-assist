@@ -1044,7 +1044,8 @@
           if (myEntry) entities.set(playerId, myEntry);
           monsterAggro.clear(); mobAttackers.clear();
           target = null;
-          log('🧹 ล้าง entities แมปเก่า (เปลี่ยนแมป)');
+          queue.clear(); recentDrops.clear();   // ★★ เคลียร์ loot แมปเก่า (กันเก็บของจากแมปเดิม)
+          log('🧹 ล้าง entities + loot แมปเก่า (เปลี่ยนแมป)');
           bossAlertedIds.clear();   // ★ ล้าง boss alert cache (เริ่มนับใหม่ในแมปใหม่)
           navWanderReset();   // ★ เปลี่ยนแมป → reset wander state (ล้าง target เก่า)
           navPatrolReset();   // ★ reset patrol state ด้วย
@@ -2645,6 +2646,7 @@
               sendTeleport(next, -999, -999);
               fleeCooldownUntil = now + 5000;  // รอ 5s ให้ entity data โหลด
               target = null; monsterAggro.clear(); mobAttackers.clear();
+              queue.clear(); recentDrops.clear();   // ★★ เคลียร์ loot แมปเก่า
               return;
             }
           }
