@@ -116,7 +116,7 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.80.0';
+  const VERSION = '4.79.0';
   const GITHUB_RAW = 'https://raw.githubusercontent.com/superogira/ro-rebuild-web-assist/main/ro-rebuild-web-assist.user.js';
   // ★ Feedback — ส่งปัญหา/ข้อเสนอแนะถึงผู้พัฒนาผ่าน Telegram
   const FEEDBACK_BOT_TOKEN = '7932077955:AAEc2u3FaKLY-6iY6VjseK5_GPJXgYK3ORA';
@@ -2243,6 +2243,9 @@
     for (const e of entities.values()) {
       if (e.kind !== 0 || !e.alive || e.x == null) continue;
       if (e.id === playerId) continue;       // ยกเว้นตัวเอง
+      // ★★ ข้าม entity ที่อยู่ใกล้เกินไป (≤3 ช่อง) = น่าจะตัวเองจาก 0x3c/minimap
+      //   สาเหตุ: หลังวาร์ป 0x3c sub=13 ส่งตัวเรามาด้วย + playerId อาจยังไม่อัปเดต
+      if (Math.abs(e.x - player.x) <= 3 && Math.abs(e.y - player.y) <= 3) continue;
       if (isStaleId(e.id, now)) continue;
       if (radius > 0 && Math.hypot(e.x - player.x, e.y - player.y) > radius) continue;  // radius=0 = นับทุกคนในแมป
       n++;
@@ -2657,7 +2660,8 @@
               // ★ แสดงตำแหน่งผู้เล่น (ถ้า nearby=1 แสดงตำแหน่งเดียวกัน)
               const pes = [...entities.values()].filter(e => e.kind === 0 && e.id !== playerId && e.alive && e.x != null);
               const posInfo = pes.length === 1 ? ' @(' + pes[0].x + ',' + pes[0].y + ')' : '';
-              log('🏃 หนีผู้เล่น!', nearby, 'คน' + posInfo + ' → วาร์ปไป', next);
+              const botPos = player.x != null ? ' bot@(' + Math.round(player.x) + ',' + Math.round(player.y) + ')' : '';
+              log('🏃 หนีผู้เล่น!', nearby, 'คน' + posInfo + botPos + ' → วาร์ปไป', next);
               logImportant('flee', '🏃 หนีผู้เล่น ' + nearby + ' คน → ' + next);
               CFG.farmMap = next;        // ★ auto-set farm map (กัน warpBackToFarm ดึงกลับ)
               saveConfigDebounced();
@@ -4204,8 +4208,8 @@
     { name: 'Charge Arrow', skillId: 25, level: 1, targeted: true, maxUsesPerTarget: 1, maxDistance: 10, spMin: 20, cooldownMs: 60000, job: 'Archer/Hunter', desc: 'ดันมอนออกไกล' },
     { name: 'Arrow Shower', skillId: 26, level: 5, ground: true, maxUsesPerTarget: 1, maxDistance: 10, mobCountMin: 2, spMin: 20, cooldownMs: 60000, job: 'Hunter', desc: 'AoE ธนู (เลือกพื้นที่)' },
     // ---- Thief/Assassin/Rogue (จาก packet capture) ----
-    { name: 'Steal', skillId: 61, level: 10, targeted: true, maxUsesPerTarget: 2, maxDistance: 2, spMin: 10, cooldownMs: 30000, job: 'Thief/Assassin/Rogue', desc: 'ขโมยของจากมอน (ใช้ที่เลเวลสูงสุด)' },
-    { name: 'Sonic Blow', skillId: 126, level: 10, targeted: true, maxUsesPerTarget: 1, maxDistance: 2, spMin: 34, cooldownMs: 1, job: 'Assassin/SinX', desc: 'ฟัน 8 ครั้งรวด (ดาเมจหนัก)' },
+    { name: 'Steal', skillId: 61, level: 10, targeted: true, maxUsesPerTarget: 1, maxDistance: 2, spMin: 10, cooldownMs: 30000, job: 'Thief/Assassin/Rogue', desc: 'ขโมยของจากมอน (ใช้ที่เลเวลสูงสุด)' },
+    { name: 'Sonic Blow', skillId: 126, level: 10, targeted: true, maxUsesPerTarget: 1, maxDistance: 2, spMin: 34, cooldownMs: 120000, job: 'Assassin/SinX', desc: 'ฟัน 8 ครั้งรวด (ดาเมจหนัก)' },
   ];
   function skillPresetGroups() {
     const groups = {};
