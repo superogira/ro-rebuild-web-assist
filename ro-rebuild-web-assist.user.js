@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.82.0
+// @version      4.83.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,7 +116,7 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.82.0';
+  const VERSION = '4.83.0';
   const GITHUB_RAW = 'https://raw.githubusercontent.com/superogira/ro-rebuild-web-assist/main/ro-rebuild-web-assist.user.js';
   // ★ Feedback — ส่งปัญหา/ข้อเสนอแนะถึงผู้พัฒนาผ่าน Telegram
   const FEEDBACK_BOT_TOKEN = '7932077955:AAEc2u3FaKLY-6iY6VjseK5_GPJXgYK3ORA';
@@ -5959,6 +5959,8 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
       chatHistory: chatBuf.slice(-30),
       // ★ important log — ส่ง log สำคัญล่าสุด 30 รายการ
       alerts: importantLogBuf.slice(-30),
+      // ★★ normal log — ส่ง log ล่าสุด 200 รายการ (สำหรับ remote monitor)
+      logs: logBuf.slice(-200).map(l => ({ t: l.t, m: (l.msg || '').slice(0, 150) })),
       // ★ map entities — สำหรับแสดง dots บนแผนที่ใน remote monitor
       mapEntities: (() => {
         const now = nowMs(); const out = [];
