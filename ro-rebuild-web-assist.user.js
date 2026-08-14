@@ -2849,7 +2849,9 @@
         if (target && aid === target.id) continue;   // ตัวที่กำลังตีอยู่แล้ว → ข้าม
         const am = entities.get(aid);
         if (!am || !am.alive || am.x == null) continue;
-        if (!isTargetable(am, now)) continue;         // ตัวที่ตีเราต้อง targetable ด้วย
+        // ★★ ไม่เช็ค isTargetable สำหรับ threats — มอนที่ตีเราต้องตอบโต้เสมอ
+        // (mirror บอทหลัก bot.js:600-607 — แค่ alive + kind ไม่สน cooldown/distance/avoidPlayers)
+        if (am.kind !== 1 && am.kind !== 0) continue;   // ต้องเป็น monster หรือ unknown (kind=0 จาก MOVE_UPDATE)
         const d = Math.hypot(am.x - player.x, am.y - player.y);
         if (d < attackerDist) { attackerDist = d; attacker = am; }
       }
