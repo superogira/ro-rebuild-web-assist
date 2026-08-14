@@ -2836,13 +2836,16 @@
       return;
     }
 
-    // === 1b. Defensive retarget === ถ้าโดนมอนตี (ที่ไม่ใช่ target ปัจจุบัน) → สลับมาตีตัวนั้น
+    // === 1b. Defensive retarget === ถ้าโดนมอนตี/aggro (ที่ไม่ใช่ target ปัจจุบัน) → สลับมาตีตัวนั้น
     //   สำคัญ: ถ้ามอน aggro เรา ต้องสู้กลับ ไม่ใช่เดินหาตัวอื่น
     //   ★★ sticky target guard: ถ้ากำลังตีอยู่ + server ตอบกลับ < 5s → ไม่สลับ (กันสลับไปมา)
     if (player.x != null && !(target && target.lastAttackResultAt && now - target.lastAttackResultAt < 5000)) {
       let attacker = null, attackerDist = Infinity;
-      for (const [aid, at] of mobAttackers) {
-        if (now - at > CFG.fleeMobWindowMs) { mobAttackers.delete(aid); continue; }
+      // ★★ รวม mobAttackers (ตีกายภาพ) + monsterAggro (สกิลเล็งเรา) → ตอบโต้ทุกกรณี
+      const threats = new Map();
+      for (const [aid, at] of mobAttackers) { if (now - at <= CFG.fleeMobWindowMs) threats.set(aid, at); else mobAttackers.delete(aid); }
+      for (const [aid, at] of monsterAggro) { if (now - at <= (CFG.aggroKeepAliveMs || 10000)) threats.set(aid, Math.max(threats.get(aid) || 0, at)); else monsterAggro.delete(aid); }
+      for (const [aid, at] of threats) {
         if (target && aid === target.id) continue;   // ตัวที่กำลังตีอยู่แล้ว → ข้าม
         const am = entities.get(aid);
         if (!am || !am.alive || am.x == null) continue;
