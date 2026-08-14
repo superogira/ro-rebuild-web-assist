@@ -1621,6 +1621,19 @@
         mobAttackers.set(attacker, now);
         markCombat();
       }
+      // ★★ DEBUG: ถ้าเราโดนตีแต่ mobAttackers ไม่ถูกเติม → log เพื่อหาสาเหตุ
+      //   เก็บ raw packet เมื่อ victimId หรือ 0x26-attacker ตรงกับ playerId
+      if (now - (lastDamageDebugAt || 0) > 2000) {
+        lastDamageDebugAt = now;
+        const hex = Array.from(u.slice(0, Math.min(u.length, 25))).map(b => b.toString(16).padStart(2, '0')).join(' ');
+        if (victimId === playerId) {
+          console.log('[ASSIST][dmg] 0x' + op.toString(16) + ' 0x0b-branch victim=player → mobAttackers.set(' + attacker.toString(16) + ') | ' + hex);
+        } else if (op === 0x26 && attacker === playerId) {
+          console.log('[ASSIST][dmg] 0x26 victim=player (no attacker info!) dmg=' + damage + ' | ' + hex);
+        } else if (op === 0x0b && (victimId === 0 || victimId === playerId)) {
+          console.log('[ASSIST][dmg] 0x0b special: victim=' + victimId.toString(16) + ' attacker=' + attacker.toString(16) + ' dmg=' + damage + ' | ' + hex);
+        }
+      }
       // คนอื่นตีมอน → mark engaged (KS avoidance)
       else if (attacker !== playerId && victimId !== playerId && victimId !== 0) {
         const m = entities.get(victimId);
@@ -1634,6 +1647,15 @@
     else if (op === 0x17 && u.length >= 9 && playerId != null) {
       const victimId = u32(u, 1);
       const damage = u32(u, 5);
+      // ★★ DEBUG: player โดนดาเมจผ่าน 0x17 → log (ไม่มี attacker info!)
+      if (victimId === playerId) {
+        const nowD = nowMs();
+        if (nowD - (lastDamageDebugAt || 0) > 2000) {
+          lastDamageDebugAt = nowD;
+          const hex = Array.from(u.slice(0, Math.min(u.length, 20))).map(b => b.toString(16).padStart(2, '0')).join(' ');
+          console.log('[ASSIST][dmg] 0x17 DAMAGE_V2 player! dmg=' + damage + ' (ไม่มี attacker → mobAttackers ไม่เติม) | ' + hex);
+        }
+      }
       // victim = player → ข้าม (โดนตี จัดการใน 0x0b แล้ว)
       if (victimId !== playerId && victimId !== 0) {
         const now = nowMs();
@@ -2631,6 +2653,7 @@
   let fleeCooldownUntil = 0;
   let lastFleeDebugAt = 0;
   let last3cDebugAt = 0;
+  let lastDamageDebugAt = 0;
   const combatLoop = setInterval(() => {
     const now = nowMs();
     // ★★ Flee from players — ทำงานไม่สน combat on/off (priority สูงสุด)
