@@ -1616,6 +1616,25 @@
           m._lastEngagedByMeAt = t;
         }
       }
+      // ★★ AUTO-DETECT playerId: ถ้า 0x0b มาซ้ำๆ โดย victim = ID เดิม (ไม่ใช่ playerId ปัจจุบัน)
+      //   → ID นั้นคือตัวเรา → อัปเดต playerId (SELECT_CHAR/SPAWN อาจให้ค่าผิด)
+      else if (op === 0x0b && victimId !== playerId && victimId !== 0 && victimId !== attacker && attacker !== playerId) {
+        _victimIdCount = _victimIdCount || new Map();
+        const cnt = (_victimIdCount.get(victimId) || 0) + 1;
+        _victimIdCount.set(victimId, cnt);
+        // ★ เก็บแค่ 10s — clear เก่า
+        if (now - (_victimIdCountAt || 0) > 10000) { _victimIdCount.clear(); _victimIdCount.set(victimId, 1); }
+        _victimIdCountAt = now;
+        // ★ ถ้า victim ID เดิมโดนตี ≥ 3 ครั้งใน 10s → น่าจะเป็นเรา (มอนตีคนอื่นไม่ถี่ขนาดนี้ต่อ ID เดียว)
+        if (cnt >= 3) {
+          const oldId = playerId;
+          playerId = victimId;
+          stalePlayerIds.set(oldId, now + 300000);
+          _victimIdCount.clear();
+          log('🔄 AUTO-DETECT playerId:', oldId != null ? oldId.toString(16) : '?', '→', playerId.toString(16), '(โดนตีซ้ำ', cnt, 'ครั้ง)');
+          relayRegisterPlayer();
+        }
+      }
       // มอนตีเรา → mark mobAttacker
       else if (victimId === playerId || (victimId === 0 && attacker !== playerId)) {
         mobAttackers.set(attacker, now);
@@ -2654,6 +2673,8 @@
   let lastFleeDebugAt = 0;
   let last3cDebugAt = 0;
   let lastDamageDebugAt = 0;
+  let _victimIdCount = null;   // ★ auto-detect playerId — นับ victim ID ที่โดนตีซ้ำ
+  let _victimIdCountAt = 0;
   const combatLoop = setInterval(() => {
     const now = nowMs();
     // ★★ Flee from players — ทำงานไม่สน combat on/off (priority สูงสุด)
