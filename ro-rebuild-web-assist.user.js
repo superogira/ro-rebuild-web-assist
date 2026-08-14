@@ -1562,16 +1562,15 @@
       }
     }
     // 0x0b ATTACK_RESULT IN: [0b][attacker:4][target:4]...[damage:4 @17 ถ้ามี]
-    //   + 0x26 variant: [26][attacker:4][damage:4] (มอนตี player)
-    //   ★ บอทหลักรับแค่ 8 bytes (attacker+target) damage เป็น optional — กันเคส packet สั้น
-    else if ((op === 0x0b || op === 0x26) && playerId != null) {
+    //   ★ มอนตีเรา (รวม miss damage=0) + เราตีมอน — แหล่งเดียวที่บอก attacker identity!
+    //   ★★ 0x26 = HP REGEN ไม่ใช่ attack (ส่งทุก ~6s ค่าเดิมซ้ำๆ) — ไม่ process
+    // 0x0b ATTACK_RESULT: [0b][attackerId:4][victimId:4]...[damage optional @17]
+    //   ★★ มอนตีเรา (รวม miss damage=0) + เราตีมอน — แหล่งเดียวที่บอก attacker!
+    //   ★★★ 0x26 ไม่ใช่ attack — มันคือ HP REGEN (ส่งทุก ~6s, ค่าเดิมซ้ำๆ, HP เพิ่มขึ้น)
+    else if (op === 0x0b && u.length >= 9 && playerId != null) {
       let attacker, victimId, damage;
-      if (op === 0x26 && u.length >= 9) { attacker = u32(u, 1); victimId = 0; damage = u32(u, 5); }
-      else if (op === 0x0b && u.length >= 9) {   // ★ ลดจาก 21 → 9 (รับ packet สั้น)
-        attacker = u32(u, 1); victimId = u32(u, 5);
-        damage = u.length >= 21 ? u32(u, 17) : 0;   // damage optional (offset 17 ถ้ามี)
-      }
-      else return;
+      attacker = u32(u, 1); victimId = u32(u, 5);
+      damage = u.length >= 21 ? u32(u, 17) : 0;   // damage optional (offset 17 ถ้ามี)
       const now = nowMs();
       // ★ DEBUG: ถ้ากำลังตี target อยู่ → log packet จริงเพื่อหาสาเหตุ reset ไม่ทำงาน
       if (target && CFG.verbose) {
@@ -1640,18 +1639,11 @@
         mobAttackers.set(attacker, now);
         markCombat();
       }
-      // ★★ DEBUG: ถ้าเราโดนตีแต่ mobAttackers ไม่ถูกเติม → log เพื่อหาสาเหตุ
-      //   เก็บ raw packet เมื่อ victimId หรือ 0x26-attacker ตรงกับ playerId
-      if (now - (lastDamageDebugAt || 0) > 2000) {
+      // ★★ DEBUG: log เมื่อ player โดนตี (ทุก 2s — กัน spam)
+      if (now - (lastDamageDebugAt || 0) > 2000 && victimId === playerId) {
         lastDamageDebugAt = now;
         const hex = Array.from(u.slice(0, Math.min(u.length, 25))).map(b => b.toString(16).padStart(2, '0')).join(' ');
-        if (victimId === playerId) {
-          console.log('[ASSIST][dmg] 0x' + op.toString(16) + ' 0x0b-branch victim=player → mobAttackers.set(' + attacker.toString(16) + ') | ' + hex);
-        } else if (op === 0x26 && attacker === playerId) {
-          console.log('[ASSIST][dmg] 0x26 victim=player (no attacker info!) dmg=' + damage + ' | ' + hex);
-        } else if (op === 0x0b && (victimId === 0 || victimId === playerId)) {
-          console.log('[ASSIST][dmg] 0x0b special: victim=' + victimId.toString(16) + ' attacker=' + attacker.toString(16) + ' dmg=' + damage + ' | ' + hex);
-        }
+        console.log('[ASSIST][dmg] 0x0b victim=player attacker=' + attacker.toString(16) + ' dmg=' + damage + (damage === 0 ? ' (MISS)' : '') + ' → mobAttackers.set | ' + hex);
       }
       // คนอื่นตีมอน → mark engaged (KS avoidance)
       else if (attacker !== playerId && victimId !== playerId && victimId !== 0) {
