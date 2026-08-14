@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.85.0
+// @version      4.86.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,7 +116,7 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.85.0';
+  const VERSION = '4.86.0';
   const GITHUB_RAW = 'https://raw.githubusercontent.com/superogira/ro-rebuild-web-assist/main/ro-rebuild-web-assist.user.js';
   // ★ Feedback — ส่งปัญหา/ข้อเสนอแนะถึงผู้พัฒนาผ่าน Telegram
   const FEEDBACK_BOT_TOKEN = '7932077955:AAEc2u3FaKLY-6iY6VjseK5_GPJXgYK3ORA';
@@ -928,9 +928,8 @@
       }
     }
     // 0x0b ATTACK_RESULT: ถ้าตัวเราเป็นคนตี → กำลังสู้
-    else if (op === 0x0b && u.length >= 9) {
-      if (playerId != null && u32(u, 1) === playerId) markCombat();
-    }
+    // ★★ 0x0b จัดการใน handler เต็มด้านล่าง (บรรทัด ~1570) — อย่าดักที่นี่!
+    //   (เดิม: else if ที่นี่ดัก 0x0b ไปก่อน → handler เต็ม (mobAttackers/damage/AUTO-DETECT) ไม่ทำงาน!)
     // 0x22 EXP: ได้รับ EXP (solo/party/event ใช้ opcode เดียวกัน)
     //   format: [22][baseTotal:4][baseDelta:4][jobTotal:4][jobDelta:4] (17 bytes)
     //   ★ delta=0 = zone-in sync → ไม่นับ session EXP (mirror world.js:985)
@@ -1571,6 +1570,8 @@
       let attacker, victimId, damage;
       attacker = u32(u, 1); victimId = u32(u, 5);
       damage = u.length >= 21 ? u32(u, 17) : 0;   // damage optional (offset 17 ถ้ามี)
+      // ★ markCombat เมื่อเราเป็นคนตี (ย้ายมาจาก handler เก่าบรรทัด 931)
+      if (u32(u, 1) === playerId) markCombat();
       const now = nowMs();
       // ★★★ SUPER DEBUG — log ทุก 0x0b packet (ทุก 2s) เพื่อยืนยันว่า handler ทำงาน
       if (now - (lastDamageDebugAt || 0) > 2000) {
