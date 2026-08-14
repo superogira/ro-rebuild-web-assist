@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.86.0
+// @version      4.87.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,7 +116,7 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.86.0';
+  const VERSION = '4.87.0';
   const GITHUB_RAW = 'https://raw.githubusercontent.com/superogira/ro-rebuild-web-assist/main/ro-rebuild-web-assist.user.js';
   // ★ Feedback — ส่งปัญหา/ข้อเสนอแนะถึงผู้พัฒนาผ่าน Telegram
   const FEEDBACK_BOT_TOKEN = '7932077955:AAEc2u3FaKLY-6iY6VjseK5_GPJXgYK3ORA';
@@ -132,7 +132,7 @@
     'combatEnabled', 'targetWhitelist', 'targetBlacklist', 'attackRange', 'rangedAttackRange',
     'maxAcquireDistance', 'searchRadii', 'maxChaseDistance', 'antiKS', 'avoidOtherPlayers', 'targetLowestHpFirst',
     'fleeOnMobCount', 'fleeOnAggroCount', 'fleeOnProximityCount', 'fleeOnProximityRadius', 'fleeMonsters', 'fleeMonsterRadius', 'maxEngageSec', 'maxEngageSecSlow', 'slowMonsterSubIds',
-    'wanderEnabled', 'warpFindEnabled', 'warpToMonster', 'stuckWarpOnAbandon', 'warpToBoss', 'warpToMiniBoss', 'bossAlertRadius', 'noMonsterWarpSec',
+    'wanderEnabled', 'warpFindEnabled', 'warpToMonster', 'stuckWarpOnAbandon', 'stepAsideOnAbandon', 'warpToBoss', 'warpToMiniBoss', 'bossAlertRadius', 'noMonsterWarpSec',
     'restEnabled', 'restHpPercent', 'restUntilPercent', 'restMaxSec', 'postCombatDelayMs', 'autoRespawnEnabled', 'autoRespawnDelayMs', 'telegramAlertCard', 'telegramAlertFlee', 'telegramAlertBotMention', 'telegramAlertNearby', 'telegramAlertWhisper', 'telegramBotToken', 'telegramChatId',
     'sellEnabled', 'sellNpcName', 'sellNpcMap', 'sellNpcX', 'sellNpcY', 'sellIntervalMin', 'sellOnFull', 'sellItemIds',
     'storageEnabled', 'kafraName', 'kafraMap', 'kafraMapX', 'kafraMapY', 'kafraChoice', 'depositOnFull', 'depositAfterSell', 'depositItemIds',
@@ -454,6 +454,7 @@
     warpToMonsterCooldownMs: 10000,
     warpToMonsterMaxPerEntity: 2,
     stuckWarpOnAbandon: 0,        // abandon 3 ครั้งใน 60s → วาร์ปสุ่ม
+    stepAsideOnAbandon: true,     // ★ abandon stuck → เดินหลีก 5-12 ช่อง (กันยืนนิ่ง)
     warpToBoss: false,            // ★ วาร์ปไปสู้ Boss เมื่อตรวจจับได้ (flag=4, toggle, default OFF)
     warpToMiniBoss: false,        // ★ วาร์ปไปสู้ Mini Boss เมื่อตรวจจับได้ (flag=3, toggle, default OFF)
     bossAlertRadius: 0,           // ★ ระยะที่จะ alert mini-boss (0 = ทุกระยะ)
@@ -2563,8 +2564,8 @@
         stuckAbandonHistory.push(nowMs());
         stuckAbandonHistory = stuckAbandonHistory.filter(t => nowMs() - t < 60000);
         stuckAbandonCount = stuckAbandonHistory.length;
-        // ★ เดินหลีกเฉพาะตอน stuck (กันยืนนิ่งหลังตีไม่ติด)
-        if (player.x != null && player.y != null) {
+        // ★ เดินหลีกเฉพาะตอน stuck (กันยืนนิ่งหลังตีไม่ติด) — toggle ได้
+        if (CFG.stepAsideOnAbandon !== false && player.x != null && player.y != null) {
           const angle = Math.random() * Math.PI * 2;
           const step = 5 + Math.random() * 7;   // 5-12 ช่อง
           const tx = Math.round(player.x + Math.cos(angle) * step);
@@ -4894,6 +4895,7 @@
             <div class="field"><label>วาร์ปหามอนเมื่อไม่เจอมอน (วินาที) — 0 = วาร์ปทันทีหลังตีมอนเสร็จ</label><input type="number" id="__assist_nowarpsec" min="0" max="120" placeholder="30"></div>
             <div class="field"><label>stuck abandon N ครั้งใน 60s → วาร์ปสุ่ม (0=ปิด)</label><input type="number" id="__assist_stuckwarp" min="0" max="20"></div>
             <div class="field"><label>เลิกตีมอนถ้าสู้นานเกิน (วินาที) — หันไปตีตัวอื่น</label><input type="number" id="__assist_engagesec" min="5" max="600" placeholder="40"></div>
+            <div class="btns"><button id="__assist_t_stepaside" class="on">🚶 เดินหลีกหลัง abandon</button></div>
             <div class="field"><label>เลิกตีมอนตีช้า (เห็ด/พืช) ถ้านานเกิน (วินาที)</label><input type="number" id="__assist_engageslow" min="30" max="600" placeholder="180"></div>
             <div class="btns">
               <button id="__assist_t_warptoboss" class="off">👑 วาร์ปไปสู้ Boss</button>
@@ -5369,6 +5371,7 @@
     root.querySelector('#__assist_t_warptoboss').addEventListener('click', () => { CFG.warpToBoss = !CFG.warpToBoss; saveConfigDebounced(); log('👑 วาร์ปไปสู้ Boss:', CFG.warpToBoss ? 'เปิด' : 'ปิด'); });
     root.querySelector('#__assist_t_warptominiboss').addEventListener('click', () => { CFG.warpToMiniBoss = !CFG.warpToMiniBoss; saveConfigDebounced(); log('👹 วาร์ปไปสู้ Mini Boss:', CFG.warpToMiniBoss ? 'เปิด' : 'ปิด'); });
     root.querySelector('#__assist_t_fleeplayers').addEventListener('click', () => { CFG.fleeFromPlayers = !CFG.fleeFromPlayers; saveConfigDebounced(); log('🏃 หนีผู้เล่น:', CFG.fleeFromPlayers ? 'เปิด' : 'ปิด'); });
+    root.querySelector('#__assist_t_stepaside').addEventListener('click', () => { CFG.stepAsideOnAbandon = CFG.stepAsideOnAbandon === false ? true : false; saveConfigDebounced(); log('🚶 เดินหลีกหลัง abandon:', CFG.stepAsideOnAbandon ? 'เปิด' : 'ปิด'); });
     // ★ populate flee inputs ครั้งเดียวตอนเริ่ม (ไม่ sync ตลอด — กันเด้ง)
     const _fm = root.querySelector('#__assist_fleemaps');
     const _fr = root.querySelector('#__assist_fleeradius');
@@ -5891,7 +5894,8 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
     try { savedName = localStorage.getItem('roAssistChatName') || ''; } catch (_) {}
     const overlay = document.createElement('div');
     overlay.id = '__assist_chatroom_modal';
-    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:999999;display:flex;align-items:center;justify-content:center';
+    // ★ ชิดขวา — ไม่บังจอเกม (เหมือน popup panel)
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:999999;display:flex;align-items:center;justify-content:flex-end;padding-right:10px';
     overlay.innerHTML = `
       <div style="background:#1e1e2e;color:#e8e8e8;border-radius:12px;padding:16px;width:480px;max-width:90vw;height:500px;max-height:85vh;display:flex;flex-direction:column;font-family:sans-serif;box-shadow:0 8px 32px rgba(0,0,0,.5)">
         <div style="font-size:15px;font-weight:700;margin-bottom:8px;color:#4fc3f7">🗨️ ห้องแชท</div>
@@ -6533,6 +6537,7 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
     syncToggle('#__assist_t_warptoboss', CFG.warpToBoss === true);
     syncToggle('#__assist_t_warptominiboss', CFG.warpToMiniBoss === true);
     syncToggle('#__assist_t_fleeplayers', CFG.fleeFromPlayers === true);
+    syncToggle('#__assist_t_stepaside', CFG.stepAsideOnAbandon !== false);
     // ★ ไม่ sync fleemaps/fleeradius — กันเขียนทับค่าที่กำลังแก้ (Unity แย่ง focus → isEditing คืน false)
     syncInput('#__assist_fleemonsters', (CFG.fleeMonsters || []).join(','));
     syncInput('#__assist_fleemonsterradius', CFG.fleeMonsterRadius);
