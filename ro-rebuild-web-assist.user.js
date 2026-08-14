@@ -1572,6 +1572,11 @@
       attacker = u32(u, 1); victimId = u32(u, 5);
       damage = u.length >= 21 ? u32(u, 17) : 0;   // damage optional (offset 17 ถ้ามี)
       const now = nowMs();
+      // ★★★ SUPER DEBUG — log ทุก 0x0b packet (ทุก 2s) เพื่อยืนยันว่า handler ทำงาน
+      if (now - (lastDamageDebugAt || 0) > 2000) {
+        lastDamageDebugAt = now;
+        console.log('[ASSIST][0x0b] ENTERED handler: attacker=' + attacker.toString(16) + ' victim=' + victimId.toString(16) + ' playerId=' + playerId.toString(16) + ' match=' + (victimId === playerId) + ' dmg=' + damage + ' len=' + u.length);
+      }
       // ★ DEBUG: ถ้ากำลังตี target อยู่ → log packet จริงเพื่อหาสาเหตุ reset ไม่ทำงาน
       if (target && CFG.verbose) {
         const isOur = (attacker === playerId);
