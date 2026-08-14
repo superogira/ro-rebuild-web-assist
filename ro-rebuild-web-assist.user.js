@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.81.0
+// @version      4.82.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,7 +116,7 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.81.0';
+  const VERSION = '4.82.0';
   const GITHUB_RAW = 'https://raw.githubusercontent.com/superogira/ro-rebuild-web-assist/main/ro-rebuild-web-assist.user.js';
   // ★ Feedback — ส่งปัญหา/ข้อเสนอแนะถึงผู้พัฒนาผ่าน Telegram
   const FEEDBACK_BOT_TOKEN = '7932077955:AAEc2u3FaKLY-6iY6VjseK5_GPJXgYK3ORA';
@@ -5742,7 +5742,16 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
           attachHtml = `<br><a href="${fileUrl}" target="_blank" style="color:#8ab4f8;font-size:11px">📄 ${m.attachment.filename}</a>`;
         }
       }
-      return `<div style="margin-bottom:6px"><span style="color:#666;font-size:10px">${ts}</span> <span style="color:#4fc3f7;font-weight:600">${name}</span><span style="color:#888">: </span><span style="color:#e8e8e8">${text}</span>${attachHtml}</div>`;
+      // ★★ reply quote — แสดงข้อความที่ตอบกลับ
+      let replyHtml = '';
+      if (m.replyTo && m.replyTo.displayName) {
+        const rName = m.replyTo.displayName.replace(/</g,'&lt;');
+        const rText = (m.replyTo.text || '').replace(/</g,'&lt;');
+        replyHtml = `<div style="border-left:2px solid #4fc3f7;padding-left:6px;margin-bottom:2px;font-size:10px;color:#888"><span style="color:#4fc3f7">${rName}</span>: ${rText.slice(0,80)}</div>`;
+      }
+      // ★★ reply button
+      const replyBtn = `<button class="__assist_reply_btn" data-reply-name="${encodeURIComponent(name)}" data-reply-text="${encodeURIComponent(text)}" style="background:none;border:none;color:#666;font-size:10px;cursor:pointer;padding:0 2px;opacity:.6" title="ตอบกลับ">↩</button>`;
+      return `<div style="margin-bottom:6px">${replyHtml}<span style="color:#666;font-size:10px">${ts}</span> <span style="color:#4fc3f7;font-weight:600">${name}</span><span style="color:#888">: </span><span style="color:#e8e8e8">${text}</span>${attachHtml} ${replyBtn}</div>`;
     }).join('');
     box.scrollTop = box.scrollHeight;
     // ★★ wire image click → fullscreen modal
@@ -5766,6 +5775,26 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
         closeBtn.onclick = () => ov.remove();
         ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
         document.body.appendChild(ov);
+      };
+    });
+    // ★★ wire reply buttons → set reply preview
+    box.querySelectorAll('.__assist_reply_btn').forEach(btn => {
+      btn.onclick = () => {
+        const rName = decodeURIComponent(btn.dataset.replyName || '');
+        const rText = decodeURIComponent(btn.dataset.replyText || '');
+        modal._replyTo = { displayName: rName, text: rText };
+        // แสดง preview bar
+        let preview = modal.querySelector('#__assist_chatroom_reply_preview');
+        if (!preview) {
+          preview = document.createElement('div');
+          preview.id = '__assist_chatroom_reply_preview';
+          preview.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 10px;background:#1a2a3a;border-radius:6px;margin-bottom:6px;font-size:11px';
+          const msgs = modal.querySelector('#__assist_chatroom_msgs');
+          msgs.parentNode.insertBefore(preview, msgs.nextSibling);
+        }
+        preview.innerHTML = `<span style="color:#4fc3f7">↩ ${rName}:</span> <span style="color:#888;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${rText.slice(0,60).replace(/</g,'&lt;')}</span> <button style="background:none;border:none;color:#e74c3c;cursor:pointer;font-size:14px;padding:0 4px">✕</button>`;
+        preview.querySelector('button').onclick = () => { modal._replyTo = null; preview.remove(); };
+        modal.querySelector('#__assist_chatroom_msg').focus();
       };
     });
   }
@@ -5843,7 +5872,12 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
       try { localStorage.setItem('roAssistChatName', displayName); } catch (_) {}
       if (relayWs && relayWs.readyState === 1) {
         try {
-          relayWs.send(JSON.stringify({ type: 'roomSend', message: msg, displayName }));
+          const payload = { type: 'roomSend', message: msg, displayName };
+          // ★★ แนบ replyTo ถ้ามี
+          if (overlay._replyTo) { payload.replyTo = overlay._replyTo; overlay._replyTo = null; }
+          const preview = overlay.querySelector('#__assist_chatroom_reply_preview');
+          if (preview) preview.remove();
+          relayWs.send(JSON.stringify(payload));
           msgEl.value = '';
           msgEl.focus();
         } catch (_) {}

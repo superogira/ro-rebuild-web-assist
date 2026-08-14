@@ -427,6 +427,10 @@ wss.on('connection', (ws, req) => {
       const botName = cleanPlayerName(entry?.lastData?.player?.name) || ws.playerName || '';
       const version = entry?.lastData?.version || '';
       const msgObj = { t: Date.now(), displayName, botName, version, text, attachment };
+      // ★★ replyTo — อ้างอิงข้อความเดิม (quote reply)
+      if (msg.replyTo && typeof msg.replyTo === 'object' && msg.replyTo.displayName) {
+        msgObj.replyTo = { displayName: String(msg.replyTo.displayName).slice(0, 30), text: String(msg.replyTo.text || '').slice(0, 100) };
+      }
       chatHistory.push(msgObj);
       if (chatHistory.length > CHAT_HISTORY_MAX) chatHistory = chatHistory.slice(-CHAT_HISTORY_MAX);
       saveChatHistory();

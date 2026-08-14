@@ -1095,6 +1095,7 @@ if (m) { document.getElementById('pid-input').value = m[1]; connect(m[1]); }
   const msgEl = document.getElementById('chatroom-msg');
   const sendBtn = document.getElementById('chatroom-send');
   const badgeEl = document.getElementById('cr-badge');
+  var _replyTo = null;   // ★★ reply tracking
 
   // ★ โหลด displayName จาก localStorage
   try { nameEl.value = localStorage.getItem('roMonitorChatName') || ''; } catch (_) {}
@@ -1136,7 +1137,12 @@ if (m) { document.getElementById('pid-input').value = m[1]; connect(m[1]); }
           }
         }
       }
-      return '<div style="margin-bottom:6px"><span style="color:#666;font-size:10px">' + ts + '</span> <span style="color:#4fc3f7;font-weight:600">' + name + '</span><span style="color:#888">: </span><span style="color:#e8e8e8">' + text + '</span>' + attach + '</div>';
+      var replyQuote = '';
+      if (m.replyTo && m.replyTo.displayName) {
+        replyQuote = '<div style="border-left:2px solid #4fc3f7;padding-left:6px;margin-bottom:2px;font-size:10px;color:#888"><span style="color:#4fc3f7">' + escapeHtml(m.replyTo.displayName) + '</span>: ' + escapeHtml((m.replyTo.text||'').slice(0,80)) + '</div>';
+      }
+      var replyBtn = '<button class="cr-reply-btn" data-rn="' + encodeURIComponent(name) + '" data-rt="' + encodeURIComponent(m.text||'') + '" style="background:none;border:none;color:#666;font-size:10px;cursor:pointer;padding:0 2px;opacity:.6" title="ตอบกลับ">↩</button>';
+      return '<div style="margin-bottom:6px">' + replyQuote + '<span style="color:#666;font-size:10px">' + ts + '</span> <span style="color:#4fc3f7;font-weight:600">' + name + '</span><span style="color:#888">: </span><span style="color:#e8e8e8">' + text + '</span>' + attach + ' ' + replyBtn + '</div>';
     }).join('');
     msgsEl.scrollTop = msgsEl.scrollHeight;
     // ★ คลิกรูป → เต็มจอ
@@ -1159,6 +1165,24 @@ if (m) { document.getElementById('pid-input').value = m[1]; connect(m[1]); }
         ov.querySelector('button').onclick = () => ov.remove();
         ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
         document.body.appendChild(ov);
+      };
+    });
+    // ★★ reply buttons
+    msgsEl.querySelectorAll('.cr-reply-btn').forEach(btn => {
+      btn.onclick = () => {
+        var rn = decodeURIComponent(btn.dataset.rn || '');
+        var rt = decodeURIComponent(btn.dataset.rt || '');
+        _replyTo = { displayName: rn, text: rt };
+        var pv = document.getElementById('cr-reply-preview');
+        if (!pv) {
+          pv = document.createElement('div');
+          pv.id = 'cr-reply-preview';
+          pv.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 10px;background:#1a2a3a;border-radius:6px;margin-bottom:4px;font-size:11px';
+          msgsEl.parentNode.insertBefore(pv, msgsEl);
+        }
+        pv.innerHTML = '<span style="color:#4fc3f7">↩ ' + escapeHtml(rn) + ':</span> <span style="color:#888;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(rt.slice(0,60)) + '</span> <button style="background:none;border:none;color:#e74c3c;cursor:pointer;font-size:14px;padding:0 4px">✕</button>';
+        pv.querySelector('button').onclick = () => { _replyTo = null; pv.remove(); };
+        msgEl.focus();
       };
     });
   }
@@ -1186,7 +1210,9 @@ if (m) { document.getElementById('pid-input').value = m[1]; connect(m[1]); }
     if (window.__monitorWs && window.__monitorWs.readyState === 1) {
       const displayName = nameEl.value.trim() || 'ผู้ดู';
       try { localStorage.setItem('roMonitorChatName', displayName); } catch (_) {}
-      window.__monitorWs.send(JSON.stringify({ type: 'roomSend', message: msg, displayName }));
+      var payload = { type: 'roomSend', message: msg, displayName };
+      if (_replyTo) { payload.replyTo = _replyTo; _replyTo = null; var pv = document.getElementById('cr-reply-preview'); if (pv) pv.remove(); }
+      window.__monitorWs.send(JSON.stringify(payload));
       return true;
     }
     return false;
