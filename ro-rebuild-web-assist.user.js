@@ -116,7 +116,7 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.79.0';
+  const VERSION = '4.80.0';
   const GITHUB_RAW = 'https://raw.githubusercontent.com/superogira/ro-rebuild-web-assist/main/ro-rebuild-web-assist.user.js';
   // ★ Feedback — ส่งปัญหา/ข้อเสนอแนะถึงผู้พัฒนาผ่าน Telegram
   const FEEDBACK_BOT_TOKEN = '7932077955:AAEc2u3FaKLY-6iY6VjseK5_GPJXgYK3ORA';
@@ -1234,10 +1234,10 @@
       if (now - (last3cDebugAt || 0) > 3000) {
         last3cDebugAt = now;
         const flags = [];
-        if (sub === 7 || sub === 13) { let pp = 3; while (pp + 9 <= u.length) { flags.push(u[pp+8]); pp += 9; } }
+        if (sub === 7 || sub === 13 || sub === 4) { let pp = 3; while (pp + 9 <= u.length) { flags.push(u[pp+8]); pp += 9; } }
         log('📡 0x3c sub=' + sub + ' len=' + u.length + ' flags=[' + flags.join(',') + ']');
       }
-      if ((sub === 7 || sub === 13) && u.length >= 5) {
+      if ((sub === 7 || sub === 13 || sub === 4) && u.length >= 5) {
         // ★ sub=7 / sub=13: multi-entity minimap list (players + warps + NPCs)
         //   format: [3c][sub:2] then repeating [id:4][x:2][y:2][flag:1] (9 bytes each)
         //   ★★ sub=13 = initial map data (ส่งตอนเข้าแมป — มีผู้เล่นทุกคนในแมป)
