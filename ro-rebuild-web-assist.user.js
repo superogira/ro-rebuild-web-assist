@@ -2862,7 +2862,9 @@
         const isTargetStillEngaged = lastCombatSignal && (now - lastCombatSignal < CFG.aggroKeepAliveMs);
         // ★ มอน "ตีช้า" (mushroom/plant/เจาะไม่เข้า) → ใช้ maxEngageSecSlow (ยาวกว่า) กัน abandon ก่อนฆ่าทัน
         const isSlowMonster = m.sub != null && Array.isArray(CFG.slowMonsterSubIds) && CFG.slowMonsterSubIds.includes(m.sub);
-        const engageLimit = isSlowMonster ? (CFG.maxEngageSecSlow || 180) : CFG.maxEngageSec;
+        // ★★ เพิ่มเวลาเดิน — ระยะ 5 ช่อง = +1 วิ (กัน abandon ตอนกำลังเดินไปหามอนไกล)
+        const travelSec = curDist > 0 ? Math.ceil(curDist / 5) : 0;
+        const engageLimit = (isSlowMonster ? (CFG.maxEngageSecSlow || 180) : CFG.maxEngageSec) + travelSec;
         if (target.engageAt && engageAge > engageLimit && !isTargetStillEngaged) {
           abandonTarget('engage นาน ' + engageAge.toFixed(0) + 's' + (isSlowMonster ? ' (slow)' : ''), true, 10000); target = null;
         }
