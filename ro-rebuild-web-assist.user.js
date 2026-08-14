@@ -5020,6 +5020,13 @@
     window.addEventListener('paste', (e) => {
       const inp = ourActiveInput();
       if (!inp) return;
+      // ★★ ถ้า clipboard มีรูป → ข้าม global handler (ให้ chatroom paste handler จัดการ)
+      const items = e.clipboardData?.items;
+      if (items) {
+        for (const item of items) {
+          if (item.type.startsWith('image/')) return;
+        }
+      }
       e.stopPropagation();
       if (e.stopImmediatePropagation) e.stopImmediatePropagation();
       e.preventDefault();
@@ -5090,6 +5097,7 @@
         inp.selectionStart = inp.selectionEnd = s + 1;
       }
       // อื่นๆ (Shift/Ctrl/Alt/Tab ฯลฯ) ไม่ต้องทำอะไร
+      try { inp.scrollLeft = inp.scrollWidth; } catch (_) {}   // ★★ scroll ตาม cursor (กันข้อความยาวไม่เลื่อน)
       inp.dispatchEvent(new Event('input', { bubbles: true }));
     }
     // ★ คลิก input → focus ทันที (กัน Unity ขโมย)
