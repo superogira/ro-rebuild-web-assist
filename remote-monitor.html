@@ -1123,11 +1123,17 @@ if (m) { document.getElementById('pid-input').value = m[1]; connect(m[1]); }
       const text = escapeHtml(m.text || '');
       let attach = '';
       if (m.attachment) {
-        const url = location.origin + '/chat-files/' + m.attachment.filename;
-        if (m.attachment.type === 'image') {
-          attach = '<br><img src="' + url + '" style="max-width:200px;max-height:120px;border-radius:6px;cursor:pointer;margin-top:4px" data-full="' + url + '" onerror="this.style.display=\'none\'">';
-        } else {
-          attach = '<br><a href="' + url + '" target="_blank" style="color:#8ab4f8;font-size:11px">📄 ' + escapeHtml(m.attachment.filename) + '</a>';
+        if (m.attachment.type === 'text' && m.attachment.text) {
+          const lines = m.attachment.lines || (m.attachment.text.match(/\n/g) || []).length + 1;
+          const esc = encodeURIComponent(m.attachment.text);
+          attach = '<br><button class="cr-text-attach" data-text="' + esc + '" style="background:#2a3a4a;color:#4fc3f7;border:1px solid #3a5a6a;border-radius:6px;padding:6px 12px;font-size:11px;cursor:pointer;margin-top:4px;font-family:inherit">📄 ข้อความ ' + lines + ' บรรทัด (คลิกเพื่อดู)</button>';
+        } else if (m.attachment.filename) {
+          const url = location.origin + '/chat-files/' + m.attachment.filename;
+          if (m.attachment.type === 'image') {
+            attach = '<br><img src="' + url + '" style="max-width:200px;max-height:120px;border-radius:6px;cursor:pointer;margin-top:4px" data-full="' + url + '" onerror="this.style.display=\'none\'">';
+          } else {
+            attach = '<br><a href="' + url + '" target="_blank" style="color:#8ab4f8;font-size:11px">📄 ' + escapeHtml(m.attachment.filename) + '</a>';
+          }
         }
       }
       return '<div style="margin-bottom:6px"><span style="color:#666;font-size:10px">' + ts + '</span> <span style="color:#4fc3f7;font-weight:600">' + name + '</span><span style="color:#888">: </span><span style="color:#e8e8e8">' + text + '</span>' + attach + '</div>';
@@ -1140,6 +1146,18 @@ if (m) { document.getElementById('pid-input').value = m[1]; connect(m[1]); }
         ov.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.9);z-index:10003;display:flex;align-items:center;justify-content:center;cursor:zoom-out';
         ov.innerHTML = '<img src="' + img.dataset.full + '" style="max-width:95vw;max-height:95vh;border-radius:8px">';
         ov.onclick = () => ov.remove();
+        document.body.appendChild(ov);
+      };
+    });
+    // ★★ text attachment click → modal
+    msgsEl.querySelectorAll('.cr-text-attach').forEach(btn => {
+      btn.onclick = () => {
+        const raw = decodeURIComponent(btn.dataset.text);
+        const ov = document.createElement('div');
+        ov.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.85);z-index:10003;display:flex;align-items:center;justify-content:center';
+        ov.innerHTML = '<div style="background:#1a1a2e;border:1px solid #3a3f4b;border-radius:12px;padding:20px;width:700px;max-width:92vw;height:80vh;display:flex;flex-direction:column"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><span style="color:#4fc3f7;font-size:13px;font-weight:600">📄 ข้อความ</span><button style="background:none;border:none;color:#888;font-size:18px;cursor:pointer">✕</button></div><pre style="flex:1;overflow:auto;background:#0d0d15;border-radius:8px;padding:12px;font-size:11px;line-height:1.5;color:#ccc;white-space:pre-wrap;word-break:break-word;font-family:Consolas,monospace">' + escapeHtml(raw) + '</pre></div>';
+        ov.querySelector('button').onclick = () => ov.remove();
+        ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
         document.body.appendChild(ov);
       };
     });
@@ -1226,6 +1244,20 @@ if (m) { document.getElementById('pid-input').value = m[1]; connect(m[1]); }
     const items = e.clipboardData?.items; if (!items) return;
     for (const item of items) {
       if (item.type.startsWith('image/')) { e.preventDefault(); const f = item.getAsFile(); if (f) uploadFile(f); return; }
+    }
+    // ★★ paste ข้อความ >3 บรรทัด → ส่งเป็น text attachment
+    const pasteText = e.clipboardData.getData('text');
+    if (pasteText) {
+      const lines = (pasteText.match(/\n/g) || []).length;
+      if (lines > 3) {
+        e.preventDefault();
+        if (window.__monitorWs && window.__monitorWs.readyState === 1) {
+          window.__monitorWs.send(JSON.stringify({
+            type: 'roomSend', displayName: nameEl.value.trim() || 'ผู้ดู', message: '',
+            attachment: { type: 'text', text: pasteText, lines: lines + 1 },
+          }));
+        }
+      }
     }
   });
 

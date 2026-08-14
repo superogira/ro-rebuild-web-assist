@@ -5027,10 +5027,30 @@
           if (item.type.startsWith('image/')) return;
         }
       }
+      // ★★ ถ้า paste ใน chatroom + ข้อความ >3 บรรทัด → ส่งเป็น text attachment
+      const pasteText = (e.clipboardData || window.clipboardData).getData('text');
+      if (pasteText && inp.closest && inp.closest('#__assist_chatroom_modal')) {
+        const lineCount = (pasteText.match(/\n/g) || []).length;
+        if (lineCount > 3) {
+          e.stopPropagation();
+          if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+          e.preventDefault();
+          if (relayWs && relayWs.readyState === 1) {
+            relayWs.send(JSON.stringify({
+              type: 'roomSend',
+              displayName: (localStorage.getItem('roAssistChatName') || 'ผู้ใช้'),
+              message: '',
+              attachment: { type: 'text', text: pasteText, lines: lineCount + 1 },
+            }));
+            log('📄 ส่งข้อความ', lineCount + 1, 'บรรทัด เป็น text attachment');
+          }
+          return;
+        }
+      }
       e.stopPropagation();
       if (e.stopImmediatePropagation) e.stopImmediatePropagation();
       e.preventDefault();
-      const text = (e.clipboardData || window.clipboardData).getData('text');
+      const text = pasteText;
       const s = inp.selectionStart, en = inp.selectionEnd;
       inp.value = inp.value.slice(0, s) + text + inp.value.slice(en);
       const pos = s + text.length;
@@ -5678,7 +5698,11 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
       const text = (m.text || '').replace(/</g,'&lt;');
       let attachHtml = '';
       if (m.attachment) {
-        if (m.attachment.type === 'image' && m.attachment.filename) {
+        if (m.attachment.type === 'text' && m.attachment.text) {
+          const lines = m.attachment.lines || (m.attachment.text.match(/\n/g) || []).length + 1;
+          const escaped = m.attachment.text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+          attachHtml = `<br><button class="__assist_text_attach" data-text="${encodeURIComponent(escaped)}" style="background:#2a3a4a;color:#4fc3f7;border:1px solid #3a5a6a;border-radius:6px;padding:6px 12px;font-size:11px;cursor:pointer;margin-top:4px;font-family:inherit">📄 ข้อความ ${lines} บรรทัด (คลิกเพื่อดู)</button>`;
+        } else if (m.attachment.type === 'image' && m.attachment.filename) {
           const imgUrl = getChatFileUrl(m.attachment.filename);
           attachHtml = `<br><img src="${imgUrl}" style="max-width:200px;max-height:120px;border-radius:6px;cursor:pointer;margin-top:4px" data-full="${imgUrl}" onerror="this.style.display='none'">`;
         } else if (m.attachment.type === 'file' && m.attachment.filename) {
@@ -5696,6 +5720,19 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
         ov.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.9);z-index:999999;display:flex;align-items:center;justify-content:center;cursor:zoom-out';
         ov.innerHTML = `<img src="${img.dataset.full}" style="max-width:95vw;max-height:95vh;border-radius:8px">`;
         ov.onclick = () => ov.remove();
+        document.body.appendChild(ov);
+      };
+    });
+    // ★★ wire text attachment click → modal ดูข้อความเต็ม
+    box.querySelectorAll('.__assist_text_attach').forEach(btn => {
+      btn.onclick = () => {
+        const raw = decodeURIComponent(btn.dataset.text);
+        const ov = document.createElement('div');
+        ov.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.85);z-index:999999;display:flex;align-items:center;justify-content:center';
+        ov.innerHTML = `<div style="background:#1a1a2e;border:1px solid #3a3f4b;border-radius:12px;padding:20px;width:700px;max-width:92vw;height:80vh;display:flex;flex-direction:column"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><span style="color:#4fc3f7;font-size:13px;font-weight:600">📄 ข้อความ</span><button style="background:none;border:none;color:#888;font-size:18px;cursor:pointer">✕</button></div><pre style="flex:1;overflow:auto;background:#0d0d15;border-radius:8px;padding:12px;font-size:11px;line-height:1.5;color:#ccc;white-space:pre-wrap;word-break:break-word;font-family:Consolas,monospace">${raw.replace(/</g,'&lt;')}</pre></div>`;
+        const closeBtn = ov.querySelector('button');
+        closeBtn.onclick = () => ov.remove();
+        ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
         document.body.appendChild(ov);
       };
     });

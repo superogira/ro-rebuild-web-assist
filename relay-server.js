@@ -34,7 +34,7 @@ const MAX_FILE_SIZE = 1048576;   // 1 MB
 const MIME_MAP = {
   '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
   '.bmp': 'image/bmp', '.gif': 'image/gif', '.webp': 'image/webp',
-  '.json': 'application/json',
+  '.json': 'application/json', '.txt': 'text/plain',
 };
 
 const server = http.createServer((req, res) => {
@@ -413,7 +413,11 @@ wss.on('connection', (ws, req) => {
       let attachment = null;
       if (msg.attachment && typeof msg.attachment === 'object') {
         const at = msg.attachment;
-        if (at.filename && at.type) {
+        if (at.type === 'text' && typeof at.text === 'string') {
+          // ★★ text attachment — เก็บใน message ไม่ต้อง upload ไฟล์ (สูงสุด 50KB)
+          const lines = (at.text.match(/\n/g) || []).length + 1;
+          attachment = { type: 'text', text: at.text.slice(0, 51200), lines };
+        } else if (at.filename && at.type) {
           attachment = { type: at.type, filename: String(at.filename).slice(0, 100), mimeType: String(at.mimeType || '').slice(0, 50) };
         }
       }
