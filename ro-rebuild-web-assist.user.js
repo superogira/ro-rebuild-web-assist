@@ -2496,7 +2496,9 @@
   //     กรณี stuck=false (ฆ่าได้/defensive/ไกลเกิน) ไม่เดิน เพราะมีเหตุผลอื่นหรือมีของตกต้องเก็บ
   function abandonTarget(reason, stuck, cooldownMs = 0) {
     if (target) {
-      log('🚫 abandon target', target.id, '(' + reason + ')');
+      const abM = entities.get(target.id);
+      const abName = (abM && abM.name) ? abM.name : '?';
+      log('🚫 abandon', abName, target.id.toString(16), '(' + reason + ')');
       if (cooldownMs > 0) abandonCooldown.set(target.id, nowMs() + cooldownMs);
       // ★ เคลียร์ claim (mirror bot.js:3914-3916) — กันมอนที่ abandon ดึงกลับมาวนลูป
       const e = entities.get(target.id);
@@ -2551,7 +2553,7 @@
     if (useLowestHp) {
       log('🎯 เลือกเป้า HP ต่ำสุด (รุม', mobCount, 'ตัว):', found.m.name, (found.hpPct * 100).toFixed(0) + '%', '@', found.dist.toFixed(1), '(r≤' + usedRadius + ')');
     } else {
-      log('🎯 เลือกเป้าใกล้สุด:', found.m.name, '@', found.dist.toFixed(1), '(r≤' + usedRadius + ')');
+      log('🎯 เลือกเป้า:', found.m.name || '?', found.m.id.toString(16), '@ dist', found.dist.toFixed(1), '(r≤' + usedRadius + ')');
     }
     const m = found.m;
     target = {
