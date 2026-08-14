@@ -34,7 +34,7 @@ const MAX_FILE_SIZE = 1048576;   // 1 MB
 const MIME_MAP = {
   '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
   '.bmp': 'image/bmp', '.gif': 'image/gif', '.webp': 'image/webp',
-  '.json': 'application/json', '.txt': 'text/plain',
+  '.json': 'application/json', '.txt': 'text/plain', '.js': 'text/javascript',
 };
 
 const server = http.createServer((req, res) => {

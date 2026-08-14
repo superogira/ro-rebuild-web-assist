@@ -1236,7 +1236,7 @@ if (m) { document.getElementById('pid-input').value = m[1]; connect(m[1]); }
   }
   document.getElementById('chatroom-attach').onclick = () => {
     const inp = document.createElement('input');
-    inp.type = 'file'; inp.accept = 'image/png,image/jpeg,image/bmp,image/gif,image/webp,.json';
+    inp.type = 'file'; inp.accept = 'image/png,image/jpeg,image/bmp,image/gif,image/webp,.json,.js,.txt';
     inp.onchange = () => { if (inp.files[0]) uploadFile(inp.files[0]); };
     inp.click();
   };

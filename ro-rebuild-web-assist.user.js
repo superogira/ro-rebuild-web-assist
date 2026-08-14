@@ -5669,10 +5669,10 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
   // ★★ อัปโหลดไฟล์ → relay → ส่ง chat message พร้อม attachment
   async function uploadChatFile(file) {
     if (!file) return;
-    const allowed = ['image/jpeg','image/png','image/bmp','image/gif','image/webp','application/json'];
+    const allowed = ['image/jpeg','image/png','image/bmp','image/gif','image/webp','application/json','text/javascript','text/plain'];
     const ext = file.name.match(/\.(\w+)$/)?.[1]?.toLowerCase();
-    if (!allowed.includes(file.type) && !['json','jpg','jpeg','png','bmp','gif','webp'].includes(ext)) {
-      log('⚠️ ไม่รองรับไฟล์ประเภทนี้ — รับเฉพาะรูป (jpg/png/bmp/gif) และ .json'); return;
+    if (!allowed.includes(file.type) && !['json','js','txt','jpg','jpeg','png','bmp','gif','webp'].includes(ext)) {
+      log('⚠️ ไม่รองรับไฟล์ประเภทนี้ — รับเฉพาะรูป (jpg/png/bmp/gif) และ .json/.js/.txt'); return;
     }
     if (file.size > 1048576) {
       log('⚠️ ไฟล์ใหญ่เกิน 1MB (' + (file.size/1024).toFixed(0) + 'KB)'); return;
@@ -5799,7 +5799,7 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
     // ★★ ปุ่ม 📎 → file picker
     overlay.querySelector('#__assist_chatroom_attach').onclick = () => {
       const inp = document.createElement('input');
-      inp.type = 'file'; inp.accept = 'image/png,image/jpeg,image/bmp,image/gif,image/webp,.json';
+      inp.type = 'file'; inp.accept = 'image/png,image/jpeg,image/bmp,image/gif,image/webp,.json,.js,.txt';
       inp.onchange = () => { if (inp.files[0]) uploadChatFile(inp.files[0]); };
       inp.click();
     };
