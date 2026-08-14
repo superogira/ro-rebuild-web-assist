@@ -1721,16 +1721,21 @@
       }
     }
     // 0x1b DESPAWN: entity หาย (มี false-despawn guard)
-    //   ★★ false despawn = server ส่ง DESPAWN แต่เราเพิ่งตีมอนโดนภายใน 3s → ไม่ลบ (มอนอาจยังไม่ตาย)
+    //   ★★ false despawn = server ส่ง DESPAWN แต่มอนยังไม่ตาย → ไม่ลบ
     //   mirror bot.js:304-307 + world.js:1596-1612
     else if (op === 0x1b && u.length >= 5) {
       const id = u32(u, 1);
       const e = entities.get(id);
       if (e) {
         const now = nowMs();
-        if (e._lastDamageAt && now - e._lastDamageAt < 3000) {
-          // ★★ false despawn — ไม่ลบ entity ไม่แตะ alive → combatLoop ตีต่อจนกว่าจะตายจริง
+        // guard 1: ตีโดนภายใน 3s → ไม่ลบ
+        const recentDamage = e._lastDamageAt && now - e._lastDamageAt < 3000;
+        // guard 2: ★★ เป็น target ปัจจุบัน + ส่ง attack ไปแล้วภายใน 5s (ยังไม่โดน แต่อาจกำลังเดินเข้า)
+        const recentAttack = target && target.id === id && target.firstAttackAt && now - target.firstAttackAt < 5000;
+        if (recentDamage) {
           log('🛡️ false despawn guard: มอน', e.name || id.toString(16), 'โดนดาเมจ', (now - e._lastDamageAt) + 'ms ที่แล้ว → ไม่ลบ');
+        } else if (recentAttack) {
+          log('🛡️ false despawn guard: target', e.name || id.toString(16), 'ส่ง attack', (now - target.firstAttackAt) + 'ms ที่แล้ว → ไม่ลบ');
         } else {
           entities.delete(id);
           if (e._isMiniBoss || e._isBoss) { bossAlertedIds.delete(id); log((e._isBoss ? '👑 Boss' : '👹 Mini Boss') + ' ตาย — จะ alert ใหม่เมื่อเกิดใหม่'); }
