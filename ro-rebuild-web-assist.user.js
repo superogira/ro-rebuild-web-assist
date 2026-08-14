@@ -4013,6 +4013,40 @@
       }));
     },
     getTarget() { return target ? { id: target.id.toString(16), pending: target.pendingAttacks, engageSec: target.engageAt ? ((nowMs()-target.engageAt)/1000).toFixed(0) : 0 } : null; },
+    // ★★ debug — ดูสถานะ combat ครบทุกอย่าง (ใช้ตอนวินิจฉัย)
+    debug() {
+      const now = nowMs();
+      const out = {
+        playerId: playerId != null ? playerId.toString(16) : null,
+        playerPos: player.x != null ? `(${player.x},${player.y})` : null,
+        currentMap,
+        target: target ? { id: target.id.toString(16), pending: target.pendingAttacks, firstAttackAt: target.firstAttackAt ? (now - target.firstAttackAt) + 'ms ago' : null, lastResultAt: target.lastAttackResultAt ? (now - target.lastAttackResultAt) + 'ms ago' : null } : null,
+        mobAttackers: [...mobAttackers.entries()].map(([id, t]) => ({
+          id: id.toString(16), ago: (now - t) + 'ms',
+          entity: entities.has(id) ? { kind: entities.get(id).kind, alive: entities.get(id).alive, x: entities.get(id).x, y: entities.get(id).y, name: entities.get(id).name } : '(ไม่อยู่ใน entities!)',
+        })),
+        monsterAggro: [...monsterAggro.entries()].map(([id, t]) => ({
+          id: id.toString(16), ago: (now - t) + 'ms',
+          entity: entities.has(id) ? { kind: entities.get(id).kind, alive: entities.get(id).alive } : '(ไม่อยู่ใน entities!)',
+        })),
+        entities: {
+          total: entities.size,
+          players: [...entities.values()].filter(e => e.kind === 0).length,
+          monsters: [...entities.values()].filter(e => e.kind === 1 && e.alive).length,
+          npcs: [...entities.values()].filter(e => e.kind === 2).length,
+        },
+        flee: {
+          enabled: CFG.fleeFromPlayers,
+          maps: CFG.fleeMaps,
+          radius: CFG.fleePlayerRadius,
+          cooldownLeft: fleeCooldownUntil > now ? (fleeCooldownUntil - now) + 'ms' : 'ready',
+        },
+        combat: { enabled: CFG.combatEnabled, manualMode, remoteWalk: remoteWalkTarget ? { x: remoteWalkTarget.x, y: remoteWalkTarget.y } : null },
+      };
+      console.log('%c 🔍 ASSIST DEBUG ', 'background:#e74c3c;color:#fff;padding:2px 8px;border-radius:4px;font-weight:bold');
+      console.table([out]);
+      return out;
+    },
     getAggro() { return { mobAttackers: getMobAttackerCount(CFG.fleeOnProximityRadius), aggro: getAggroCount(CFG.fleeOnProximityRadius), threat: getThreatCount(CFG.fleeOnProximityRadius), monstersNearby: countMonsters(CFG.fleeOnProximityRadius) }; },
     // ★ debug: ดู entities ทั้งหมดเพื่อหาสาเหตุ acquire ไม่ติด
     debugEntities() {
