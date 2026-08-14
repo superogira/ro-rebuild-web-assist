@@ -1035,7 +1035,7 @@
         if (name && name !== currentMap) {
           const prevMap = currentMap;
           currentMap = name;
-          log('🗺️ แมป:', name);
+          log('🗺️ แมป:', name, player.x != null ? '@(' + Math.round(player.x) + ',' + Math.round(player.y) + ')' : '(pos ยังไม่รู้)');
           // ★★★ clear entities ของแมปเก่า — กัน monster ค้างติดมาแมปใหม่ (mirror world.js:293-306)
           //   ปัญหา: ไม่ clear → Merman/Strouf จากแมปเก่ายังค้าง → บอทพยายามตีมอนที่ไม่มีจริง
           //   ★ เก็บตัวเองไว้ (re-add self หลัง clear)
@@ -2654,7 +2654,10 @@
           if (nearby > 0) {
             const next = pickNextFleeMap();
             if (next) {
-              log('🏃 หนีผู้เล่น!', nearby, 'คน → วาร์ปไป', next);
+              // ★ แสดงตำแหน่งผู้เล่น (ถ้า nearby=1 แสดงตำแหน่งเดียวกัน)
+              const pes = [...entities.values()].filter(e => e.kind === 0 && e.id !== playerId && e.alive && e.x != null);
+              const posInfo = pes.length === 1 ? ' @(' + pes[0].x + ',' + pes[0].y + ')' : '';
+              log('🏃 หนีผู้เล่น!', nearby, 'คน' + posInfo + ' → วาร์ปไป', next);
               logImportant('flee', '🏃 หนีผู้เล่น ' + nearby + ' คน → ' + next);
               CFG.farmMap = next;        // ★ auto-set farm map (กัน warpBackToFarm ดึงกลับ)
               saveConfigDebounced();
