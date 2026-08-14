@@ -1743,13 +1743,11 @@
     //   บอทสั่งเอง (sendMove) จะตั้ง navBotMoving=true ก่อน → ข้ามไม่บันทึก
     if (u[0] === 0x07 && u.length >= 5) {
       const mx = i16(u, 1), my = i16(u, 3);
-      // ★★★ อัปเดต player.x/y จาก outgoing MOVE — สำคัญมาก!
-      //   เกมส่ง move packet = player กำลังไปที่ (mx,my) → อัปเดตทันที
-      //   แก้ปัญหาตำแหน่งค้างหลังวาร์ป (server ไม่ส่ง pos กลับ)
-      if (mx >= -500 && mx <= 1000 && my >= -500 && my <= 1000) {
-        player.x = mx; player.y = my;
-        warpGuardUntil = 0; lastWarpPlayerPos = null;   // ★ เคลียร์ warp guard (pos อัปเดตแล้ว)
-      }
+      // ★★ ไม่อัปเดต player.x/y จาก outgoing MOVE!
+      //   จาก packet capture: ถ้าคลิกไปพื้นที่เดินไม่ได้ → server เงียบ → ไม่ส่ง MOVE_UPDATE
+      //   ถ้าอัปเดต optimistic → player.x/y ผิด → คำนวณระยะผิด → บอทเดินผิดทิศ
+      //   แก้: รอ server ส่ง MOVE_UPDATE (0x07 IN) เท่านั้น → ยืนยันตำแหน่งจริง
+      //   (mirror บอทหลัก — world.js ไม่อัปเดต position จาก outgoing move)
       if (!navBotMoving && CFG.navRecording) {
         navRecordMove(mx, my);
       }
