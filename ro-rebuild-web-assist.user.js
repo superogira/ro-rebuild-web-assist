@@ -2974,7 +2974,7 @@
               target.lastAttackAt = now; target.pendingAttacks++;
               if (!target.firstAttackAt) { target.firstAttackAt = now; }   // ★ จดเวลาส่งครั้งแรก
               if (!target.engageAt) { target.engageAt = now; }
-              log('⚔️ ตี', m.name || m.id.toString(16), target.id.toString(16), '@ dist', dist.toFixed(1), '(pending', target.pendingAttacks + ')');
+              log('⚔️ ตี', m.name || m.id.toString(16), target.id.toString(16), '@(' + Math.round(m.x) + ',' + Math.round(m.y) + ') dist', dist.toFixed(1), '(pending', target.pendingAttacks + ')');
             }
           }
           return;
