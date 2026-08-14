@@ -1230,13 +1230,13 @@
     else if (op === 0x3c && u.length >= 3) {
       const sub = u16(u, 1);
       const now = nowMs();
-      // ★★ DEBUG: log 0x3c packets เพื่อดูว่ามี player data มาไหม
-      if (now - (last3cDebugAt || 0) > 3000) {
-        last3cDebugAt = now;
-        const flags = [];
-        if (sub === 7 || sub === 13 || sub === 4) { let pp = 3; while (pp + 9 <= u.length) { flags.push(u[pp+8]); pp += 9; } }
-        log('📡 0x3c sub=' + sub + ' len=' + u.length + ' flags=[' + flags.join(',') + ']');
-      }
+      // DEBUG (commented out — ไม่ต้องแสดงตอนปกติ):
+      // if (now - (last3cDebugAt || 0) > 3000) {
+      //   last3cDebugAt = now;
+      //   const flags = [];
+      //   if (sub === 7 || sub === 13 || sub === 4) { let pp = 3; while (pp + 9 <= u.length) { flags.push(u[pp+8]); pp += 9; } }
+      //   log('📡 0x3c sub=' + sub + ' len=' + u.length + ' flags=[' + flags.join(',') + ']');
+      // }
       if ((sub === 7 || sub === 13 || sub === 4) && u.length >= 5) {
         // ★ sub=7 / sub=13: multi-entity minimap list (players + warps + NPCs)
         //   format: [3c][sub:2] then repeating [id:4][x:2][y:2][flag:1] (9 bytes each)
