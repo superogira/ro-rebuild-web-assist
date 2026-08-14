@@ -2558,7 +2558,7 @@
     // ★ progressive search — ค้นจากรัศมีเล็กก่อน ถ้าเจอใช้เลย (mirror bot.js:3957-3963)
     //   ทำให้เลือกมอนใกล้ก่อนเสมอ แม้จะตั้ง maxAcquireDistance ไว้สูง
     const radii = (Array.isArray(CFG.searchRadii) && CFG.searchRadii.length > 0)
-      ? [...CFG.searchRadii].sort((a, b) => a - b)
+      ? [...CFG.searchRadii].sort((a, b) => a - b).filter(r => r <= CFG.maxAcquireDistance)   // ★★ ไม่ค้นเกิน maxAcquireDistance
       : [CFG.maxAcquireDistance];
     let found = null;
     let usedRadius = 0;
@@ -4798,6 +4798,8 @@
             <div class="field"><label>มอนที่จะไม่ตี — blacklist</label><input type="text" id="__assist_blacklist" placeholder="เช่น MVP,Boss"></div>
             <div class="btns"><button id="__assist_applywhitelist">ตั้ง whitelist</button><button id="__assist_applyblacklist">ตั้ง blacklist</button></div>
             <div class="field"><label>ระยะโจมตี (ช่อง) — นักธนูตั้ง >2 เพื่อตีไกล</label><input type="number" id="__assist_attackrange" min="0" max="15"></div>
+            <div class="field"><label>รัศมีค้นหามอน (ช่อง) — เลือกมอนในระยะนี้เท่านั้น (เล็ก=ไม่เดินไกล)</label><input type="number" id="__assist_maxacq" min="1" max="50" placeholder="30"></div>
+            <div class="field"><label>ไล่ตามมอนสูงสุด (ช่อง) — ไกลกว่านี้ abandon</label><input type="number" id="__assist_maxchase" min="5" max="100" placeholder="40"></div>
             <div class="btns">
               <button id="__assist_t_antiks" class="on">antiKS</button>
               <button id="__assist_t_avoidp" class="on">avoidPlayers</button>
@@ -5270,8 +5272,14 @@
       if (!isNaN(es)) CFG.maxEngageSec = es;
       const esl = parseInt(root.querySelector('#__assist_engageslow')?.value, 10);
       if (!isNaN(esl)) CFG.maxEngageSecSlow = esl;
+      const maq = parseInt(root.querySelector('#__assist_maxacq')?.value, 10);
+      if (!isNaN(maq) && maq > 0) { CFG.maxAcquireDistance = maq; log('🎯 รัศมีค้นหามอน =', maq, 'ช่อง'); }
+      const mch = parseInt(root.querySelector('#__assist_maxchase')?.value, 10);
+      if (!isNaN(mch) && mch > 0) { CFG.maxChaseDistance = mch; log('🏃 ไล่มอนสูงสุด =', mch, 'ช่อง'); }
     });
-    // ★ populate engage inputs ครั้งเดียว
+    // ★ populate inputs ครั้งเดียว
+    const _maq = root.querySelector('#__assist_maxacq'); if (_maq) _maq.value = CFG.maxAcquireDistance;
+    const _mch = root.querySelector('#__assist_maxchase'); if (_mch) _mch.value = CFG.maxChaseDistance;
     const _es = root.querySelector('#__assist_engagesec'); if (_es) _es.value = CFG.maxEngageSec;
     const _esl = root.querySelector('#__assist_engageslow'); if (_esl) _esl.value = CFG.maxEngageSecSlow;
     // ★ populate noMonsterWarpSec ครั้งเดียว
