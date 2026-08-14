@@ -1368,6 +1368,7 @@
       }
       if (items.length === 0) {
         log('⚠️ ไม่มีของที่จะขาย (sellItemIds ว่าง หรือ inventory ไม่มี)');
+        sendSellClose();   // ★★ ปิด sell dialog ก่อน warp (กัน warp ไม่ไป)
         sellState = 'WARP_BACK'; sellStateAt = nowMs();
       } else {
         log('💰 ขายของ', items.length, 'รายการ' + (eqCount ? ' (' + eqCount + ' equipment)' : '') + ':',
@@ -1398,6 +1399,7 @@
         }
       } else {
         log('⚠️ ขายของล้มเหลว (SELL_RESULT flag=0)');
+        sendSellClose();   // ★★ ปิด dialog ก่อน warp
       }
       sellState = 'WARP_BACK'; sellStateAt = nowMs();
     }
@@ -1975,6 +1977,7 @@
   function setStorageState(s) { storageState = s; storageStateAt = nowMs(); }
   function abortStorage(reason) {
     log('⚠️ ยกเลิกฝาก:', reason);
+    sendStorageClose();   // ★★ ปิด dialog ก่อน (กัน warp ไม่ไป)
     storageState = 'IDLE'; storageStateAt = 0;
     storageMoveQueue = []; storageMoveIdx = 0;
     if (storageReturnTo && storageReturnTo.map) { sendTeleport(storageReturnTo.map, storageReturnTo.x, storageReturnTo.y); }
@@ -2484,6 +2487,12 @@
   function sendStorageClose() {
     if (!activeWS || activeWS.readyState !== 1) return false;
     activeWS.send(new Uint8Array([0x56, 0x00]));
+    return true;
+  }
+  // ★★ ปิด sell dialog / NPC dialog — ส่ง cancel (mirror storage close)
+  function sendSellClose() {
+    if (!activeWS || activeWS.readyState !== 1) return false;
+    activeWS.send(new Uint8Array([0x56, 0x00]));   // ปิด dialog (เหมือน storage close)
     return true;
   }
   function clearCombatThreat() { monsterAggro.clear(); mobAttackers.clear(); }
