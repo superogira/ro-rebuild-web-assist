@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.95.0
+// @version      4.96.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,12 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.95.0';
+  const VERSION = '4.96.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.96.0', d: '2026-08-15', items: [
+      '🏃 Toggle โหมดหนีผู้เล่น: 🗺️ เปลี่ยนแมป / 📍 แมปเดิม (วาร์ปสุ่ม)',
+    ]},
     { v: '4.95.0', d: '2026-08-15', items: [
       '🔴 Real-time HP tracking — ลด HP ทันทีจาก 0x0b/0x17 damage (แก้ heal ช้า)',
     ]},
@@ -178,7 +181,7 @@
     'restEnabled', 'restHpPercent', 'restUntilPercent', 'restMaxSec', 'postCombatDelayMs', 'autoRespawnEnabled', 'autoRespawnDelayMs', 'telegramAlertCard', 'telegramAlertFlee', 'telegramAlertBotMention', 'telegramAlertNearby', 'telegramAlertWhisper', 'telegramBotToken', 'telegramChatId',
     'sellEnabled', 'sellNpcName', 'sellNpcMap', 'sellNpcX', 'sellNpcY', 'sellIntervalMin', 'sellOnFull', 'sellItemIds',
     'storageEnabled', 'kafraName', 'kafraMap', 'kafraMapX', 'kafraMapY', 'kafraChoice', 'depositOnFull', 'depositAfterSell', 'depositItemIds',
-    'farmMap', 'farmMapX', 'farmMapY', 'warpBackToFarm', 'fleeFromPlayers', 'fleeMaps', 'fleePlayerRadius',
+    'farmMap', 'farmMapX', 'farmMapY', 'warpBackToFarm', 'fleeFromPlayers', 'fleeMode', 'fleeMaps', 'fleePlayerRadius',
     'navRecording', 'navMergeRadius', 'navWanderUseNav', 'navWanderMode',
     'itemNames',
   ];
@@ -426,7 +429,8 @@
     farmMapX: -999,               // พิกัด X ที่จะวาร์ปไป (-999 = random spawn ในแมปนั้น)
     farmMapY: -999,               // พิกัด Y
     warpBackToFarm: true,         // ถ้า currentMap เปลี่ยนจาก farmMap → วาร์ปกลับอัตโนมัติ
-    fleeFromPlayers: false,       // ★★ วาร์ปหนีผู้เล่น — เจอผู้เล่นในแมป → วาร์ปเปลี่ยนแมปทันที
+    fleeFromPlayers: false,       // ★★ วาร์ปหนีผู้เล่น — เจอผู้เล่นในแมป → วาร์ปหนีทันที
+    fleeMode: 'changeMap',        // ★★ 'changeMap' = เปลี่ยนแมป | 'sameMap' = วาร์ปสุ่มในแมปเดิม
     fleeMaps: [],                 // ★★ รายการแผนที่สำรอง ['moc_fild04','moc_fild08',...]
     fleePlayerRadius: 30,         // ★★ ระยะตรวจจับผู้เล่น (ช่อง)
 
@@ -2779,12 +2783,23 @@
             log('🔍 flee: nearby=' + nearby + ' players=' + pes.length + ' r=' + CFG.fleePlayerRadius + ' [' + detail + ']');
           }
           if (nearby > 0) {
+            // ★ แสดงตำแหน่งผู้เล่น (ถ้า nearby=1 แสดงตำแหน่งเดียวกัน)
+            const pes = [...entities.values()].filter(e => e.kind === 0 && e.id !== playerId && e.alive && e.x != null);
+            const posInfo = pes.length === 1 ? ' @(' + pes[0].x + ',' + pes[0].y + ')' : '';
+            const botPos = player.x != null ? ' bot@(' + Math.round(player.x) + ',' + Math.round(player.y) + ')' : '';
+            // ★★ sameMap mode — วาร์ปสุ่มในแมปเดิม (ไม่เปลี่ยนแมป)
+            if (CFG.fleeMode === 'sameMap') {
+              log('🏃 หนีผู้เล่น!', nearby, 'คน' + posInfo + botPos + ' → วาร์ปสุ่มในแมปเดิม');
+              logImportant('flee', '🏃 หนีผู้เล่น ' + nearby + ' คน → วาร์ปสุ่มในแมปเดิม');
+              if (sendRandomWarp()) {
+                fleeCooldownUntil = now + 5000;
+                target = null; monsterAggro.clear(); mobAttackers.clear();
+              }
+              return;
+            }
+            // ★★ changeMap mode — เปลี่ยนแมป (เดิม)
             const next = pickNextFleeMap();
             if (next) {
-              // ★ แสดงตำแหน่งผู้เล่น (ถ้า nearby=1 แสดงตำแหน่งเดียวกัน)
-              const pes = [...entities.values()].filter(e => e.kind === 0 && e.id !== playerId && e.alive && e.x != null);
-              const posInfo = pes.length === 1 ? ' @(' + pes[0].x + ',' + pes[0].y + ')' : '';
-              const botPos = player.x != null ? ' bot@(' + Math.round(player.x) + ',' + Math.round(player.y) + ')' : '';
               log('🏃 หนีผู้เล่น!', nearby, 'คน' + posInfo + botPos + ' → วาร์ปไป', next);
               logImportant('flee', '🏃 หนีผู้เล่น ' + nearby + ' คน → ' + next);
               CFG.farmMap = next;        // ★ auto-set farm map (กัน warpBackToFarm ดึงกลับ)
@@ -5044,7 +5059,11 @@
           </div>
           <!-- 🏃 Flee -->
           <div class="__assist_subpage" data-sub="flee">
-            <div class="btns"><button id="__assist_t_fleeplayers" class="off">🏃 หนีผู้เล่น</button></div>
+            <div class="btns">
+              <button id="__assist_t_fleeplayers" class="off">🏃 หนีผู้เล่น</button>
+              <button id="__assist_t_fleemode_change" class="on">🗺️ เปลี่ยนแมป</button>
+              <button id="__assist_t_fleemode_same" class="off">📍 แมปเดิม</button>
+            </div>
             <div class="field"><label>แผนที่สำรองเมื่อหนีผู้เล่น (คั่นด้วยจุลภาค)</label><input type="text" id="__assist_fleemaps" placeholder="moc_fild04,moc_fild08,gef_fild13"></div>
             <div class="field"><label>รัศมีตรวจจับผู้เล่น (ช่อง) — 0 = หนีทันทีที่มีผู้เล่นในแผนที่</label><input type="number" id="__assist_fleeradius" min="0" max="200" placeholder="30"></div>
             <div class="btns"><button id="__assist_applyfleemap">ใช้ค่าหนีผู้เล่น</button></div>
@@ -5465,6 +5484,8 @@
     root.querySelector('#__assist_t_warptoboss').addEventListener('click', () => { CFG.warpToBoss = !CFG.warpToBoss; saveConfigDebounced(); log('👑 วาร์ปไปสู้ Boss:', CFG.warpToBoss ? 'เปิด' : 'ปิด'); });
     root.querySelector('#__assist_t_warptominiboss').addEventListener('click', () => { CFG.warpToMiniBoss = !CFG.warpToMiniBoss; saveConfigDebounced(); log('👹 วาร์ปไปสู้ Mini Boss:', CFG.warpToMiniBoss ? 'เปิด' : 'ปิด'); });
     root.querySelector('#__assist_t_fleeplayers').addEventListener('click', () => { CFG.fleeFromPlayers = !CFG.fleeFromPlayers; saveConfigDebounced(); log('🏃 หนีผู้เล่น:', CFG.fleeFromPlayers ? 'เปิด' : 'ปิด'); });
+    root.querySelector('#__assist_t_fleemode_change').addEventListener('click', () => { CFG.fleeMode = 'changeMap'; saveConfigDebounced(); log('🗺️ หนีผู้เล่น: เปลี่ยนแมป'); });
+    root.querySelector('#__assist_t_fleemode_same').addEventListener('click', () => { CFG.fleeMode = 'sameMap'; saveConfigDebounced(); log('📍 หนีผู้เล่น: วาร์ปสุ่มในแมปเดิม'); });
     root.querySelector('#__assist_t_stepaside').addEventListener('click', () => { CFG.stepAsideOnAbandon = CFG.stepAsideOnAbandon === false ? true : false; saveConfigDebounced(); log('🚶 เดินหลีกหลัง abandon:', CFG.stepAsideOnAbandon ? 'เปิด' : 'ปิด'); });
     // ★ populate flee inputs ครั้งเดียวตอนเริ่ม (ไม่ sync ตลอด — กันเด้ง)
     const _fm = root.querySelector('#__assist_fleemaps');
@@ -6669,6 +6690,8 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
     syncToggle('#__assist_t_warptoboss', CFG.warpToBoss === true);
     syncToggle('#__assist_t_warptominiboss', CFG.warpToMiniBoss === true);
     syncToggle('#__assist_t_fleeplayers', CFG.fleeFromPlayers === true);
+    syncToggle('#__assist_t_fleemode_change', CFG.fleeMode !== 'sameMap');
+    syncToggle('#__assist_t_fleemode_same', CFG.fleeMode === 'sameMap');
     syncToggle('#__assist_t_stepaside', CFG.stepAsideOnAbandon !== false);
     // ★ ไม่ sync fleemaps/fleeradius — กันเขียนทับค่าที่กำลังแก้ (Unity แย่ง focus → isEditing คืน false)
     syncInput('#__assist_fleemonsters', (CFG.fleeMonsters || []).join(','));
