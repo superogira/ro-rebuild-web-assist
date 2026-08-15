@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.94.0
+// @version      4.95.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,12 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.94.0';
+  const VERSION = '4.95.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.95.0', d: '2026-08-15', items: [
+      '🔴 Real-time HP tracking — ลด HP ทันทีจาก 0x0b/0x17 damage (แก้ heal ช้า)',
+    ]},
     { v: '4.94.0', d: '2026-08-15', items: [
       '🔴 SELF-DETECT เพิ่มใน sub=1 (ก่อนหน้ามีแค่ sub=7/13)',
       '🔴 SELF-DETECT ลบ entity เก่า (entities.delete) — กันค้างเป็น player',
@@ -1709,10 +1712,15 @@
           relayRegisterPlayer();
         }
       }
-      // มอนตีเรา → mark mobAttacker
+      // มอนตีเรา → mark mobAttacker + ★★ ลด HP ทันที (ไม่รอ STAT!)
       else if (victimId === playerId || (victimId === 0 && attacker !== playerId)) {
         mobAttackers.set(attacker, now);
         markCombat();
+        // ★★ real-time HP tracking — ลด HP ทันทีจาก damage (แก้ heal ช้า!)
+        //   เดิม: รอ server ส่ง STAT (1-2 วิ) → HP ค้างที่ค่าเก่า → heal ช้า
+        if (damage > 0 && hp.cur != null && hp.max > 0) {
+          hp.cur = Math.max(0, hp.cur - damage);
+        }
       }
       // ★★ DEBUG: log เมื่อ player โดนตี (ทุก 2s — กัน spam)
       if (now - (lastDamageDebugAt || 0) > 2000 && victimId === playerId) {
@@ -1733,13 +1741,17 @@
     else if (op === 0x17 && u.length >= 9 && playerId != null) {
       const victimId = u32(u, 1);
       const damage = u32(u, 5);
-      // ★★ DEBUG: player โดนดาเมจผ่าน 0x17 → log (ไม่มี attacker info!)
+      // ★★ DEBUG: player โดนดาเมจผ่าน 0x17 → log + ★★ ลด HP ทันที!
       if (victimId === playerId) {
         const nowD = nowMs();
+        // ★★ real-time HP tracking — ลด HP ทันทีจาก damage (แก้ heal ช้า!)
+        if (damage > 0 && hp.cur != null && hp.max > 0) {
+          hp.cur = Math.max(0, hp.cur - damage);
+        }
         if (nowD - (lastDamageDebugAt || 0) > 2000) {
           lastDamageDebugAt = nowD;
           const hex = Array.from(u.slice(0, Math.min(u.length, 20))).map(b => b.toString(16).padStart(2, '0')).join(' ');
-          console.log('[ASSIST][dmg] 0x17 DAMAGE_V2 player! dmg=' + damage + ' (ไม่มี attacker → mobAttackers ไม่เติม) | ' + hex);
+          console.log('[ASSIST][dmg] 0x17 DAMAGE_V2 player! dmg=' + damage + ' HP→' + hp.cur + '/' + hp.max + ' | ' + hex);
         }
       }
       // victim = player → ข้าม (โดนตี จัดการใน 0x0b แล้ว)
