@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.97.0
+// @version      4.98.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,14 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.97.0';
+  const VERSION = '4.98.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.98.0', d: '2026-08-16', items: [
+      '🔴 SPAWN SELF-DETECT — flag=2 + ชื่อตรง playerName → update playerId + position',
+      '   แก้: หลังวาร์ปสุ่มในแมปเดิม ตำแหน่งค้าง → บอทตี entity เก่า → วนลูป',
+      '   แก่: HP เพี้ยน (AUTO-DETECT ตั้ง playerId = Target Dummy → HP ผิด)',
+    ]},
     { v: '4.97.0', d: '2026-08-15', items: [
       '🔴 countNearbyPlayers นับเฉพาะ SPAWN entities (มีชื่อจริง) — แก้หนีตัวเองถาวร',
     ]},
@@ -1588,6 +1593,18 @@
           });
           // ★ (C) SPAWN อัปเดต player.x/y ด้วย (mirror world.js:1289-1292) — กัน stale หลังวาร์ป
           if (id === playerId && x != null) { player.x = x; player.y = y; }
+          // ★★★ SPAWN SELF-DETECT: flag=2 + ชื่อตรง playerName → นี่คือตัวเรา! (แก้วนลูปหลังวาร์ปในแมปเดิม)
+          //   หลังวาร์ปสุ่ม entityId เปลี่ยน → SPAWN มาพร้อมชื่อของเรา → update playerId + position!
+          //   ถ้าไม่ update → player.x/y ค้างที่ตำแหน่งเก่า → บอทตี entity เก่าที่อยู่ไกล → pending สูง → วนลูป!
+          if (id !== playerId && name && playerName && name === playerName && x != null) {
+            log('🔄 SPAWN SELF-DETECT: playerId', playerId.toString(16), '→', id.toString(16), '(ชื่อตรง:', name + ')');
+            const oldId = playerId;
+            playerId = id;
+            stalePlayerIds.set(oldId, nowMs() + 300000);
+            entities.delete(oldId);
+            player.x = x; player.y = y;
+            relayRegisterPlayer();
+          }
           // ★ เก็บ playerName — ใช้เป็น guard กัน false ID change (mirror world.js:1235)
           if (id === playerId && name && !playerName) {
             playerName = name; log('👤 player_name =', name);
