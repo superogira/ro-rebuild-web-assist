@@ -1,0 +1,1507 @@
+{
+  "requests": [
+    {
+      "id": "ms6f57su4fcn",
+      "playerName": "Testระบบรับของ",
+      "items": [
+        {
+          "itemId": 603,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "timeout",
+      "createdAt": 1785349750206,
+      "expiresAt": 1785350650206
+    },
+    {
+      "id": "ms6f5yx51vum",
+      "playerName": "Testระบบรับของ",
+      "items": [
+        {
+          "itemId": 4084,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "timeout",
+      "createdAt": 1785349785353,
+      "expiresAt": 1785350685353
+    },
+    {
+      "id": "ms6flm6rznim",
+      "playerName": "Testระบบรับของ01",
+      "items": [
+        {
+          "itemId": 4084,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "timeout",
+      "createdAt": 1785350515347,
+      "expiresAt": 1785351415347
+    },
+    {
+      "id": "ms6fmi423mo2",
+      "playerName": "Testระบบรับของ01",
+      "items": [
+        {
+          "itemId": 4084,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "timeout",
+      "createdAt": 1785350556722,
+      "expiresAt": 1785351456722
+    },
+    {
+      "id": "ms6hrmzsqh34",
+      "playerName": "bottest",
+      "ip": "",
+      "items": [
+        {
+          "itemId": 984,
+          "amount": 1
+        },
+        {
+          "itemId": 985,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "timeout",
+      "createdAt": 1785354155560,
+      "expiresAt": 1785355055560
+    },
+    {
+      "id": "ms6idbujdkzm",
+      "playerName": "testtrade2",
+      "ip": "",
+      "items": [],
+      "zeny": 100000,
+      "status": "timeout",
+      "createdAt": 1785355167547,
+      "expiresAt": 1785356067547
+    },
+    {
+      "id": "ms6ip84gpjxo",
+      "playerName": "superogira",
+      "ip": "2405:9800:b640:396c:2b8b:70e9:253a:3583",
+      "items": [],
+      "zeny": 100000,
+      "status": "cancelled",
+      "createdAt": 1785355722592,
+      "expiresAt": 1785356622592
+    },
+    {
+      "id": "ms6iptahhkrp",
+      "playerName": "superogira",
+      "ip": "2405:9800:b640:396c:2b8b:70e9:253a:3583",
+      "items": [],
+      "zeny": 50000,
+      "status": "timeout",
+      "createdAt": 1785355750025,
+      "expiresAt": 1785356650025
+    },
+    {
+      "id": "ms6iqni0y32e",
+      "playerName": "superogira",
+      "ip": "2405:9800:b641:3a08:814c:a570:48a7:eaa2",
+      "items": [
+        {
+          "itemId": 603,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "timeout",
+      "createdAt": 1785355789176,
+      "expiresAt": 1785356689176
+    },
+    {
+      "id": "ms6isbrnze7o",
+      "playerName": "superogira1",
+      "ip": "2405:9800:b641:3a08:814c:a570:48a7:eaa2",
+      "items": [],
+      "zeny": 100000,
+      "status": "timeout",
+      "createdAt": 1785355867283,
+      "expiresAt": 1785356767283
+    },
+    {
+      "id": "ms6j1cpbetc4",
+      "playerName": "Sladin",
+      "ip": "2001:fb1:4d:8db4:9405:82c7:cd4b:8afe",
+      "items": [
+        {
+          "itemId": 603,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "timeout",
+      "createdAt": 1785356288399,
+      "expiresAt": 1785357188399
+    },
+    {
+      "id": "ms73i73c77uc",
+      "playerName": "superogira",
+      "ip": "49.228.105.178",
+      "items": [],
+      "zeny": 100000,
+      "status": "timeout",
+      "createdAt": 1785390666600,
+      "expiresAt": 1785391566600
+    },
+    {
+      "id": "ms7rlovx2xpl",
+      "playerName": "BNP",
+      "ip": "2405:9800:b661:63f9:1d85:17d7:85c2:9ba7",
+      "items": [
+        {
+          "itemId": 985,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "cancelled",
+      "createdAt": 1785431140413,
+      "expiresAt": 1785432040413
+    },
+    {
+      "id": "ms7sioqdph9h",
+      "playerName": "7777",
+      "ip": "49.237.86.179",
+      "items": [
+        {
+          "itemId": 984,
+          "amount": 1
+        },
+        {
+          "itemId": 985,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "cancelled",
+      "createdAt": 1785432679861,
+      "expiresAt": 1785433579861
+    },
+    {
+      "id": "ms7uuihk6uk3",
+      "playerName": "เจ๊าะ",
+      "ip": "110.169.129.27",
+      "items": [
+        {
+          "itemId": 984,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "timeout",
+      "createdAt": 1785436590873,
+      "expiresAt": 1785437490873
+    },
+    {
+      "id": "ms84whg26196",
+      "playerName": "KPz",
+      "ip": "27.130.60.80",
+      "items": [],
+      "zeny": 100000,
+      "status": "cancelled",
+      "createdAt": 1785453478994,
+      "expiresAt": 1785454378994
+    },
+    {
+      "id": "ms84ytfaegax",
+      "playerName": "KPz",
+      "ip": "27.130.60.80",
+      "items": [
+        {
+          "itemId": 4004,
+          "amount": 1
+        },
+        {
+          "itemId": 4035,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "timeout",
+      "createdAt": 1785453587830,
+      "expiresAt": 1785454487830
+    },
+    {
+      "id": "ms8g1c1ld75u",
+      "playerName": "A7",
+      "ip": "175.144.93.111",
+      "items": [
+        {
+          "itemId": 4117,
+          "amount": 1
+        },
+        {
+          "itemId": 4115,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "timeout",
+      "createdAt": 1785472181049,
+      "expiresAt": 1785473081049
+    },
+    {
+      "id": "ms8gya6uj8su",
+      "playerName": "A3110",
+      "ip": "2405:9800:b870:b0a4:65d3:4d9b:c6e5:9873",
+      "items": [
+        {
+          "itemId": 984,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "cancelled",
+      "createdAt": 1785473718294,
+      "expiresAt": 1785474618294
+    },
+    {
+      "id": "ms8gya72esmh",
+      "playerName": "A3110",
+      "ip": "2405:9800:b870:b0a4:65d3:4d9b:c6e5:9873",
+      "items": [
+        {
+          "itemId": 984,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "cancelled",
+      "createdAt": 1785473718302,
+      "expiresAt": 1785474618302
+    },
+    {
+      "id": "ms8mls4f2ci9",
+      "playerName": "zErRoRz",
+      "ip": "49.237.4.187",
+      "items": [
+        {
+          "itemId": 4117,
+          "amount": 1
+        },
+        {
+          "itemId": 4115,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "cancelled",
+      "createdAt": 1785483212703,
+      "expiresAt": 1785484112703
+    },
+    {
+      "id": "ms8mtd5iwk8j",
+      "playerName": "zErRoRz",
+      "ip": "49.237.4.187",
+      "items": [
+        {
+          "itemId": 4117,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "cancelled",
+      "createdAt": 1785483566550,
+      "expiresAt": 1785484466550
+    },
+    {
+      "id": "ms8osijm426b",
+      "playerName": "A7",
+      "ip": "175.144.93.111",
+      "items": [],
+      "zeny": 100000,
+      "status": "timeout",
+      "createdAt": 1785486886114,
+      "expiresAt": 1785487786114
+    },
+    {
+      "id": "msahlfo4tx0h",
+      "playerName": "4ssis7",
+      "ip": "171.97.240.78",
+      "items": [
+        {
+          "itemId": 985,
+          "amount": 1
+        },
+        {
+          "itemId": 984,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "timeout",
+      "createdAt": 1785595730836,
+      "expiresAt": 1785596630836
+    },
+    {
+      "id": "mse3u218m8lf",
+      "playerName": "Bot ตรวจสอบราคา",
+      "ip": "2a06:98c0:3600::103",
+      "items": [],
+      "zeny": 100000,
+      "status": "cancelled",
+      "createdAt": 1785814483148,
+      "expiresAt": 1785815383148
+    },
+    {
+      "id": "msff30botlf9",
+      "playerName": "UnexpectedBusiness",
+      "ip": "2a06:98c0:3600::103",
+      "items": [
+        {
+          "itemId": 4035,
+          "amount": 1
+        },
+        {
+          "itemId": 4111,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "timeout",
+      "createdAt": 1785893842788,
+      "expiresAt": 1785894742788
+    }
+  ],
+  "history": [
+    {
+      "playerName": "xNogginx",
+      "items": [],
+      "zeny": 100000,
+      "status": "traded",
+      "ts": 1785349616743
+    },
+    {
+      "playerName": "xNogginx",
+      "items": [
+        {
+          "itemId": 4117,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "traded",
+      "ts": 1785349666897
+    },
+    {
+      "playerName": "NogginTimu",
+      "items": [
+        {
+          "itemId": 4115,
+          "amount": 1
+        }
+      ],
+      "zeny": 100000,
+      "status": "traded",
+      "ts": 1785349789468
+    },
+    {
+      "playerName": "Noggin",
+      "items": [],
+      "zeny": 150000,
+      "status": "traded",
+      "ts": 1785349970783
+    },
+    {
+      "playerName": "BronzeStar",
+      "items": [
+        {
+          "itemId": 603,
+          "amount": 1
+        },
+        {
+          "itemId": 985,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "traded",
+      "ts": 1785349981748
+    },
+    {
+      "playerName": "NogginTime",
+      "items": [],
+      "zeny": 150000,
+      "status": "traded",
+      "ts": 1785350037326
+    },
+    {
+      "playerName": "SilverStar",
+      "items": [
+        {
+          "itemId": 4314,
+          "amount": 1
+        },
+        {
+          "itemId": 4077,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "traded",
+      "ts": 1785350228840
+    },
+    {
+      "playerName": "UnexpectedBusiness",
+      "items": [
+        {
+          "itemId": 4314,
+          "amount": 1
+        },
+        {
+          "itemId": 4117,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "traded",
+      "ts": 1785350631031
+    },
+    {
+      "playerName": "Testระบบรับของ",
+      "items": [
+        {
+          "itemId": 603,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "timeout",
+      "ts": 1785350669588
+    },
+    {
+      "playerName": "Testระบบรับของ",
+      "items": [
+        {
+          "itemId": 4084,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "timeout",
+      "ts": 1785350699588
+    },
+    {
+      "playerName": "superogira0",
+      "items": [],
+      "zeny": 100000,
+      "status": "traded",
+      "ts": 1785350715091
+    },
+    {
+      "playerName": "Testระบบ01",
+      "items": [
+        {
+          "itemId": 4084,
+          "amount": 1
+        },
+        {
+          "itemId": 4044,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "traded",
+      "ts": 1785351079470
+    },
+    {
+      "playerName": "Testระบบรับของ01",
+      "items": [
+        {
+          "itemId": 4084,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "timeout",
+      "ts": 1785351419521
+    },
+    {
+      "playerName": "Testระบบรับของ01",
+      "items": [
+        {
+          "itemId": 4084,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "timeout",
+      "ts": 1785351479523
+    },
+    {
+      "playerName": "testtrade1",
+      "items": [
+        {
+          "itemId": 984,
+          "amount": 1
+        },
+        {
+          "itemId": 985,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "traded",
+      "ts": 1785353097596
+    },
+    {
+      "playerName": "testtrade",
+      "items": [
+        {
+          "itemId": 984,
+          "amount": 1
+        },
+        {
+          "itemId": 985,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "traded",
+      "ts": 1785353382601
+    },
+    {
+      "playerName": "bottest",
+      "ip": "",
+      "items": [
+        {
+          "itemId": 984,
+          "amount": 1
+        },
+        {
+          "itemId": 985,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "timeout",
+      "ts": 1785355066560
+    },
+    {
+      "playerName": "testtrade2",
+      "ip": null,
+      "items": [],
+      "zeny": 100000,
+      "status": "timeout",
+      "ts": 1785356074858
+    },
+    {
+      "playerName": "superogira",
+      "ip": "2405:9800:b640:396c:2b8b:70e9:253a:3583",
+      "items": [],
+      "zeny": 50000,
+      "status": "timeout",
+      "ts": 1785356674972
+    },
+    {
+      "playerName": "superogira",
+      "ip": "2405:9800:b641:3a08:814c:a570:48a7:eaa2",
+      "items": [
+        {
+          "itemId": 603,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "timeout",
+      "ts": 1785356704973
+    },
+    {
+      "playerName": "superogira1",
+      "ip": "2405:9800:b641:3a08:814c:a570:48a7:eaa2",
+      "items": [],
+      "zeny": 100000,
+      "status": "timeout",
+      "ts": 1785356794976
+    },
+    {
+      "playerName": "Sladin",
+      "ip": "2001:fb1:4d:8db4:9405:82c7:cd4b:8afe",
+      "items": [
+        {
+          "itemId": 603,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "timeout",
+      "ts": 1785357214983
+    },
+    {
+      "playerName": "superogira0",
+      "ip": null,
+      "items": [],
+      "zeny": 0,
+      "status": "timeout",
+      "ts": 1785361816412
+    },
+    {
+      "playerName": "superogira0",
+      "ip": null,
+      "items": [
+        {
+          "itemId": 985,
+          "amount": 5
+        },
+        {
+          "itemId": 984,
+          "amount": 12
+        }
+      ],
+      "zeny": 0,
+      "status": "refill",
+      "ts": 1785361840782
+    },
+    {
+      "playerName": "superogira0",
+      "ip": null,
+      "items": [
+        {
+          "itemId": 702,
+          "amount": 18
+        },
+        {
+          "itemId": 984,
+          "amount": 10
+        },
+        {
+          "itemId": 985,
+          "amount": 7
+        }
+      ],
+      "zeny": 0,
+      "status": "refill",
+      "ts": 1785363305117
+    },
+    {
+      "playerName": "superogira0",
+      "ip": null,
+      "items": [],
+      "zeny": 75874,
+      "status": "refill",
+      "ts": 1785363325331
+    },
+    {
+      "playerName": "superogira0",
+      "ip": null,
+      "items": [],
+      "zeny": 9000,
+      "status": "refill",
+      "ts": 1785363827103
+    },
+    {
+      "playerName": "sssddd",
+      "ip": "2405:9800:b640:396c:2b8b:70e9:253a:3583",
+      "items": [
+        {
+          "itemId": 984,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "traded",
+      "ts": 1785363928743
+    },
+    {
+      "playerName": "sssddd",
+      "ip": "2405:9800:b640:396c:2b8b:70e9:253a:3583",
+      "items": [],
+      "zeny": 50000,
+      "status": "traded",
+      "ts": 1785363963291
+    },
+    {
+      "playerName": "JKJoKeR",
+      "ip": "2403:6200:8878:13a4:77e1:6c7:b08a:a305",
+      "items": [
+        {
+          "itemId": 4115,
+          "amount": 1
+        },
+        {
+          "itemId": 4117,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "traded",
+      "ts": 1785376110213
+    },
+    {
+      "playerName": "superogira",
+      "ip": "49.228.105.178",
+      "items": [],
+      "zeny": 100000,
+      "status": "timeout",
+      "ts": 1785391568340
+    },
+    {
+      "playerName": "10sion",
+      "ip": "171.97.179.215",
+      "items": [
+        {
+          "itemId": 4117,
+          "amount": 1
+        },
+        {
+          "itemId": 4058,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "traded",
+      "ts": 1785409955870
+    },
+    {
+      "playerName": "superogira0",
+      "ip": null,
+      "items": [
+        {
+          "itemId": 4224,
+          "amount": 9
+        },
+        {
+          "itemId": 4247,
+          "amount": 4
+        },
+        {
+          "itemId": 4292,
+          "amount": 6
+        }
+      ],
+      "zeny": 500000,
+      "status": "refill",
+      "ts": 1785429599694
+    },
+    {
+      "playerName": "superogira0",
+      "ip": null,
+      "items": [
+        {
+          "itemId": 4273,
+          "amount": 1
+        },
+        {
+          "itemId": 4252,
+          "amount": 1
+        },
+        {
+          "itemId": 4157,
+          "amount": 1
+        },
+        {
+          "itemId": 4153,
+          "amount": 1
+        },
+        {
+          "itemId": 4004,
+          "amount": 1
+        },
+        {
+          "itemId": 603,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "refill",
+      "ts": 1785429719624
+    },
+    {
+      "playerName": "10sion",
+      "ip": "171.97.179.215",
+      "items": [
+        {
+          "itemId": 4035,
+          "amount": 1
+        },
+        {
+          "itemId": 4117,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "traded",
+      "ts": 1785431084747
+    },
+    {
+      "playerName": "NarutoZa007",
+      "ip": "124.121.183.37",
+      "items": [
+        {
+          "itemId": 4115,
+          "amount": 1
+        },
+        {
+          "itemId": 4117,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "traded",
+      "ts": 1785431905321
+    },
+    {
+      "playerName": "Weirdo",
+      "ip": "2001:fb1:bb:784c:a10d:294e:9e7a:98df",
+      "items": [
+        {
+          "itemId": 985,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "traded",
+      "ts": 1785431929672
+    },
+    {
+      "playerName": "zKinGz",
+      "ip": "2001:fb1:18b:4023:27a0:4199:ffa4:cc6f",
+      "items": [
+        {
+          "itemId": 984,
+          "amount": 1
+        },
+        {
+          "itemId": 985,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "traded",
+      "ts": 1785432096401
+    },
+    {
+      "playerName": "เจ๊าะ",
+      "ip": "110.169.129.27",
+      "items": [
+        {
+          "itemId": 984,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "timeout",
+      "ts": 1785437501585
+    },
+    {
+      "playerName": "KPz",
+      "ip": "27.130.60.80",
+      "items": [
+        {
+          "itemId": 4004,
+          "amount": 1
+        },
+        {
+          "itemId": 4035,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "timeout",
+      "ts": 1785454512875
+    },
+    {
+      "playerName": "คุณพุงพุง",
+      "ip": "2001:fb1:be:6199:9eb3:1bf1:23ee:980c",
+      "items": [
+        {
+          "itemId": 4077,
+          "amount": 1
+        },
+        {
+          "itemId": 985,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "traded",
+      "ts": 1785468703794
+    },
+    {
+      "playerName": "อาแฮะ อาแฮะ",
+      "ip": "49.237.170.223",
+      "items": [
+        {
+          "itemId": 4077,
+          "amount": 1
+        },
+        {
+          "itemId": 4053,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "traded",
+      "ts": 1785469343114
+    },
+    {
+      "playerName": "Bot สำรวจราคา",
+      "ip": "1.2.215.86",
+      "items": [],
+      "zeny": 100000,
+      "status": "traded",
+      "ts": 1785472896215
+    },
+    {
+      "playerName": "A7",
+      "ip": "175.144.93.111",
+      "items": [
+        {
+          "itemId": 4117,
+          "amount": 1
+        },
+        {
+          "itemId": 4115,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "timeout",
+      "ts": 1785473084112
+    },
+    {
+      "playerName": "superogira0",
+      "ip": null,
+      "items": [
+        {
+          "itemId": 4111,
+          "amount": 1
+        }
+      ],
+      "zeny": 700000,
+      "status": "refill",
+      "ts": 1785479390562
+    },
+    {
+      "playerName": "superogira0",
+      "ip": null,
+      "items": [
+        {
+          "itemId": 4199,
+          "amount": 5
+        },
+        {
+          "itemId": 4035,
+          "amount": 3
+        }
+      ],
+      "zeny": 0,
+      "status": "refill",
+      "ts": 1785479437237
+    },
+    {
+      "playerName": "superogira0",
+      "ip": null,
+      "items": [
+        {
+          "itemId": 985,
+          "amount": 10
+        },
+        {
+          "itemId": 984,
+          "amount": 10
+        }
+      ],
+      "zeny": 0,
+      "status": "refill",
+      "ts": 1785479841439
+    },
+    {
+      "playerName": "superogira0",
+      "ip": null,
+      "items": [
+        {
+          "itemId": 4002,
+          "amount": 1
+        }
+      ],
+      "zeny": 1,
+      "status": "refill",
+      "ts": 1785479875247
+    },
+    {
+      "playerName": "A7",
+      "ip": "175.144.93.111",
+      "items": [],
+      "zeny": 100000,
+      "status": "timeout",
+      "ts": 1785487801739
+    },
+    {
+      "playerName": "A2",
+      "ip": "175.144.93.111",
+      "items": [
+        {
+          "itemId": 4077,
+          "amount": 1
+        },
+        {
+          "itemId": 4043,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "traded",
+      "ts": 1785488524074
+    },
+    {
+      "playerName": "A7",
+      "ip": "113.211.65.203",
+      "items": [
+        {
+          "itemId": 4043,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "traded",
+      "ts": 1785488748424
+    },
+    {
+      "playerName": "A7",
+      "ip": "113.211.65.203",
+      "items": [
+        {
+          "itemId": 4043,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "traded",
+      "ts": 1785488775563
+    },
+    {
+      "playerName": "คุณดุ๋ง",
+      "ip": "49.237.78.223",
+      "items": [
+        {
+          "itemId": 4077,
+          "amount": 1
+        },
+        {
+          "itemId": 4053,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "traded",
+      "ts": 1785514956394
+    },
+    {
+      "playerName": "BronzeStar",
+      "ip": "171.97.179.215",
+      "items": [
+        {
+          "itemId": 4035,
+          "amount": 1
+        },
+        {
+          "itemId": 4058,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "traded",
+      "ts": 1785523627192
+    },
+    {
+      "playerName": "4ssis7",
+      "ip": "171.97.240.78",
+      "items": [
+        {
+          "itemId": 985,
+          "amount": 1
+        },
+        {
+          "itemId": 984,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "timeout",
+      "ts": 1785596657274
+    },
+    {
+      "playerName": "superogira0",
+      "ip": null,
+      "items": [],
+      "zeny": 1500000,
+      "status": "refill",
+      "ts": 1785602904888
+    },
+    {
+      "playerName": "ค้าขายหน่ะ",
+      "ip": "2001:fb1:be:6ce4:3038:e74c:fa9:ff56",
+      "items": [
+        {
+          "itemId": 4058,
+          "amount": 1
+        },
+        {
+          "itemId": 4035,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "traded",
+      "ts": 1785607174664
+    },
+    {
+      "playerName": "UnexpectedBusiness",
+      "ip": "171.97.179.215",
+      "items": [
+        {
+          "itemId": 4111,
+          "amount": 1
+        },
+        {
+          "itemId": 4035,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "traded",
+      "ts": 1785607461104
+    },
+    {
+      "playerName": "Bot สำรวจราคา",
+      "ip": "2a06:98c0:3600::103",
+      "items": [],
+      "zeny": 100000,
+      "status": "traded",
+      "ts": 1785814584023
+    },
+    {
+      "playerName": "superogira0",
+      "ip": null,
+      "items": [],
+      "zeny": 1000000,
+      "status": "refill",
+      "ts": 1785817157544
+    },
+    {
+      "playerName": "superogira0",
+      "ip": null,
+      "items": [
+        {
+          "itemId": 4002,
+          "amount": 2
+        },
+        {
+          "itemId": 4004,
+          "amount": 2
+        }
+      ],
+      "zeny": 0,
+      "status": "refill",
+      "ts": 1785817189107
+    },
+    {
+      "playerName": "superogira0",
+      "ip": null,
+      "items": [
+        {
+          "itemId": 4030,
+          "amount": 6
+        },
+        {
+          "itemId": 4033,
+          "amount": 2
+        },
+        {
+          "itemId": 4037,
+          "amount": 3
+        },
+        {
+          "itemId": 4042,
+          "amount": 2
+        },
+        {
+          "itemId": 4048,
+          "amount": 2
+        },
+        {
+          "itemId": 4050,
+          "amount": 2
+        },
+        {
+          "itemId": 4056,
+          "amount": 2
+        },
+        {
+          "itemId": 4062,
+          "amount": 2
+        },
+        {
+          "itemId": 4072,
+          "amount": 5
+        },
+        {
+          "itemId": 4080,
+          "amount": 2
+        }
+      ],
+      "zeny": 0,
+      "status": "refill",
+      "ts": 1785817726517
+    },
+    {
+      "playerName": "superogira0",
+      "ip": null,
+      "items": [
+        {
+          "itemId": 4082,
+          "amount": 5
+        },
+        {
+          "itemId": 4091,
+          "amount": 9
+        },
+        {
+          "itemId": 4161,
+          "amount": 5
+        },
+        {
+          "itemId": 4173,
+          "amount": 3
+        },
+        {
+          "itemId": 4180,
+          "amount": 5
+        },
+        {
+          "itemId": 4228,
+          "amount": 2
+        },
+        {
+          "itemId": 4280,
+          "amount": 2
+        }
+      ],
+      "zeny": 0,
+      "status": "refill",
+      "ts": 1785817750799
+    },
+    {
+      "playerName": "UnexpectedBusiness",
+      "ip": "2a06:98c0:3600::103",
+      "items": [
+        {
+          "itemId": 4035,
+          "amount": 1
+        },
+        {
+          "itemId": 4111,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "timeout",
+      "ts": 1785894767149
+    },
+    {
+      "playerName": "Bot สำรวจราคา",
+      "ip": "2a06:98c0:3600::103",
+      "items": [],
+      "zeny": 50000,
+      "status": "traded",
+      "ts": 1785916092624
+    },
+    {
+      "playerName": "Bot สำรวจราคา",
+      "ip": "2a06:98c0:3600::103",
+      "items": [
+        {
+          "itemId": 603,
+          "amount": 1
+        }
+      ],
+      "zeny": 0,
+      "status": "traded",
+      "ts": 1785916118004
+    }
+  ],
+  "dailyCount": {
+    "xNogginx": {
+      "date": "2026-07-30",
+      "count": 2
+    },
+    "NogginTimu": {
+      "date": "2026-07-30",
+      "count": 2
+    },
+    "Noggin": {
+      "date": "2026-07-30",
+      "count": 1
+    },
+    "BronzeStar": {
+      "date": "2026-08-01",
+      "count": 2
+    },
+    "NogginTime": {
+      "date": "2026-07-30",
+      "count": 1
+    },
+    "SilverStar": {
+      "date": "2026-07-30",
+      "count": 2
+    },
+    "UnexpectedBusiness": {
+      "date": "2026-08-02",
+      "count": 2
+    },
+    "superogira0": {
+      "date": "2026-07-30",
+      "count": 2
+    },
+    "Testระบบ01": {
+      "date": "2026-07-30",
+      "count": 2
+    },
+    "testtrade1": {
+      "date": "2026-07-30",
+      "count": 2
+    },
+    "testtrade": {
+      "date": "2026-07-30",
+      "count": 2
+    },
+    "sssddd": {
+      "date": "2026-07-30",
+      "count": 2
+    },
+    "JKJoKeR": {
+      "date": "2026-07-30",
+      "count": 2
+    },
+    "10sion": {
+      "date": "2026-07-31",
+      "count": 2
+    },
+    "NarutoZa007": {
+      "date": "2026-07-31",
+      "count": 2
+    },
+    "Weirdo": {
+      "date": "2026-07-31",
+      "count": 1
+    },
+    "zKinGz": {
+      "date": "2026-07-31",
+      "count": 2
+    },
+    "คุณพุงพุง": {
+      "date": "2026-07-31",
+      "count": 2
+    },
+    "อาแฮะ อาแฮะ": {
+      "date": "2026-07-31",
+      "count": 2
+    },
+    "Bot สำรวจราคา": {
+      "date": "2026-08-05",
+      "count": 2
+    },
+    "A2": {
+      "date": "2026-07-31",
+      "count": 2
+    },
+    "A7": {
+      "date": "2026-07-31",
+      "count": 2
+    },
+    "คุณดุ๋ง": {
+      "date": "2026-07-31",
+      "count": 2
+    },
+    "ค้าขายหน่ะ": {
+      "date": "2026-08-02",
+      "count": 2
+    }
+  },
+  "ipDailyCount": {
+    "2405:9800:b640:396c:2b8b:70e9:253a:3583": {
+      "date": "2026-07-30",
+      "count": 2,
+      "names": []
+    },
+    "2403:6200:8878:13a4:77e1:6c7:b08a:a305": {
+      "date": "2026-07-30",
+      "count": 2,
+      "names": []
+    },
+    "171.97.179.215": {
+      "date": "2026-08-02",
+      "count": 2,
+      "names": []
+    },
+    "124.121.183.37": {
+      "date": "2026-07-31",
+      "count": 2,
+      "names": []
+    },
+    "2001:fb1:bb:784c:a10d:294e:9e7a:98df": {
+      "date": "2026-07-31",
+      "count": 1,
+      "names": []
+    },
+    "2001:fb1:18b:4023:27a0:4199:ffa4:cc6f": {
+      "date": "2026-07-31",
+      "count": 2,
+      "names": []
+    },
+    "2001:fb1:be:6199:9eb3:1bf1:23ee:980c": {
+      "date": "2026-07-31",
+      "count": 2,
+      "names": []
+    },
+    "49.237.170.223": {
+      "date": "2026-07-31",
+      "count": 2,
+      "names": []
+    },
+    "1.2.215.86": {
+      "date": "2026-07-31",
+      "count": 2,
+      "names": []
+    },
+    "175.144.93.111": {
+      "date": "2026-07-31",
+      "count": 2,
+      "names": []
+    },
+    "113.211.65.203": {
+      "date": "2026-07-31",
+      "count": 2,
+      "names": []
+    },
+    "49.237.78.223": {
+      "date": "2026-07-31",
+      "count": 2,
+      "names": []
+    },
+    "2001:fb1:be:6ce4:3038:e74c:fa9:ff56": {
+      "date": "2026-08-02",
+      "count": 2,
+      "names": []
+    },
+    "2a06:98c0:3600::103": {
+      "date": "2026-08-05",
+      "count": 2,
+      "names": []
+    }
+  },
+  "tradeTimeoutCount": {}
+}

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.87.0
+// @version      4.88.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,7 +116,25 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.87.0';
+  const VERSION = '4.88.0';
+  // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
+  const CHANGELOG = [
+    { v: '4.88.0', d: '2026-08-15', items: [
+      '📜 ปุ่ม Update Log ใน mini-bar — ดู changelog ทุกเวอร์ชั่น',
+    ]},
+    { v: '4.87.0', d: '2026-08-14', items: [
+      '🚶 Toggle เดินหลีกหลัง abandon — เปิด/ปิดได้จาก sub-tab Combat',
+      '🗨️ Chat modal ชิดขวาแทนกลางจอ — ไม่บังจอเกม',
+    ]},
+    { v: '4.86.0', d: '2026-08-14', items: [
+      '🔴 แก้ critical: duplicate 0x0b handler บล็อก handler หลัก — มอนตีเราไม่ตอบโต้!',
+      '🛡️ defensive retarget รวม monsterAggro (มอนเล็งเราด้วยสกิล)',
+      '🛡️ defensive retarget ข้าม isTargetable — ตอบโต้เสมอไม่สน cooldown/ระยะ',
+      '🔄 AUTO-DETECT playerId จาก 0x0b ซ้ำ ≥3 ครั้ง',
+      '❌ 0x26 = HP REGEN ไม่ใช่ attack — ลบออกจาก handler',
+      '🔍 ASSIST.debug() — ดูสถานะ combat ครบทุกอย่าง',
+    ]},
+  ];
   const GITHUB_RAW = 'https://raw.githubusercontent.com/superogira/ro-rebuild-web-assist/main/ro-rebuild-web-assist.user.js';
   // ★ Feedback — ส่งปัญหา/ข้อเสนอแนะถึงผู้พัฒนาผ่าน Telegram
   const FEEDBACK_BOT_TOKEN = '7932077955:AAEc2u3FaKLY-6iY6VjseK5_GPJXgYK3ORA';
@@ -4290,8 +4308,8 @@
     { name: 'Charge Arrow', skillId: 25, level: 1, targeted: true, maxUsesPerTarget: 1, maxDistance: 10, spMin: 20, cooldownMs: 60000, job: 'Archer/Hunter', desc: 'ดันมอนออกไกล' },
     { name: 'Arrow Shower', skillId: 26, level: 5, ground: true, maxUsesPerTarget: 1, maxDistance: 10, mobCountMin: 2, spMin: 20, cooldownMs: 60000, job: 'Hunter', desc: 'AoE ธนู (เลือกพื้นที่)' },
     // ---- Thief/Assassin/Rogue (จาก packet capture) ----
-    { name: 'Steal', skillId: 61, level: 10, targeted: true, maxUsesPerTarget: 1, maxDistance: 2, spMin: 10, cooldownMs: 30000, job: 'Thief/Assassin/Rogue', desc: 'ขโมยของจากมอน (ใช้ที่เลเวลสูงสุด)' },
-    { name: 'Sonic Blow', skillId: 126, level: 10, targeted: true, maxUsesPerTarget: 1, maxDistance: 2, spMin: 34, cooldownMs: 120000, job: 'Assassin/SinX', desc: 'ฟัน 8 ครั้งรวด (ดาเมจหนัก)' },
+    { name: 'Steal', skillId: 61, level: 10, targeted: true, maxUsesPerTarget: 1, maxDistance: 2, spMin: 15, cooldownMs: 30000, job: 'Thief/Assassin/Rogue', desc: 'ขโมยของจากมอน (ใช้ที่เลเวลสูงสุด)' },
+    { name: 'Sonic Blow', skillId: 126, level: 10, targeted: true, maxUsesPerTarget: 1, maxDistance: 2, spMin: 40, cooldownMs: 120000, job: 'Assassin/SinX', desc: 'ฟัน 8 ครั้งรวด (ดาเมจหนัก)' },
   ];
   function skillPresetGroups() {
     const groups = {};
@@ -4805,6 +4823,7 @@
         <span class="pill" data-remote style="background:#1a3a1a;color:#81c784;display:none">🌐</span>
         <span class="pill" data-feedback style="background:#4a3a1a;color:#ffd54f" title="แจ้งปัญหา/ข้อเสนอแนะ">💬</span>
         <span class="pill" data-chatroom style="background:#1a3a4a;color:#4fc3f7;position:relative" title="ห้องแชท">🗨️<span id="__assist_chatbadge" style="position:absolute;top:-4px;right:-4px;background:#e74c3c;color:#fff;font-size:8px;border-radius:50%;width:14px;height:14px;display:none;align-items:center;justify-content:center;font-weight:bold"></span></span>
+        <span class="pill" data-changelog style="background:#3a2a1a;color:#ffd54f" title="Update Log">📜</span>
         <span class="expand">⚙</span>
       </div>
       <div id="__assist_popup">
@@ -5262,6 +5281,7 @@
         if (pill.hasAttribute('data-remote')) { openRemoteMonitor(); }
         if (pill.hasAttribute('data-feedback')) { openFeedbackModal(); }
         if (pill.hasAttribute('data-chatroom')) { openChatRoomModal(); }
+        if (pill.hasAttribute('data-changelog')) { openChangelogModal(); }
         return;
       }
       popup.classList.toggle('open');
@@ -5881,6 +5901,43 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
         modal.querySelector('#__assist_chatroom_msg').focus();
       };
     });
+  }
+  // ★★ Changelog modal — แสดง Update Log ล่าสุดขึ้นก่อน
+  function openChangelogModal() {
+    const old = document.getElementById('__assist_changelog_modal');
+    if (old) old.remove();
+    const overlay = document.createElement('div');
+    overlay.id = '__assist_changelog_modal';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);z-index:999999;display:flex;align-items:center;justify-content:flex-end;padding-right:10px';
+    const versionsHtml = CHANGELOG.map(entry => `
+      <div style="margin-bottom:16px">
+        <div style="font-size:14px;font-weight:700;color:#ffd54f;border-bottom:1px solid #3a3f4b;padding-bottom:4px;margin-bottom:6px">
+          v${entry.v} <span style="font-size:10px;color:#888;font-weight:normal">${entry.d}</span>
+          ${entry.v === VERSION ? '<span style="font-size:9px;background:#27ae60;color:#fff;padding:1px 6px;border-radius:8px;margin-left:6px">ปัจจุบัน</span>' : ''}
+        </div>
+        <ul style="list-style:none;padding:0;margin:0;font-size:11px;line-height:1.8;color:#ccc">
+          ${entry.items.map(item => `<li style="padding:1px 0">${item}</li>`).join('')}
+        </ul>
+      </div>
+    `).join('');
+    overlay.innerHTML = `
+      <div style="background:#1a1a2e;color:#e8e8e8;border-radius:12px;padding:20px;width:480px;max-width:90vw;height:75vh;display:flex;flex-direction:column;font-family:sans-serif;box-shadow:0 8px 32px rgba(0,0,0,.5)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <span style="font-size:16px;font-weight:700;color:#ffd54f">📜 Update Log</span>
+          <button id="__assist_changelog_close" style="background:none;border:none;color:#888;font-size:18px;cursor:pointer">✕</button>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding-right:6px">${versionsHtml}</div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#__assist_changelog_close').onclick = () => overlay.remove();
+    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+    // ★ กัน Unity ขโมย focus
+    overlay.addEventListener('mousedown', (e) => {
+      if (e.target.matches && e.target.matches('button')) {
+        e.stopPropagation();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+      }
+    }, true);
   }
   function openChatRoomModal() {
     const old = document.getElementById('__assist_chatroom_modal');
