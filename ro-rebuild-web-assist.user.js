@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.93.0
+// @version      4.94.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,13 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.93.0';
+  const VERSION = '4.94.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.94.0', d: '2026-08-15', items: [
+      '🔴 SELF-DETECT เพิ่มใน sub=1 (ก่อนหน้ามีแค่ sub=7/13)',
+      '🔴 SELF-DETECT ลบ entity เก่า (entities.delete) — กันค้างเป็น player',
+    ]},
     { v: '4.93.0', d: '2026-08-15', items: [
       '🔴 Death loop guard — max respawn 5 ครั้ง แล้วหยุด 60s',
       '🔴 AUTO-DETECT ลบ entity เก่า (กันค้างเป็น player → หนีตัวเอง)',
@@ -1306,6 +1310,7 @@
               const oldId = playerId;
               playerId = eid;
               stalePlayerIds.set(oldId, now + 300000);
+              entities.delete(oldId);   // ★★ ลบ entity เก่า (กันค้างเป็น player → หนีตัวเอง!)
               entities.set(eid, { id: eid, kind: 0, x: ex, y: ey, alive: true, _lastSeenAt: now, name: playerName || '' });
               player.x = ex; player.y = ey;
               log('🔄 SELF-DETECT (post-warp 0x3c): playerId', oldId.toString(16), '→', playerId.toString(16));
@@ -1325,6 +1330,18 @@
         if (id && x >= -500 && x <= 1000 && y >= -500 && y <= 1000 && (flag === 1 || flag === 3 || flag === 4)) {
           if (flag === 1) {
             // ★ flag=1 = ผู้เล่นอื่นบนแมป (minimap marker) → track เป็น kind=0
+            //   ★★ SELF-DETECT: เพิ่งวาร์ป + ไม่มี entity ของ playerId → entity นี้คือตัวเรา!
+            if (now < warpGuardUntil && playerId != null && !entities.has(playerId)) {
+              const oldId = playerId;
+              playerId = id;
+              stalePlayerIds.set(oldId, now + 300000);
+              entities.delete(oldId);
+              entities.set(id, { id, kind: 0, x, y, alive: true, _lastSeenAt: now, name: playerName || '' });
+              player.x = x; player.y = y;
+              log('🔄 SELF-DETECT (sub=1 post-warp): playerId', oldId.toString(16), '→', playerId.toString(16));
+              relayRegisterPlayer();
+              return;
+            }
             let m = entities.get(id);
             if (m) { m.x = x; m.y = y; m._lastSeenAt = now; }
             else { entities.set(id, { id, kind: 0, x, y, alive: true, _lastSeenAt: now, name: '' }); }
