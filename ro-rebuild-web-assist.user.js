@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.96.1
+// @version      4.97.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,12 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.96.1';
+  const VERSION = '4.97.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.97.0', d: '2026-08-15', items: [
+      '🔴 countNearbyPlayers นับเฉพาะ SPAWN entities (มีชื่อจริง) — แก้หนีตัวเองถาวร',
+    ]},
     { v: '4.96.0', d: '2026-08-15', items: [
       '🏃 Toggle โหมดหนีผู้เล่น: 🗺️ เปลี่ยนแมป / 📍 แมปเดิม (วาร์ปสุ่ม)',
     ]},
@@ -2367,9 +2370,12 @@
     for (const e of entities.values()) {
       if (e.kind !== 0 || !e.alive || e.x == null) continue;
       if (e.id === playerId) continue;       // ยกเว้นตัวเอง
-      // ★★ ข้าม entity ที่อยู่ใกล้เกินไป (≤8 ช่อง) = น่าจะตัวเองจาก 0x3c/minimap
-      //   สาเหตุ: หลังวาร์ป 0x3c sub=13 ส่งตัวเรามาด้วย + playerId อาจยังไม่อัปเดต
-      if (Math.hypot(e.x - player.x, e.y - player.y) <= 8) continue;
+      // ★★ นับเฉพาะผู้เล่นที่มาจาก SPAWN (มีชื่อจริง ไม่ใช่ empty string)
+      //   entity จาก 0x3c minimap มี name='' → น่าจะตัวเราเอง → ข้าม!
+      //   (แก้ปัญหาหนีตัวเองวนลูป — entity ID เปลี่ยนตลอด SELF-DETECT ไม่ทัน)
+      if (!e.name || !e.name.trim()) continue;
+      // ★★ ข้ามชื่อขยะ (ไม่มีตัวอักษร/ตัวเลขที่อ่านได้) — spawn parse ผิด
+      if (!/[a-zA-Z0-9\u0E00-\u0E7F]/.test(e.name)) continue;
       if (isStaleId(e.id, now)) continue;
       if (radius > 0 && Math.hypot(e.x - player.x, e.y - player.y) > radius) continue;  // radius=0 = นับทุกคนในแมป
       n++;
