@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.91.0
+// @version      4.92.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,12 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.91.0';
+  const VERSION = '4.92.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.92.0', d: '2026-08-15', items: [
+      '🔴 SELF-DETECT หลังวาร์ป — 0x3c flag=1 ตัวแรกตอน warpGuard = ตัวเรา (แก้วนลูปวาร์ปรัว)',
+    ]},
     { v: '4.91.0', d: '2026-08-15', items: [
       '🏃 เพิ่ม toggle flee ใน mini-bar',
       '🎨 mini-bar pills — แสดงแค่ icon (เขียว=ON, แดง=OFF) ไม่มีข้อความ',
@@ -1293,6 +1296,18 @@
             else { entities.set(eid, { id: eid, kind: 1, x: ex, y: ey, alive: true, _lastSeenAt: now, _isMiniBoss: true, name: 'Mini Boss' }); }
           } else if (eflag === 1) {
             // ★ flag=1 = ผู้เล่นอื่นบนแมป (minimap marker) → track เป็น kind=0
+            //   ★★ SELF-DETECT: เพิ่งวาร์ป + ไม่มี entity ของ playerId → entity นี้คือตัวเรา!
+            //   (หลังวาร์ป entityId เปลี่ยน → playerId เก่าไม่ match → หนีตัวเองวนลูป)
+            if (now < warpGuardUntil && playerId != null && !entities.has(playerId)) {
+              const oldId = playerId;
+              playerId = eid;
+              stalePlayerIds.set(oldId, now + 300000);
+              entities.set(eid, { id: eid, kind: 0, x: ex, y: ey, alive: true, _lastSeenAt: now, name: playerName || '' });
+              player.x = ex; player.y = ey;
+              log('🔄 SELF-DETECT (post-warp 0x3c): playerId', oldId.toString(16), '→', playerId.toString(16));
+              relayRegisterPlayer();
+              continue;
+            }
             let m = entities.get(eid);
             if (m) { m.x = ex; m.y = ey; m._lastSeenAt = now; }
             else { entities.set(eid, { id: eid, kind: 0, x: ex, y: ey, alive: true, _lastSeenAt: now, name: '' }); }
