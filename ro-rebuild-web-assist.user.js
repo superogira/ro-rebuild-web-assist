@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.90.0
+// @version      4.91.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,13 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.90.0';
+  const VERSION = '4.91.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.91.0', d: '2026-08-15', items: [
+      '🏃 เพิ่ม toggle flee ใน mini-bar',
+      '🎨 mini-bar pills — แสดงแค่ icon (เขียว=ON, แดง=OFF) ไม่มีข้อความ',
+    ]},
     { v: '4.90.0', d: '2026-08-15', items: [
       '🔴 วาร์ปสุ่ม → null ตำแหน่งทันที — กันวนลูป "ไม่เจอมอน 3s → วาร์ปสุ่ม" ไม่จบ',
     ]},
@@ -4819,14 +4823,15 @@
       <div id="__assist_bar">
         <span class="hptext">HP ?</span>
         <div class="hpbar"><div class="hpfill" style="width:0%"></div></div>
-        <span class="pill off" data-loot>📦 Loot</span>
-        <span class="pill off" data-heal>💉 Heal</span>
-        <span class="pill off" data-rest>🪑 Rest</span>
-        <span class="pill off" data-combat>⚔️ Combat</span>
-        <span class="pill off" data-skill>🔮 Skill</span>
-        <span class="pill off" data-buff>✨ Buff</span>
-        <span class="pill off" data-sell>💰 Sell</span>
-        <span class="pill off" data-storage>🏦 Kafra</span>
+        <span class="pill off" data-loot>📦</span>
+        <span class="pill off" data-heal>💉</span>
+        <span class="pill off" data-rest>🪑</span>
+        <span class="pill off" data-combat>⚔️</span>
+        <span class="pill off" data-skill>🔮</span>
+        <span class="pill off" data-buff>✨</span>
+        <span class="pill off" data-sell>💰</span>
+        <span class="pill off" data-storage>🏦</span>
+        <span class="pill off" data-flee>🏃</span>
         <span class="pill" data-teleport style="background:#4a2c6a;color:#d1b3ff">🌀</span>
         <span class="pill" data-monitor style="background:#1a237e;color:#90caf9">🖥️</span>
         <span class="pill" data-remote style="background:#1a3a1a;color:#81c784;display:none">🌐</span>
@@ -5283,6 +5288,7 @@
         if (pill.hasAttribute('data-buff')) CFG.buffEnabled ? ASSIST.buffOff() : ASSIST.buffOn();
         if (pill.hasAttribute('data-sell')) CFG.sellEnabled ? ASSIST.sellOff() : ASSIST.sellOn();
         if (pill.hasAttribute('data-storage')) CFG.storageEnabled ? ASSIST.storageOff() : ASSIST.storageOn();
+        if (pill.hasAttribute('data-flee')) { CFG.fleeFromPlayers = !CFG.fleeFromPlayers; saveConfigDebounced(); log('🏃 หนีผู้เล่น:', CFG.fleeFromPlayers ? 'เปิด' : 'ปิด'); }
         if (pill.hasAttribute('data-teleport')) {
           if (sendRandomWarp()) log('🌀 วาร์ปสุ่ม (กดจาก mini-bar)');
         }
@@ -6437,18 +6443,20 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
       fill.className = 'hpfill' + (w < 25 ? '' : w < 50 ? ' warn' : ' good');
     }
     root.querySelectorAll('.pill').forEach(p => {
-      let on, label;
-      if (p.hasAttribute('data-loot')) { on = CFG.lootEnabled; label = '📦 Loot'; }
-      else if (p.hasAttribute('data-heal')) { on = CFG.healEnabled; label = '💉 Heal'; }
-      else if (p.hasAttribute('data-rest')) { on = CFG.restEnabled; label = '🪑 Rest'; }
-      else if (p.hasAttribute('data-combat')) { on = CFG.combatEnabled; label = '⚔️ Combat'; }
-      else if (p.hasAttribute('data-skill')) { on = CFG.skillEnabled; label = '🔮 Skill'; }
-      else if (p.hasAttribute('data-buff')) { on = CFG.buffEnabled; label = '✨ Buff'; }
-      else if (p.hasAttribute('data-sell')) { on = CFG.sellEnabled; label = '💰 Sell'; }
-      else if (p.hasAttribute('data-storage')) { on = CFG.storageEnabled; label = '🏦 Kafra'; }
+      let on, label, title;
+      if (p.hasAttribute('data-loot')) { on = CFG.lootEnabled; label = '📦'; title = 'Loot'; }
+      else if (p.hasAttribute('data-heal')) { on = CFG.healEnabled; label = '💉'; title = 'Heal'; }
+      else if (p.hasAttribute('data-rest')) { on = CFG.restEnabled; label = '🪑'; title = 'Rest'; }
+      else if (p.hasAttribute('data-combat')) { on = CFG.combatEnabled; label = '⚔️'; title = 'Combat'; }
+      else if (p.hasAttribute('data-skill')) { on = CFG.skillEnabled; label = '🔮'; title = 'Skill'; }
+      else if (p.hasAttribute('data-buff')) { on = CFG.buffEnabled; label = '✨'; title = 'Buff'; }
+      else if (p.hasAttribute('data-sell')) { on = CFG.sellEnabled; label = '💰'; title = 'Sell'; }
+      else if (p.hasAttribute('data-storage')) { on = CFG.storageEnabled; label = '🏦'; title = 'Kafra'; }
+      else if (p.hasAttribute('data-flee')) { on = CFG.fleeFromPlayers; label = '🏃'; title = 'Flee'; }
       else return;
       p.className = 'pill ' + (on ? 'on' : 'off');
-      p.textContent = label + ': ' + (on ? 'ON' : 'OFF');
+      p.textContent = label;
+      p.title = title + ' — ' + (on ? 'ON (เขียว)' : 'OFF (แดง)');
     });
     if (isDead) root.querySelector('#__assist_bar').classList.add('__assist_dead');
     else root.querySelector('#__assist_bar').classList.remove('__assist_dead');
