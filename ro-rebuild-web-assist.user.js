@@ -6443,20 +6443,19 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
       fill.className = 'hpfill' + (w < 25 ? '' : w < 50 ? ' warn' : ' good');
     }
     root.querySelectorAll('.pill').forEach(p => {
-      let on, label, title;
-      if (p.hasAttribute('data-loot')) { on = CFG.lootEnabled; label = '📦'; title = 'Loot'; }
-      else if (p.hasAttribute('data-heal')) { on = CFG.healEnabled; label = '💉'; title = 'Heal'; }
-      else if (p.hasAttribute('data-rest')) { on = CFG.restEnabled; label = '🪑'; title = 'Rest'; }
-      else if (p.hasAttribute('data-combat')) { on = CFG.combatEnabled; label = '⚔️'; title = 'Combat'; }
-      else if (p.hasAttribute('data-skill')) { on = CFG.skillEnabled; label = '🔮'; title = 'Skill'; }
-      else if (p.hasAttribute('data-buff')) { on = CFG.buffEnabled; label = '✨'; title = 'Buff'; }
-      else if (p.hasAttribute('data-sell')) { on = CFG.sellEnabled; label = '💰'; title = 'Sell'; }
-      else if (p.hasAttribute('data-storage')) { on = CFG.storageEnabled; label = '🏦'; title = 'Kafra'; }
-      else if (p.hasAttribute('data-flee')) { on = CFG.fleeFromPlayers; label = '🏃'; title = 'Flee'; }
+      let on, label;
+      if (p.hasAttribute('data-loot')) { on = CFG.lootEnabled; label = '📦 Loot'; }
+      else if (p.hasAttribute('data-heal')) { on = CFG.healEnabled; label = '💉 Heal'; }
+      else if (p.hasAttribute('data-rest')) { on = CFG.restEnabled; label = '🪑 Rest'; }
+      else if (p.hasAttribute('data-combat')) { on = CFG.combatEnabled; label = '⚔️ Combat'; }
+      else if (p.hasAttribute('data-skill')) { on = CFG.skillEnabled; label = '🔮 Skill'; }
+      else if (p.hasAttribute('data-buff')) { on = CFG.buffEnabled; label = '✨ Buff'; }
+      else if (p.hasAttribute('data-sell')) { on = CFG.sellEnabled; label = '💰 Sell'; }
+      else if (p.hasAttribute('data-storage')) { on = CFG.storageEnabled; label = '🏦 Kafra'; }
+      else if (p.hasAttribute('data-flee')) { on = CFG.fleeFromPlayers; label = '🏃 Flee'; }
       else return;
       p.className = 'pill ' + (on ? 'on' : 'off');
       p.textContent = label;
-      p.title = title + ' — ' + (on ? 'ON (เขียว)' : 'OFF (แดง)');
     });
     if (isDead) root.querySelector('#__assist_bar').classList.add('__assist_dead');
     else root.querySelector('#__assist_bar').classList.remove('__assist_dead');
