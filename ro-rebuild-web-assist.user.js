@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.88.0
+// @version      4.89.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,12 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.88.0';
+  const VERSION = '4.89.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.89.0', d: '2026-08-15', items: [
+      '🔴 defensive retarget ห้ามตี player (kind=0) — เฉพาะ monster (kind=1)',
+    ]},
     { v: '4.88.0', d: '2026-08-15', items: [
       '📜 ปุ่ม Update Log ใน mini-bar — ดู changelog ทุกเวอร์ชั่น',
     ]},
@@ -2912,7 +2915,7 @@
         if (!am || !am.alive || am.x == null) continue;
         // ★★ ไม่เช็ค isTargetable สำหรับ threats — มอนที่ตีเราต้องตอบโต้เสมอ
         // (mirror บอทหลัก bot.js:600-607 — แค่ alive + kind ไม่สน cooldown/distance/avoidPlayers)
-        if (am.kind !== 1 && am.kind !== 0) continue;   // ต้องเป็น monster หรือ unknown (kind=0 จาก MOVE_UPDATE)
+        if (am.kind !== 1) continue;   // ★★ ต้องเป็น monster (kind=1) เท่านั้น — ห้ามตี player (kind=0)!
         const d = Math.hypot(am.x - player.x, am.y - player.y);
         if (d < attackerDist) { attackerDist = d; attacker = am; }
       }
