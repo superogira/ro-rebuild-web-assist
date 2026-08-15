@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.96.0
+// @version      4.96.1
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,7 +116,7 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.96.0';
+  const VERSION = '4.96.1';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
     { v: '4.96.0', d: '2026-08-15', items: [
@@ -2792,6 +2792,11 @@
               log('🏃 หนีผู้เล่น!', nearby, 'คน' + posInfo + botPos + ' → วาร์ปสุ่มในแมปเดิม');
               logImportant('flee', '🏃 หนีผู้เล่น ' + nearby + ' คน → วาร์ปสุ่มในแมปเดิม');
               if (sendRandomWarp()) {
+                // ★★ clear entities — เหมือนเปลี่ยนแมป!
+                //   ไม่ clear → entity เก่า (ID เก่า + ตำแหน่งเก่า) ค้าง → นับเป็น player → หนีตัวเอง!
+                //   ตำแหน่งใหม่หลังวาร์ป → ข้อมูลเก่าใช้ไม่ได้ → clear เป็นวิธีที่ถูกต้อง
+                entities.clear();
+                queue.clear(); recentDrops.clear();
                 fleeCooldownUntil = now + 5000;
                 target = null; monsterAggro.clear(); mobAttackers.clear();
               }
