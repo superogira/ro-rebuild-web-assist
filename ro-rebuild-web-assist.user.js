@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.92.0
+// @version      4.93.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,13 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.92.0';
+  const VERSION = '4.93.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.93.0', d: '2026-08-15', items: [
+      '🔴 Death loop guard — max respawn 5 ครั้ง แล้วหยุด 60s',
+      '🔴 AUTO-DETECT ลบ entity เก่า (กันค้างเป็น player → หนีตัวเอง)',
+    ]},
     { v: '4.92.0', d: '2026-08-15', items: [
       '🔴 SELF-DETECT หลังวาร์ป — 0x3c flag=1 ตัวแรกตอน warpGuard = ตัวเรา (แก้วนลูปวาร์ปรัว)',
     ]},
@@ -1682,6 +1686,7 @@
           const oldId = playerId;
           playerId = victimId;
           stalePlayerIds.set(oldId, now + 300000);
+          entities.delete(oldId);   // ★★ ลบ entity เก่า (กันค้างเป็น "player" → หนีตัวเอง)
           _victimIdCount.clear();
           log('🔄 AUTO-DETECT playerId:', oldId != null ? oldId.toString(16) : '?', '→', playerId.toString(16), '(โดนตีซ้ำ', cnt, 'ครั้ง)');
           relayRegisterPlayer();
@@ -2718,6 +2723,7 @@
   let lastFleeDebugAt = 0;
   let last3cDebugAt = 0;
   let lastDamageDebugAt = 0;
+  let respawnAttemptCount = 0;   // ★ กัน death loop — max 5 ครั้ง
   let _victimIdCount = null;   // ★ auto-detect playerId — นับ victim ID ที่โดนตีซ้ำ
   let _victimIdCountAt = 0;
   const combatLoop = setInterval(() => {
@@ -2777,14 +2783,23 @@
       if (me && me.x != null) { player.x = me.x; player.y = me.y; }
     }
     // ★★★ AUTO-RESPAWN — priority สูงสุด: ถ้าตาย → respawn กลับจุด save (mirror bot.js:1404-1406)
+    //   ★★ MAX 5 ครั้ง — กัน death loop (ส่ง respawn รัวๆ แต่ไม่ฟื้น)
     if (isDead) {
+      if (now - lastRespawnAt > 30000) respawnAttemptCount = 0;   // ผ่าน 30s ไม่ตาย → reset count
+      if (respawnAttemptCount >= 5) {
+        if (now - lastRespawnAt > 60000) {
+          respawnAttemptCount = 0;
+          log('⚠️ Death loop หยุด 60s — ลอง respawn ใหม่อีกครั้ง');
+        } else return;
+      }
       if (CFG.autoRespawnEnabled && activeWS && activeWS.readyState === 1) {
         if (now - lastRespawnAt >= CFG.autoRespawnDelayMs) {
           if (sendRespawn()) {
             lastRespawnAt = now;
+            respawnAttemptCount++;
             target = null; monsterAggro.clear(); mobAttackers.clear();
             postRespawnRest = true;   // ★ บังคับนั่งพักหลัง respawn
-            log('💀 ตาย! → respawn กลับจุด save');
+            log('💀 ตาย! → respawn (ครั้งที่ ' + respawnAttemptCount + '/5)');
             logImportant('flee', '💀 ตาย → respawn กลับจุด save');
           }
         }
