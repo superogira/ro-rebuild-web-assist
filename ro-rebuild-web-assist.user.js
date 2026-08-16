@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.101.1
+// @version      4.102.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,12 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.101.1';
+  const VERSION = '4.102.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.102.0', d: '2026-08-16', items: [
+      '📋 ปุ่มดู Log ใน mini-bar — modal ชิดขวา 500 บรรทัด + ปุ่มคัดลอกทั้งหมด',
+    ]},
     { v: '4.101.0', d: '2026-08-16', items: [
       '📋 Log buffer 200→500 บรรทัด',
       '💬 Feedback — checkbox แนบ log 500 บรรทัด + hint ให้อธิบายละเอียด',
@@ -4972,6 +4975,7 @@
         <span class="pill" data-chatroom style="background:#1a3a4a;color:#4fc3f7;position:relative" title="ห้องแชท">💬<span id="__assist_chatbadge" style="position:absolute;top:-4px;right:-4px;background:#e74c3c;color:#fff;font-size:8px;border-radius:50%;width:14px;height:14px;display:none;align-items:center;justify-content:center;font-weight:bold"></span></span>
         <span class="pill" data-feedback style="background:#4a2a2a;color:#ff8a80" title="แจ้งปัญหา/ข้อเสนอแนะ">🐞</span>
         <span class="pill" data-changelog style="background:#3a2a1a;color:#ffd54f" title="Update Log">📜</span>
+        <span class="pill" data-logview style="background:#1a2a3a;color:#82b1ff" title="ดู Log">📋</span>
         <span class="expand">⚙</span>
       </div>
       <div id="__assist_popup">
@@ -5435,6 +5439,7 @@
         if (pill.hasAttribute('data-feedback')) { openFeedbackModal(); }
         if (pill.hasAttribute('data-chatroom')) { openChatRoomModal(); }
         if (pill.hasAttribute('data-changelog')) { openChangelogModal(); }
+        if (pill.hasAttribute('data-logview')) { openLogViewModal(); }
         return;
       }
       popup.classList.toggle('open');
@@ -6078,6 +6083,63 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
     });
   }
   // ★★ Changelog modal — แสดง Update Log ล่าสุดขึ้นก่อน
+  // ★★ Log view modal — ดู log 500 บรรทัดล่าสุด (ชิดขวา + เลื่อนได้)
+  function openLogViewModal() {
+    const old = document.getElementById('__assist_logview_modal');
+    if (old) old.remove();
+    const overlay = document.createElement('div');
+    overlay.id = '__assist_logview_modal';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);z-index:999999;display:flex;align-items:center;justify-content:flex-end;padding-right:10px';
+    const logsHtml = logBuf.map(l => {
+      const d = new Date(l.t);
+      const ts = d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0')+':'+d.getSeconds().toString().padStart(2,'0');
+      return `<div style="padding:1px 0;border-bottom:1px solid #1a1a2a;word-break:break-word"><span style="color:#555;font-size:9px">[${ts}]</span> <span style="color:#bbb">${(l.msg || '').replace(/</g,'&lt;')}</span></div>`;
+    }).join('');
+    overlay.innerHTML = `
+      <div style="background:#1a1a2e;color:#e8e8e8;border-radius:12px;padding:16px;width:520px;max-width:90vw;height:80vh;display:flex;flex-direction:column;font-family:sans-serif;box-shadow:0 8px 32px rgba(0,0,0,.5)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <span style="font-size:15px;font-weight:700;color:#82b1ff">📋 Log (${logBuf.length})</span>
+          <span>
+            <button id="__assist_logview_copy" style="background:#333;color:#aaa;border:1px solid #555;border-radius:6px;padding:5px 12px;font-size:11px;cursor:pointer;margin-right:6px;font-family:inherit">📋 คัดลอกทั้งหมด</button>
+            <button id="__assist_logview_close" style="background:none;border:none;color:#888;font-size:18px;cursor:pointer">✕</button>
+          </span>
+        </div>
+        <div id="__assist_logview_content" style="flex:1;overflow-y:auto;font-size:10px;line-height:1.5;font-family:Consolas,monospace;padding-right:4px">${logsHtml}</div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const content = overlay.querySelector('#__assist_logview_content');
+    content.scrollTop = content.scrollHeight;   // เลื่อนไปล่างสุด (ข้อความใหม่สุด)
+    overlay.querySelector('#__assist_logview_close').onclick = () => overlay.remove();
+    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+    overlay.querySelector('#__assist_logview_copy').onclick = (e) => {
+      e.stopPropagation();
+      const text = logBuf.map(l => {
+        const d = new Date(l.t);
+        const ts = d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0')+':'+d.getSeconds().toString().padStart(2,'0');
+        return `[${ts}] ${l.msg || ''}`;
+      }).join('\n');
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;top:0;left:0;width:2em;height:2em;padding:0;border:none;outline:none;box-shadow:none;background:transparent;font-size:1px;opacity:0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      ta.setSelectionRange(0, text.length);
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (_) {}
+      document.body.removeChild(ta);
+      const btn = overlay.querySelector('#__assist_logview_copy');
+      if (ok) { btn.textContent = '✓ คัดลอกแล้ว'; setTimeout(() => btn.textContent = '📋 คัดลอกทั้งหมด', 1500); }
+      else btn.textContent = '❌ ไม่สำเร็จ';
+    };
+    // ★ กัน Unity ขโมย focus
+    overlay.addEventListener('mousedown', (e) => {
+      if (e.target.matches && e.target.matches('button')) {
+        e.stopPropagation();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+      }
+    }, true);
+  }
   function openChangelogModal() {
     const old = document.getElementById('__assist_changelog_modal');
     if (old) old.remove();
