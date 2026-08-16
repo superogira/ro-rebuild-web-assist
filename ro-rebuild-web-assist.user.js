@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.98.0
+// @version      4.99.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,14 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.98.0';
+  const VERSION = '4.99.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.99.0', d: '2026-08-16', items: [
+      '🔴 HP=0 แต่ไม่ตาย → reset เป็น null (รอ STAT) — กันนั่งพักวนลูป',
+      '🔴 นั่งแล้ว HP=0 → ลุกทันที (ไม่รอ timeout 40s)',
+      '🔴 pct=0 → ไม่เริ่มนั่งพัก',
+    ]},
     { v: '4.98.0', d: '2026-08-16', items: [
       '🔴 SPAWN SELF-DETECT — flag=2 + ชื่อตรง playerName → update playerId + position',
       '   แก้: หลังวาร์ปสุ่มในแมปเดิม ตำแหน่งค้าง → บอทตี entity เก่า → วนลูป',
@@ -1744,6 +1749,9 @@
         //   เดิม: รอ server ส่ง STAT (1-2 วิ) → HP ค้างที่ค่าเก่า → heal ช้า
         if (damage > 0 && hp.cur != null && hp.max > 0) {
           hp.cur = Math.max(0, hp.cur - damage);
+          // ★★ HP=0 แต่ไม่ตาย → tracking ผิด → reset เป็น null (รอ STAT แก้)
+          //   กันนั่งพักวนลูปเพราะ HP ค้างที่ 0%
+          if (hp.cur <= 0 && !isDead) { hp.cur = null; hp.max = null; }
         }
       }
       // ★★ DEBUG: log เมื่อ player โดนตี (ทุก 2s — กัน spam)
@@ -1771,6 +1779,7 @@
         // ★★ real-time HP tracking — ลด HP ทันทีจาก damage (แก้ heal ช้า!)
         if (damage > 0 && hp.cur != null && hp.max > 0) {
           hp.cur = Math.max(0, hp.cur - damage);
+          if (hp.cur <= 0 && !isDead) { hp.cur = null; hp.max = null; }   // tracking ผิด → reset
         }
         if (nowD - (lastDamageDebugAt || 0) > 2000) {
           lastDamageDebugAt = nowD;
@@ -2923,7 +2932,8 @@
 
     // === -1. AUTO-REST (priority สูงสุด — ก่อน flee) ===
     //   ถ้า HP ต่ำ + ไม่โดนรุม → นั่งพัก; ถ้ากำลังนั่งอยู่ → จัดการลุก/นั่งต่อ
-    if (CFG.restEnabled && pct != null && hp.cur != null) {
+    if (CFG.restEnabled && pct != null && hp.cur != null && pct > 0) {
+      // ★ pct=0 = tracking ผิด (ไม่ตายจริง) → ไม่นั่งพัก (รอ STAT แก้)
       if (!isResting && pct < CFG.restHpPercent && mobCount === 0) {
         // เริ่มนั่งพัก
         if (sendSit()) {
@@ -2934,8 +2944,14 @@
         return;
       }
       if (isResting) {
+        // ★★ นั่งแล้ว HP=0/null (tracking ผิด) → ลุกทันที (ไม่ต้องรอ timeout)
+        if (pct == null || pct <= 0) {
+          if (sendStand()) { log('⚠️ HP=0 ขณะนั่ง (tracking ผิด) → ลุกทันที'); }
+          isResting = false;
+          hp.cur = null; hp.max = null;   // reset รอ STAT
+        }
         // โดนรุมระหว่างนั่ง → ลุกทันทีเพื่อตีตอบ (ไม่ return — ให้ flee/defensive ทำงานต่อ)
-        if (mobCount > 0) {
+        else if (mobCount > 0) {
           if (sendStand()) { log('⚠️ โดนรุมระหว่างนั่ง → ลุกทันที'); }
           isResting = false;
         }
