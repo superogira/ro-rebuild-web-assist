@@ -392,25 +392,27 @@ wss.on('connection', (ws, req) => {
       ws.isAdmin = true;
       const list = [];
       for (const [pid, entry] of bots) {
-        if (entry.botWs && entry.botWs.readyState === 1) {
-          const d = entry.lastData || {};
-          // ★ hasTelegram: เช็คทั้ง lastData.player.name และ ws.playerName (fallback)
-          //   เหมือน setTelegram handler — กันกรณีชื่อใน payload ยังเป็น null หรือต่างจากตอน save
-          const tgName = cleanPlayerName(d.player?.name) || entry.botWs.playerName || null;
-          list.push({
-            playerId: pid,
-            name: d.player?.name || entry.botWs.playerName || '?',
-            map: d.map || '?',
-            version: d.version || '?',
-            elapsedMs: d.stats?.elapsedMs || 0,
-            baseExp: d.stats?.baseExpGained || 0,
-            zeny: d.zeny ?? null,
-            gameServer: d.gameServer || '',
-            hasTelegram: !!(tgName && telegramConfigs[tgName]),
-            viewers: entry.monitors ? entry.monitors.size : 0,
-          });
-        }
+        const isOnline = entry.botWs && entry.botWs.readyState === 1;
+        const d = entry.lastData || {};
+        // ★ hasTelegram: เช็คทั้ง lastData.player.name และ ws.playerName (fallback)
+        const tgName = cleanPlayerName(d.player?.name) || (entry.botWs ? entry.botWs.playerName : null) || null;
+        list.push({
+          playerId: pid,
+          online: !!isOnline,
+          lastSeen: d.t || 0,
+          name: d.player?.name || (entry.botWs ? entry.botWs.playerName : null) || '?',
+          map: d.map || '?',
+          version: d.version || '?',
+          elapsedMs: d.stats?.elapsedMs || 0,
+          baseExp: d.stats?.baseExpGained || 0,
+          zeny: d.zeny ?? null,
+          gameServer: d.gameServer || '',
+          hasTelegram: !!(tgName && telegramConfigs[tgName]),
+          viewers: entry.monitors ? entry.monitors.size : 0,
+        });
       }
+      // ★ เรียง: online ก่อน offline, offline เรียงตาม lastSeen ล่าสุดก่อน
+      list.sort((a, b) => (b.online - a.online) || (b.lastSeen - a.lastSeen));
       try { ws.send(JSON.stringify({ type: 'botList', bots: list })); } catch (_) {}
       return;
     }
@@ -593,21 +595,20 @@ const heartbeat = setInterval(() => {
   });
 }, 30000);
 
-// ★★ Bot entry cleanup — ลบ entries ที่ bot ตายแล้ว + ไม่มี monitor ดูอยู่ (ทุก 60s)
-//   กัน entries เก่าสะสม (bot disconnect แล้ว entry ยังค้าง → โผล่ใน list ของ admin)
+// ★★ Bot entry cleanup — ลบ entries เฉพาะที่ bot ตายนาน > 1 ชั่วโมง (ทุก 5 นาที)
+//   เก็บไว้ให้ admin กดดูย้อนหลังได้ แม้ไม่มี monitor ดูอยู่
 const botCleanup = setInterval(() => {
   let removed = 0;
   for (const [pid, entry] of bots) {
     const botDead = !entry.botWs || entry.botWs.readyState !== 1;
-    const noViewers = !entry.monitors || entry.monitors.size === 0;
-    const lastDataOld = !entry.lastData || (Date.now() - (entry.lastData.t || 0) > 120000);  // > 2 นาทีไม่มี data
-    if (botDead && noViewers && lastDataOld) {
+    const lastDataOld = !entry.lastData || (Date.now() - (entry.lastData.t || 0) > 3600000);  // > 1 ชั่วโมง
+    if (botDead && lastDataOld) {
       bots.delete(pid);
       removed++;
     }
   }
-  if (removed > 0) log(`🧹 Bot cleanup: removed ${removed} stale entries (total: ${bots.size})`);
-}, 60000);
+  if (removed > 0) log(`🧹 Bot cleanup: removed ${removed} entries offline > 1hr (total: ${bots.size})`);
+}, 300000);
 
 server.listen(PORT, () => {
   log(`✅ RO Monitor Relay running on port ${PORT}`);

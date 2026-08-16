@@ -435,9 +435,17 @@ function renderBotList(bots) {
     const tg = b.hasTelegram ? '<span style="color:#2ecc71">📨</span>' : '<span style="color:#555">📨</span>';
     const viewers = b.viewers > 0 ? `<span style="color:#3498db">👁 ${b.viewers}</span>` : '';
     const server = b.gameServer ? `<span style="color:#666;font-size:8px">${b.gameServer.replace(/^wss?:\/\//,'').split('/')[0]}</span>` : '';
-    return `<div class="bot-item" data-pid="${b.playerId}">
-      <span class="pid">${b.playerId}</span>
-      <span class="nm">${b.name || '?'} ${tg} ${viewers}</span>
+    // ★ online/offline indicator
+    const onlineDot = b.online === false
+      ? '<span style="color:#e74c3c" title="Offline">🔴</span>'
+      : '<span style="color:#2ecc71" title="Online">🟢</span>';
+    const lastSeen = b.online === false && b.lastSeen
+      ? `<span style="color:#666;font-size:8px">⏰ ${new Date(b.lastSeen).toLocaleTimeString()}</span>`
+      : '';
+    const offlineStyle = b.online === false ? ' style="opacity:.5"' : '';
+    return `<div class="bot-item" data-pid="${b.playerId}"${offlineStyle}>
+      <span class="pid">${onlineDot} ${b.playerId}</span>
+      <span class="nm">${b.name || '?'} ${tg} ${viewers} ${lastSeen}</span>
       <span class="mp">${b.map || '?'} ${server}</span>
       <span class="extra">${elapsed} ${baseExp} ${zeny} ${ver}</span>
     </div>`;
