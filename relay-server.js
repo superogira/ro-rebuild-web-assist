@@ -593,6 +593,22 @@ const heartbeat = setInterval(() => {
   });
 }, 30000);
 
+// ★★ Bot entry cleanup — ลบ entries ที่ bot ตายแล้ว + ไม่มี monitor ดูอยู่ (ทุก 60s)
+//   กัน entries เก่าสะสม (bot disconnect แล้ว entry ยังค้าง → โผล่ใน list ของ admin)
+const botCleanup = setInterval(() => {
+  let removed = 0;
+  for (const [pid, entry] of bots) {
+    const botDead = !entry.botWs || entry.botWs.readyState !== 1;
+    const noViewers = !entry.monitors || entry.monitors.size === 0;
+    const lastDataOld = !entry.lastData || (Date.now() - (entry.lastData.t || 0) > 120000);  // > 2 นาทีไม่มี data
+    if (botDead && noViewers && lastDataOld) {
+      bots.delete(pid);
+      removed++;
+    }
+  }
+  if (removed > 0) log(`🧹 Bot cleanup: removed ${removed} stale entries (total: ${bots.size})`);
+}, 60000);
+
 server.listen(PORT, () => {
   log(`✅ RO Monitor Relay running on port ${PORT}`);
   log(`   🌐 Monitor web:  http://localhost:${PORT}/`);
@@ -600,4 +616,4 @@ server.listen(PORT, () => {
   log(`   🖥️ Monitor WS:    ws://localhost:${PORT} (send {type:'subscribe', playerId:'...'})`);
 });
 
-process.on('SIGINT', () => { clearInterval(heartbeat); wss.close(); server.close(); process.exit(0); });
+process.on('SIGINT', () => { clearInterval(heartbeat); clearInterval(botCleanup); wss.close(); server.close(); process.exit(0); });
