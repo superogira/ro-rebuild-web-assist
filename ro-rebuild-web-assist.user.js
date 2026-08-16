@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.102.0
+// @version      4.103.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,7 +116,7 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.102.0';
+  const VERSION = '4.103.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
     { v: '4.102.0', d: '2026-08-16', items: [
@@ -2078,21 +2078,27 @@
 
     // === state machine ===
     if (sellState === 'WARP_TO_NPC') {
-      // รอ 3s หลังวาร์ป ให้ entities โหลด → หา NPC
-      if (now - sellStateAt > 3000) {
+      // ★★ รอ 5s หลังวาร์ป ให้ entities โหลด → หา NPC (NPC โหลดช้าได้ถึง 5s)
+      if (now - sellStateAt > 5000) {
         const npc = findSellNpc();
         if (npc) { sellNpcId = npc.id; setSellState('MOVE_TO_NPC'); log('💰 พบ', npc.name, '@(', npc.x, npc.y + ')'); }
-        else { setSellState('MOVE_TO_NPC'); log('⚠️ ไม่พบ NPC', CFG.sellNpcName, '→ ลองเดินหา'); }
+        else if (now - sellStateAt > 15000) { abortSell('ไม่พบ NPC ' + CFG.sellNpcName + ' (หลังรอ 15s)'); return; }
+        // else: ยังไม่เจอ → รอต่อ (entities ยังโหลดไม่ครบ)
       }
       return;
     }
     if (sellState === 'MOVE_TO_NPC') {
       const npc = sellNpcId ? entities.get(sellNpcId) : null;
       if (!npc || !npc.alive || npc.x == null) {
-        // NPC หาย → ลองหาใหม่
+        // NPC หาย → ลองหาใหม่ — ★★ retry ถี่ๆ ไม่ abort ทันที (entities อาจโหลดช้า)
         const found = findSellNpc();
         if (found) { sellNpcId = found.id; }
-        else { abortSell('ไม่พบ NPC ' + CFG.sellNpcName); return; }
+        else {
+          if (!sellNpcRetryAt) sellNpcRetryAt = now;
+          if (now - sellNpcRetryAt > 10000) { abortSell('ไม่พบ NPC ' + CFG.sellNpcName + ' (retry 10s)'); sellNpcRetryAt = 0; return; }
+          return;   // ยังไม่เจอ → รอ tick ถัดไป
+        }
+        sellNpcRetryAt = 0;
       }
       if (player.x != null) {
         const d = Math.hypot(npc.x - player.x, npc.y - player.y);
@@ -2202,19 +2208,27 @@
     if (now - storageStateAt > 60000) { abortStorage('timeout (' + storageState + ' 60s)'); return; }
 
     if (storageState === 'WARP_TO_KAFRA') {
-      if (now - storageStateAt > 3000) {
+      // ★★ รอ 5s หลังวาร์ป ให้ entities โหลด → หา Kafra (NPC โหลดช้าได้ถึง 5s)
+      if (now - storageStateAt > 5000) {
         const npc = findKafraNpc();
         if (npc) { storageNpcId = npc.id; setStorageState('MOVE_TO_KAFRA'); log('🏦 พบ', npc.name, '@(', npc.x, npc.y + ')'); }
-        else { abortStorage('ไม่พบ Kafra ' + CFG.kafraName); return; }
+        else if (now - storageStateAt > 15000) { abortStorage('ไม่พบ Kafra ' + CFG.kafraName + ' (หลังรอ 15s)'); return; }
+        // else: ยังไม่เจอ → รอต่อ (entities ยังโหลดไม่ครบ)
       }
       return;
     }
     if (storageState === 'MOVE_TO_KAFRA') {
       const npc = storageNpcId ? entities.get(storageNpcId) : null;
       if (!npc || !npc.alive || npc.x == null) {
+        // ★★ retry ถี่ๆ ไม่ abort ทันที (entities อาจโหลดช้า)
         const found = findKafraNpc();
         if (found) { storageNpcId = found.id; }
-        else { abortStorage('ไม่พบ Kafra ' + CFG.kafraName); return; }
+        else {
+          if (!kafraNpcRetryAt) kafraNpcRetryAt = now;
+          if (now - kafraNpcRetryAt > 10000) { abortStorage('ไม่พบ Kafra ' + CFG.kafraName + ' (retry 10s)'); kafraNpcRetryAt = 0; return; }
+          return;
+        }
+        kafraNpcRetryAt = 0;
       }
       if (player.x != null) {
         const d = Math.hypot(npc.x - player.x, npc.y - player.y);
@@ -2314,12 +2328,14 @@
   const equipmentSlots = new Map(); // ★ itemId -> [slotId, slotId, ...] (mirror world.js:773-777)
   let inventoryFull = false;      // true เมื่อ server ส่ง "too full" (0x20)
   let sellState = 'IDLE';         // IDLE|WARP_TO_NPC|MOVE_TO_NPC|TALK|SELECT_SELL|SELL|WARP_BACK
+  let sellNpcRetryAt = 0;         // ★ NPC retry — กัน abort ทันทีเมื่อ entities โหลดช้า
   let sellStateAt = 0;            // timestamp เข้า state (watchdog)
   let sellReturnTo = null;        // {map,x,y} ที่จะวาร์ปกลับหลังขาย
   let sellNpcId = null;           // NPC entity id (หาจาก entities)
   let lastSellAt = 0;             // throttle interval
   // ---------- AUTO-STORAGE state (mirror bot.js:1817-1824) ----------
   let storageState = 'IDLE';      // IDLE|WARP_TO_KAFRA|MOVE_TO_KAFRA|TALK_KAFRA|SELECT_STORAGE|STORAGE_OPENED|MOVE_ITEMS|CLOSE_STORAGE|WARP_BACK
+  let kafraNpcRetryAt = 0;        // ★ Kafra retry — กัน abort ทันทีเมื่อ entities โหลดช้า
   let storageStateAt = 0;         // timestamp เข้า state (watchdog)
   let storageReturnTo = null;     // {map,x,y} ที่จะวาร์ปกลับหลังฝาก
   let storageNpcId = null;        // Kafra entity id
