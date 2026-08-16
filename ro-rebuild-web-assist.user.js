@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.99.0
+// @version      4.100.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,13 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.99.0';
+  const VERSION = '4.100.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.100.0', d: '2026-08-16', items: [
+      '🔴 sticky guard ละข้อยกเว้นเมื่อโดนรุม ≥2 ตัว หรือ HP < 50% — ตอบโต้ทันที',
+      '🎨 flee debug log แสดงแค่ 5 entities แรก (กัน spam)',
+    ]},
     { v: '4.99.0', d: '2026-08-16', items: [
       '🔴 HP=0 แต่ไม่ตาย → reset เป็น null (รอ STAT) — กันนั่งพักวนลูป',
       '🔴 นั่งแล้ว HP=0 → ลุกทันที (ไม่รอ timeout 40s)',
@@ -2810,8 +2814,9 @@
           // ★ debug log ทุก 5s — เช็คว่าระบบทำงานไหม
           if (now - (lastFleeDebugAt || 0) > 5000) {
             lastFleeDebugAt = now;
+            // ★ แสดงแค่ 5 ตัวแรก — กัน log spam (players 34 ตัว = ยาวมาก!)
             const pes = [...entities.values()].filter(e => e.kind === 0 && e.id !== playerId && e.alive);
-            const detail = pes.map(e => `${e.id.toString(16)}@(${e.x},${e.y})`).join(' ') || '(none)';
+            const detail = pes.length > 0 ? pes.slice(0, 5).map(e => `${e.id.toString(16)}@(${e.x},${e.y})`).join(' ') + (pes.length > 5 ? ` +${pes.length - 5} more` : '') : '(none)';
             log('🔍 flee: nearby=' + nearby + ' players=' + pes.length + ' r=' + CFG.fleePlayerRadius + ' [' + detail + ']');
           }
           if (nearby > 0) {
@@ -3031,7 +3036,12 @@
     // === 1b. Defensive retarget === ถ้าโดนมอนตี/aggro (ที่ไม่ใช่ target ปัจจุบัน) → สลับมาตีตัวนั้น
     //   สำคัญ: ถ้ามอน aggro เรา ต้องสู้กลับ ไม่ใช่เดินหาตัวอื่น
     //   ★★ sticky target guard: ถ้ากำลังตีอยู่ + server ตอบกลับ < 5s → ไม่สลับ (กันสลับไปมา)
-    if (player.x != null && !(target && target.lastAttackResultAt && now - target.lastAttackResultAt < 5000)) {
+    //   ★★★ ยกเว้น: โดนรุม ≥2 ตัว หรือ HP < 50% → ละ sticky guard (ตอบโต้ทันที!)
+    //   (กันตี plant นานไป มอนตีเราไปเรื่อยโดยไม่ตอบโต้)
+    const _mobAtkCount = getMobAttackerCount();
+    const _hpPct = hpPct();
+    const _breakSticky = _mobAtkCount >= 2 || (_hpPct != null && _hpPct < 50);
+    if (player.x != null && (!_breakSticky || !target) && !(target && target.lastAttackResultAt && now - target.lastAttackResultAt < 5000)) {
       let attacker = null, attackerDist = Infinity;
       // ★★ รวม mobAttackers (ตีกายภาพ) + monsterAggro (สกิลเล็งเรา) → ตอบโต้ทุกกรณี
       const threats = new Map();
