@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.100.0
+// @version      4.101.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,15 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.100.0';
+  const VERSION = '4.101.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.101.0', d: '2026-08-16', items: [
+      '📋 Log buffer 200→500 บรรทัด',
+      '💬 Feedback — checkbox แนบ log 500 บรรทัด + hint ให้อธิบายละเอียด',
+      '📨 Log แนบส่ง Telegram เป็นไฟล์ .txt + เก็บบน relay',
+      '🌐 หน้าเว็บ /feedback — ดูรายการ + copy ข้อความ + copy log',
+    ]},
     { v: '4.100.0', d: '2026-08-16', items: [
       '🔴 sticky guard ละข้อยกเว้นเมื่อโดนรุม ≥2 ตัว หรือ HP < 50% — ตอบโต้ทันที',
       '🎨 flee debug log แสดงแค่ 5 entities แรก (กัน spam)',
@@ -555,7 +561,7 @@
   const player = { x: null, y: null }; // ตำแหน่งตัวเรา
 
   // ---------- log buffer (สำหรับ panel log console) ----------
-  const LOG_BUF_MAX = 200;
+  const LOG_BUF_MAX = 500;
   const logBuf = [];
   function log(...a) {
     const msg = a.map(x => (typeof x === 'object' ? (() => { try { return JSON.stringify(x); } catch (e) { return String(x); } })() : String(x))).join(' ');
@@ -5856,10 +5862,13 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
     overlay.id = '__assist_feedback_modal';
     overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:999999;display:flex;align-items:center;justify-content:center';
     overlay.innerHTML = `
-      <div style="background:#1e1e2e;color:#e8e8e8;border-radius:12px;padding:20px;width:420px;max-width:90vw;font-family:sans-serif;box-shadow:0 8px 32px rgba(0,0,0,.5)">
+      <div style="background:#1e1e2e;color:#e8e8e8;border-radius:12px;padding:20px;width:480px;max-width:90vw;font-family:sans-serif;box-shadow:0 8px 32px rgba(0,0,0,.5)">
         <div style="font-size:16px;font-weight:700;margin-bottom:4px">💬 แจ้งปัญหา / ข้อเสนอแนะ</div>
-        <div style="font-size:11px;color:#888;margin-bottom:10px">ข้อความจะส่งถึงผู้พัฒนาพร้อมข้อมูลเวอร์ชั่น/แมป</div>
-        <textarea id="__assist_feedback_text" style="width:100%;height:120px;background:#2a2d35;color:#e8e8e8;border:1px solid #444;border-radius:8px;padding:10px;font-size:13px;resize:vertical;box-sizing:border-box" placeholder="เขียนปัญหาหรือข้อเสนอแนะที่นี่... (Ctrl+Enter = ส่ง)"></textarea>
+        <div style="font-size:11px;color:#f39c12;margin-bottom:6px;line-height:1.5">📌 กรณีแจ้งปัญหา กรุณาอธิบายโดยละเอียด:<br>• ก่อนเกิดปัญหา บอทกำลังทำอะไรอยู่?<br>• แล้วเกิดอะไรขึ้น? (ยืนนิ่ง/วาร์ปรัว/ไม่ตอบโต้/ฯลฯ)<br>• เกิดตอนไหน บ่อยแค่ไหน?</div>
+        <textarea id="__assist_feedback_text" style="width:100%;height:120px;background:#2a2d35;color:#e8e8e8;border:1px solid #444;border-radius:8px;padding:10px;font-size:13px;resize:vertical;box-sizing:border-box" placeholder="อธิบายปัญหา/ข้อเสนอแนะอย่างละเอียด... (Ctrl+Enter = ส่ง)"></textarea>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#aaa;margin-top:8px;cursor:pointer">
+          <input type="checkbox" id="__assist_feedback_attachlog" checked> 📋 แนบ log ล่าสุด 500 บรรทัด (ช่วยให้วิเคราะห์ปัญหาได้เร็วขึ้น)
+        </label>
         <div style="display:flex;gap:8px;margin-top:10px;justify-content:flex-end">
           <button id="__assist_feedback_cancel" style="padding:8px 16px;border:none;border-radius:8px;background:#444;color:#ccc;cursor:pointer;font-size:13px">ยกเลิก</button>
           <button id="__assist_feedback_send" style="padding:8px 16px;border:none;border-radius:8px;background:#1a73e8;color:#fff;cursor:pointer;font-size:13px;font-weight:600">📤 ส่ง</button>
@@ -5885,28 +5894,60 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
     overlay.querySelector('#__assist_feedback_send').onclick = async () => {
       const msg = box.value.trim();
       if (!msg) { box.focus(); return; }
+      const attachLog = overlay.querySelector('#__assist_feedback_attachlog').checked;
       const statusEl = overlay.querySelector('#__assist_feedback_status');
       const sendBtn = overlay.querySelector('#__assist_feedback_send');
       sendBtn.disabled = true; sendBtn.textContent = 'กำลังส่ง...';
       statusEl.style.color = '#f39c12'; statusEl.textContent = 'กำลังส่ง...';
+      const ts = new Date().toISOString().slice(0, 16).replace('T', ' ');
       const text = [
         '💬 <b>Feedback</b>', '', msg, '',
         '— — —',
         '🤖 v' + VERSION,
         '👤 ' + (playerName || '?'),
         '🗺️ ' + (currentMap || '?'),
+        '⏰ ' + ts,
       ].join('\n');
       try {
+        // ★ ส่งข้อความหลัก
         const res = await fetch('https://api.telegram.org/bot' + FEEDBACK_BOT_TOKEN + '/sendMessage', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ chat_id: FEEDBACK_CHAT_ID, text, parse_mode: 'HTML', disable_web_page_preview: true }),
         });
-        if (res.ok) {
-          statusEl.style.color = '#4caf50'; statusEl.textContent = '✅ ส่งแล้ว — ขอบคุณมาก!';
-          log('💬 ส่ง feedback แล้ว');
-          setTimeout(close, 1500);
-        } else { throw new Error('HTTP ' + res.status); }
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        // ★★ ถ้าแนบ log → ส่ง log เป็น document แยก (ผ่าน FormData)
+        if (attachLog && logBuf.length > 0) {
+          statusEl.textContent = 'กำลังส่ง log...';
+          const logText = logBuf.map(l => {
+            const d = new Date(l.t);
+            const t = d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0')+':'+d.getSeconds().toString().padStart(2,'0');
+            return `[${t}] ${l.msg || ''}`;
+          }).join('\n');
+          const blob = new Blob([logText], { type: 'text/plain' });
+          const fd = new FormData();
+          fd.append('chat_id', FEEDBACK_CHAT_ID);
+          fd.append('document', blob, `log-v${VERSION}-${Date.now()}.txt`);
+          fd.append('caption', `📋 Log ${logBuf.length} บรรทัด — จาก feedback ${ts}`);
+          const res2 = await fetch('https://api.telegram.org/bot' + FEEDBACK_BOT_TOKEN + '/sendDocument', { method: 'POST', body: fd });
+          if (!res2.ok) log('⚠️ ส่ง log แนบไม่สำเร็จ (HTTP ' + res2.status + ')');
+        }
+        // ★★ ส่งไป relay server ด้วย (เก็บในระบบ)
+        if (relayWs && relayWs.readyState === 1) {
+          try {
+            relayWs.send(JSON.stringify({
+              type: 'feedback',
+              message: msg,
+              log: attachLog ? logBuf.slice(-500).map(l => ({ t: l.t, m: (l.msg || '').slice(0, 200) })) : null,
+              version: VERSION,
+              map: currentMap || '',
+              playerName: playerName || '',
+            }));
+          } catch (_) {}
+        }
+        statusEl.style.color = '#4caf50'; statusEl.textContent = '✅ ส่งแล้ว — ขอบคุณมาก!';
+        log('💬 ส่ง feedback แล้ว' + (attachLog ? ' (พร้อม log ' + logBuf.length + ' บรรทัด)' : ''));
+        setTimeout(close, 1500);
       } catch (e) {
         statusEl.style.color = '#f44336'; statusEl.textContent = '❌ ส่งไม่สำเร็จ: ' + e.message;
         sendBtn.disabled = false; sendBtn.textContent = '📤 ส่ง';
@@ -6248,7 +6289,7 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
       // ★ important log — ส่ง log สำคัญล่าสุด 30 รายการ
       alerts: importantLogBuf.slice(-30),
       // ★★ normal log — ส่ง log ล่าสุด 200 รายการ (สำหรับ remote monitor)
-      logs: logBuf.slice(-200).map(l => ({ t: l.t, m: (l.msg || '').slice(0, 150) })),
+      logs: logBuf.slice(-500).map(l => ({ t: l.t, m: (l.msg || '').slice(0, 150) })),
       // ★ map entities — สำหรับแสดง dots บนแผนที่ใน remote monitor
       mapEntities: (() => {
         const now = nowMs(); const out = [];

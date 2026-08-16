@@ -31,6 +31,12 @@ const MONITOR_HTML = fs.readFileSync(path.join(__dirname, 'remote-monitor.html')
 const CHAT_FILES_DIR = path.join(__dirname, 'chat-files');
 try { fs.mkdirSync(CHAT_FILES_DIR, { recursive: true }); } catch (_) {}
 const MAX_FILE_SIZE = 1048576;   // 1 MB
+
+// ★★ Feedback store — เก็บปัญหา/ข้อเสนอแนะจากผู้ใช้
+const FEEDBACK_FILE = path.join(__dirname, 'feedback-store.json');
+let feedbackStore = [];
+try { feedbackStore = JSON.parse(fs.readFileSync(FEEDBACK_FILE, 'utf8')); if (!Array.isArray(feedbackStore)) feedbackStore = []; } catch (_) { feedbackStore = []; }
+function saveFeedback() { try { fs.writeFileSync(FEEDBACK_FILE, JSON.stringify(feedbackStore.slice(-200))); } catch (_) {} }
 const MIME_MAP = {
   '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
   '.bmp': 'image/bmp', '.gif': 'image/gif', '.webp': 'image/webp',
@@ -93,6 +99,46 @@ const server = http.createServer((req, res) => {
     const contentType = MIME_MAP[ext] || 'application/octet-stream';
     res.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': 'public, max-age=604800, immutable' });
     fs.createReadStream(filePath).pipe(res);
+    return;
+  }
+
+  // ★★ GET /feedback — หน้าเว็บแสดงรายการ feedback
+  if (req.url === '/feedback' || req.url === '/feedback/') {
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Feedback</title>
+<style>
+body{background:#0a0a14;color:#e8e8e8;font-family:'Segoe UI',sans-serif;margin:20px}
+.fb{background:#12121e;border:1px solid #2a2a3a;border-radius:10px;padding:16px;margin-bottom:12px}
+.fb .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.fb .meta{font-size:11px;color:#888}
+.fb .msg{font-size:13px;white-space:pre-wrap;line-height:1.6;margin-bottom:8px}
+.fb .btn{background:#333;color:#aaa;border:1px solid #555;border-radius:6px;padding:4px 12px;font-size:11px;cursor:pointer;margin-right:6px}
+.fb .btn:hover{background:#444}
+.log{background:#0d0d15;border-radius:8px;padding:10px;font-size:10px;max-height:300px;overflow-y:auto;white-space:pre;font-family:Consolas,monospace;color:#bbb;margin-top:8px;display:none}
+h1{font-size:18px;color:#ffd54f}
+</style></head><body>
+<h1>💬 Feedback — ${feedbackStore.length} รายการ</h1>
+<div id="list"></div>
+<script>
+const DATA = ${JSON.stringify(feedbackStore)};
+const list = document.getElementById('list');
+list.innerHTML = DATA.slice().reverse().map((f, i) => \`
+<div class="fb">
+  <div class="hd">
+    <span class="meta">\${f.playerName || '?'} · v\${f.version} · \${f.map || '?'} · \${new Date(f.t).toLocaleString()}</span>
+    <span>
+      <button class="btn" onclick="cpMsg(\${i})" title="Copy ข้อความ">📋 ข้อความ</button>
+      \${f.log ? \`<button class="btn" onclick="toggleLog(\${i})" title="แสดง/ซ่อน log">📄 Log (\${f.log.length})</button><button class="btn" onclick="cpLog(\${i})" title="Copy log">📋 Log</button>\` : ''}
+    </span>
+  </div>
+  <div class="msg">\${(f.message || '').replace(/</g, '&lt;')}</div>
+  \${f.log ? \`<div class="log" id="log\${i}">\${f.log.map(l => \`[\${new Date(l.t).toLocaleTimeString()}] \${(l.m || '').replace(/</g, '&lt;')}\`).join('\\n')}</div>\` : ''}
+</div>\`).join('');
+function cpMsg(i) { navigator.clipboard.writeText(DATA[DATA.length - 1 - i].message); event.target.textContent = '✓ คัดลอกแล้ว'; setTimeout(() => event.target.textContent = '📋 ข้อความ', 1500); }
+function cpLog(i) { const f = DATA[DATA.length - 1 - i]; const txt = f.log.map(l => \`[\${new Date(l.t).toLocaleTimeString()}] \${l.m || ''}\`).join('\\n'); navigator.clipboard.writeText(txt); event.target.textContent = '✓ คัดลอกแล้ว'; setTimeout(() => event.target.textContent = '📋 Log', 1500); }
+function toggleLog(i) { const el = document.getElementById('log' + i); el.style.display = el.style.display === 'none' ? 'block' : 'none'; }
+</script></body></html>`;
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(html);
     return;
   }
 
@@ -400,6 +446,22 @@ wss.on('connection', (ws, req) => {
 
     // ---- ★★★ Chat Room (global — ทุก client คุยกันได้) ----
     //   roomJoin: ขอประวัติ 100 ข้อความล่าสุด
+    // ★★ Feedback จาก userscript — เก็บลง store
+    if (msg.type === 'feedback' && msg.message) {
+      const fb = {
+        t: Date.now(),
+        message: String(msg.message).slice(0, 5000),
+        log: Array.isArray(msg.log) ? msg.log.slice(-500) : null,
+        version: String(msg.version || '').slice(0, 20),
+        map: String(msg.map || '').slice(0, 30),
+        playerName: cleanPlayerName(msg.playerName) || 'ผู้ไม่ประสงค์ออกนาม',
+      };
+      feedbackStore.push(fb);
+      if (feedbackStore.length > 200) feedbackStore = feedbackStore.slice(-200);
+      saveFeedback();
+      log(`💬 Feedback [${fb.playerName}] v${fb.version}: ${fb.message.slice(0, 60)}`);
+      return;
+    }
     if (msg.type === 'roomJoin') {
       const recent = chatHistory.slice(-CHAT_SEND_MAX);
       try { ws.send(JSON.stringify({ type: 'roomHistory', messages: recent })); } catch (_) {}
