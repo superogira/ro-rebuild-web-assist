@@ -119,14 +119,26 @@
   const VERSION = '4.104.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.104.0', d: '2026-08-17', items: [
+      '📋 Log view modal — real-time update ทุก 1s + auto-scroll (smart: ไม่บังคับเมื่อเลื่อนขึ้นดูเก่า)',
+    ]},
+    { v: '4.103.0', d: '2026-08-16', items: [
+      '🔴 NPC โหลดช้า — รอ 5s (เดิม 3s) + retry 15s ก่อน abort (sell + storage)',
+      '   แก้: วาร์ปไปหา NPC → entities ยังไม่โหลด → abort ทันที → พลาด',
+    ]},
     { v: '4.102.0', d: '2026-08-16', items: [
       '📋 ปุ่มดู Log ใน mini-bar — modal ชิดขวา 500 บรรทัด + ปุ่มคัดลอกทั้งหมด',
     ]},
     { v: '4.101.0', d: '2026-08-16', items: [
       '📋 Log buffer 200→500 บรรทัด',
       '💬 Feedback — checkbox แนบ log 500 บรรทัด + hint ให้อธิบายละเอียด',
-      '📨 Log แนบส่ง Telegram เป็นไฟล์ .txt + เก็บบน relay',
+      '📨 Log แนบส่ง Telegram + เก็บบน relay',
       '🌐 หน้าเว็บ /feedback — ดูรายการ + copy ข้อความ + copy log',
+      '💬 Feedback — ลบ parse_mode HTML (แก้ 400 bad request จากชื่อ <@w@>)',
+      '🐞 สลับไอคอน: 💬=แชท 🐞=แจ้งปัญหา',
+      '🌐 /feedback — admin ลบ + เปลี่ยนสถานะ 4 แบบ (รอตรวจสอบ/กำลังดำเนินการ/เรียบร้อย/ไม่ต้องดำเนินการ)',
+      '🧹 Bot entry cleanup — ลบ stale entries > 1hr (กันรายการบอทเก่าค้าง)',
+      '🟢🔴 Bot list แสดง online/offline + lastSeen + เรียง online ก่อน',
     ]},
     { v: '4.100.0', d: '2026-08-16', items: [
       '🔴 sticky guard ละข้อยกเว้นเมื่อโดนรุม ≥2 ตัว หรือ HP < 50% — ตอบโต้ทันที',
