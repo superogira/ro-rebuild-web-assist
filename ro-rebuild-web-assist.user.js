@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.103.0
+// @version      4.104.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,7 +116,7 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.103.0';
+  const VERSION = '4.104.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
     { v: '4.102.0', d: '2026-08-16', items: [
@@ -6099,34 +6099,52 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
     });
   }
   // ★★ Changelog modal — แสดง Update Log ล่าสุดขึ้นก่อน
-  // ★★ Log view modal — ดู log 500 บรรทัดล่าสุด (ชิดขวา + เลื่อนได้)
+  // ★★ Log view modal — ดู log 500 บรรทัดล่าสุด (ชิดขวา + เลื่อนได้ + real-time update)
   function openLogViewModal() {
     const old = document.getElementById('__assist_logview_modal');
     if (old) old.remove();
     const overlay = document.createElement('div');
     overlay.id = '__assist_logview_modal';
     overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);z-index:999999;display:flex;align-items:center;justify-content:flex-end;padding-right:10px';
-    const logsHtml = logBuf.map(l => {
-      const d = new Date(l.t);
-      const ts = d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0')+':'+d.getSeconds().toString().padStart(2,'0');
-      return `<div style="padding:1px 0;border-bottom:1px solid #1a1a2a;word-break:break-word"><span style="color:#555;font-size:9px">[${ts}]</span> <span style="color:#bbb">${(l.msg || '').replace(/</g,'&lt;')}</span></div>`;
-    }).join('');
     overlay.innerHTML = `
       <div style="background:#1a1a2e;color:#e8e8e8;border-radius:12px;padding:16px;width:520px;max-width:90vw;height:80vh;display:flex;flex-direction:column;font-family:sans-serif;box-shadow:0 8px 32px rgba(0,0,0,.5)">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-          <span style="font-size:15px;font-weight:700;color:#82b1ff">📋 Log (${logBuf.length})</span>
+          <span id="__assist_logview_title" style="font-size:15px;font-weight:700;color:#82b1ff">📋 Log (0)</span>
           <span>
             <button id="__assist_logview_copy" style="background:#333;color:#aaa;border:1px solid #555;border-radius:6px;padding:5px 12px;font-size:11px;cursor:pointer;margin-right:6px;font-family:inherit">📋 คัดลอกทั้งหมด</button>
             <button id="__assist_logview_close" style="background:none;border:none;color:#888;font-size:18px;cursor:pointer">✕</button>
           </span>
         </div>
-        <div id="__assist_logview_content" style="flex:1;overflow-y:auto;font-size:10px;line-height:1.5;font-family:Consolas,monospace;padding-right:4px">${logsHtml}</div>
+        <div id="__assist_logview_content" style="flex:1;overflow-y:auto;font-size:10px;line-height:1.5;font-family:Consolas,monospace;padding-right:4px"></div>
       </div>`;
     document.body.appendChild(overlay);
     const content = overlay.querySelector('#__assist_logview_content');
-    content.scrollTop = content.scrollHeight;   // เลื่อนไปล่างสุด (ข้อความใหม่สุด)
-    overlay.querySelector('#__assist_logview_close').onclick = () => overlay.remove();
-    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+    const titleEl = overlay.querySelector('#__assist_logview_title');
+
+    // ★★ render log lines → reuse for initial + refresh
+    function renderLogs() {
+      content.innerHTML = logBuf.map(l => {
+        const d = new Date(l.t);
+        const ts = d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0')+':'+d.getSeconds().toString().padStart(2,'0');
+        return `<div style="padding:1px 0;border-bottom:1px solid #1a1a2a;word-break:break-word"><span style="color:#555;font-size:9px">[${ts}]</span> <span style="color:#bbb">${(l.msg || '').replace(/</g,'&lt;')}</span></div>`;
+      }).join('');
+      titleEl.textContent = '📋 Log (' + logBuf.length + ')';
+    }
+    renderLogs();
+    content.scrollTop = content.scrollHeight;   // เลื่อนไปล่างสุดครั้งแรก
+
+    // ★★ auto-refresh ทุก 1s — real-time update เหมือน sub-tab Log
+    //   เช็ค: ถ้าผู้ใช้เลื่อนขึ้นดู log เก่า → ไม่บังคับเลื่อนลง (auto-scroll เฉพาะเมื่ออยู่ล่างสุด)
+    const refreshTimer = setInterval(() => {
+      if (!document.body.contains(overlay)) { clearInterval(refreshTimer); return; }   // modal ปิดแล้ว → หยุด
+      const wasNearBottom = content.scrollTop + content.clientHeight >= content.scrollHeight - 30;
+      renderLogs();
+      if (wasNearBottom) content.scrollTop = content.scrollHeight;   // อยู่ล่างสุด → เลื่อนตาม
+    }, 1000);
+
+    const close = () => { clearInterval(refreshTimer); overlay.remove(); };
+    overlay.querySelector('#__assist_logview_close').onclick = close;
+    overlay.onclick = (e) => { if (e.target === overlay) close(); };
     overlay.querySelector('#__assist_logview_copy').onclick = (e) => {
       e.stopPropagation();
       const text = logBuf.map(l => {
