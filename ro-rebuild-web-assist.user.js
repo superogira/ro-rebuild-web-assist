@@ -4969,8 +4969,8 @@
         <span class="pill" data-teleport style="background:#4a2c6a;color:#d1b3ff">🌀</span>
         <span class="pill" data-monitor style="background:#1a237e;color:#90caf9">🖥️</span>
         <span class="pill" data-remote style="background:#1a3a1a;color:#81c784;display:none">🌐</span>
-        <span class="pill" data-feedback style="background:#4a3a1a;color:#ffd54f" title="แจ้งปัญหา/ข้อเสนอแนะ">💬</span>
-        <span class="pill" data-chatroom style="background:#1a3a4a;color:#4fc3f7;position:relative" title="ห้องแชท">🗨️<span id="__assist_chatbadge" style="position:absolute;top:-4px;right:-4px;background:#e74c3c;color:#fff;font-size:8px;border-radius:50%;width:14px;height:14px;display:none;align-items:center;justify-content:center;font-weight:bold"></span></span>
+        <span class="pill" data-chatroom style="background:#1a3a4a;color:#4fc3f7;position:relative" title="ห้องแชท">💬<span id="__assist_chatbadge" style="position:absolute;top:-4px;right:-4px;background:#e74c3c;color:#fff;font-size:8px;border-radius:50%;width:14px;height:14px;display:none;align-items:center;justify-content:center;font-weight:bold"></span></span>
+        <span class="pill" data-feedback style="background:#4a2a2a;color:#ff8a80" title="แจ้งปัญหา/ข้อเสนอแนะ">🐞</span>
         <span class="pill" data-changelog style="background:#3a2a1a;color:#ffd54f" title="Update Log">📜</span>
         <span class="expand">⚙</span>
       </div>
