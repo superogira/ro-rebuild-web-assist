@@ -102,40 +102,90 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // ★★ GET /feedback — หน้าเว็บแสดงรายการ feedback
-  if (req.url === '/feedback' || req.url === '/feedback/') {
+  // ★★ GET /feedback — หน้าเว็บแสดงรายการ feedback (admin: ลบ + เปลี่ยนสถานะ)
+  if (req.url.startsWith('/feedback')) {
+    const urlObj = new URL(req.url, 'http://localhost');
+    const token = urlObj.searchParams.get('token');
+    const isAdmin = (token === ADMIN_TOKEN);
+    const STATUSES = ['pending', 'in_progress', 'done', 'wontfix'];
+    const STATUS_LABELS = { pending: '⏳ รอการตรวจสอบ/แก้ไข', in_progress: '🔧 กำลังดำเนินการ', done: '✅ ตรวจสอบ/แก้ไขเรียบร้อย', wontfix: '🚫 ไม่มีอะไรต้องดำเนินการ' };
+    const STATUS_COLORS = { pending: '#f39c12', in_progress: '#3498db', done: '#2ecc71', wontfix: '#e74c3c' };
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Feedback</title>
 <style>
 body{background:#0a0a14;color:#e8e8e8;font-family:'Segoe UI',sans-serif;margin:20px}
 .fb{background:#12121e;border:1px solid #2a2a3a;border-radius:10px;padding:16px;margin-bottom:12px}
-.fb .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.fb .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:6px}
 .fb .meta{font-size:11px;color:#888}
 .fb .msg{font-size:13px;white-space:pre-wrap;line-height:1.6;margin-bottom:8px}
-.fb .btn{background:#333;color:#aaa;border:1px solid #555;border-radius:6px;padding:4px 12px;font-size:11px;cursor:pointer;margin-right:6px}
+.fb .btn{background:#333;color:#aaa;border:1px solid #555;border-radius:6px;padding:4px 12px;font-size:11px;cursor:pointer;margin-right:4px}
 .fb .btn:hover{background:#444}
+.fb .btn.del{background:#4a2020;color:#ef9a9a;border-color:#6a3030}
+.fb .btn.del:hover{background:#5a2525}
 .log{background:#0d0d15;border-radius:8px;padding:10px;font-size:10px;max-height:300px;overflow-y:auto;white-space:pre;font-family:Consolas,monospace;color:#bbb;margin-top:8px;display:none}
 h1{font-size:18px;color:#ffd54f}
+.status{display:inline-block;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:600}
+.status select{background:#2a2a3a;color:#e8e8e8;border:1px solid #555;border-radius:6px;padding:2px 6px;font-size:11px;cursor:pointer}
+.admin-bar{background:#12121e;border:1px solid #2a2a3a;border-radius:8px;padding:10px 16px;margin-bottom:16px;font-size:12px;color:#888}
+.admin-bar input{background:#1a1a2e;border:1px solid #3a3f4b;border-radius:6px;color:#e8e8e8;padding:6px 10px;font-size:12px;width:250px}
 </style></head><body>
-<h1>💬 Feedback — ${feedbackStore.length} รายการ</h1>
+<h1>💬 Feedback — <span id="cnt">${feedbackStore.length}</span> รายการ</h1>
+${!isAdmin ? `<div class="admin-bar">🔑 Admin? เพิ่ม <code>?token=YOUR_TOKEN</code> ที่ URL เพื่อลบ/เปลี่ยนสถานะ</div>` : '<div class="admin-bar" style="color:#2ecc71">✅ Admin mode — ลบ + เปลี่ยนสถานะได้</div>'}
 <div id="list"></div>
 <script>
 const DATA = ${JSON.stringify(feedbackStore)};
+const IS_ADMIN = ${isAdmin};
+const TOKEN = ${JSON.stringify(token || '')};
+const WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
+const STATUS_LABELS = ${JSON.stringify(STATUS_LABELS)};
+const STATUS_COLORS = ${JSON.stringify(STATUS_COLORS)};
+const STATUSES = ${JSON.stringify(STATUSES)};
 const list = document.getElementById('list');
-list.innerHTML = DATA.slice().reverse().map((f, i) => \`
-<div class="fb">
+function esc(s) { return String(s || '').replace(/</g, '&lt;'); }
+function render() {
+  document.getElementById('cnt').textContent = DATA.length;
+  list.innerHTML = DATA.slice().reverse().map((f, i) => \`
+<div class="fb" id="fb\${i}">
   <div class="hd">
     <span class="meta">\${f.playerName || '?'} · v\${f.version} · \${f.map || '?'} · \${new Date(f.t).toLocaleString()}</span>
-    <span>
+    <span style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+      <span class="status" style="background:\${STATUS_COLORS[f.status || 'pending']}22;color:\${STATUS_COLORS[f.status || 'pending']}">\${STATUS_LABELS[f.status || 'pending']}</span>
+      \${IS_ADMIN ? \`<select onchange="setStatus(\${i}, this.value)" style="background:\${STATUS_COLORS[f.status || 'pending']}22;color:\${STATUS_COLORS[f.status || 'pending']}">
+        \${STATUSES.map(s => \`<option value="\${s}" \${(f.status || 'pending') === s ? 'selected' : ''}>\${STATUS_LABELS[s]}</option>\`).join('')}
+      </select>\` : ''}
       <button class="btn" onclick="cpMsg(\${i})" title="Copy ข้อความ">📋 ข้อความ</button>
-      \${f.log ? \`<button class="btn" onclick="toggleLog(\${i})" title="แสดง/ซ่อน log">📄 Log (\${f.log.length})</button><button class="btn" onclick="cpLog(\${i})" title="Copy log">📋 Log</button>\` : ''}
+      \${f.log ? \`<button class="btn" onclick="toggleLog(\${i})">📄 Log (\${f.log.length})</button><button class="btn" onclick="cpLog(\${i})">📋 Log</button>\` : ''}
+      \${IS_ADMIN ? \`<button class="btn del" onclick="del(\${i})">🗑 ลบ</button>\` : ''}
     </span>
   </div>
-  <div class="msg">\${(f.message || '').replace(/</g, '&lt;')}</div>
-  \${f.log ? \`<div class="log" id="log\${i}">\${f.log.map(l => \`[\${new Date(l.t).toLocaleTimeString()}] \${(l.m || '').replace(/</g, '&lt;')}\`).join('\\n')}</div>\` : ''}
+  <div class="msg">\${esc(f.message)}</div>
+  \${f.log ? \`<div class="log" id="log\${i}">\${f.log.map(l => \`[\${new Date(l.t).toLocaleTimeString()}] \${esc(l.m)}\`).join('\\n')}</div>\` : ''}
 </div>\`).join('');
-function cpMsg(i) { navigator.clipboard.writeText(DATA[DATA.length - 1 - i].message); event.target.textContent = '✓ คัดลอกแล้ว'; setTimeout(() => event.target.textContent = '📋 ข้อความ', 1500); }
-function cpLog(i) { const f = DATA[DATA.length - 1 - i]; const txt = f.log.map(l => \`[\${new Date(l.t).toLocaleTimeString()}] \${l.m || ''}\`).join('\\n'); navigator.clipboard.writeText(txt); event.target.textContent = '✓ คัดลอกแล้ว'; setTimeout(() => event.target.textContent = '📋 Log', 1500); }
+}
+function sendWs(obj) {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(WS_URL);
+    ws.onopen = () => { ws.send(JSON.stringify(obj)); setTimeout(() => { ws.close(); resolve(); }, 500); };
+    ws.onerror = reject;
+  });
+}
+async function setStatus(i, status) {
+  const idx = DATA.length - 1 - i;
+  DATA[idx].status = status;
+  render();
+  try { await sendWs({ type: 'feedbackAdmin', action: 'status', token: TOKEN, id: DATA[idx].t, status }); } catch (e) { alert('ส่งไม่สำเร็จ: ' + e.message); }
+}
+async function del(i) {
+  if (!confirm('ลบรายการนี้?')) return;
+  const idx = DATA.length - 1 - i;
+  const id = DATA[idx].t;
+  DATA.splice(idx, 1);
+  render();
+  try { await sendWs({ type: 'feedbackAdmin', action: 'delete', token: TOKEN, id }); } catch (e) { alert('ส่งไม่สำเร็จ: ' + e.message); }
+}
+function cpMsg(i) { navigator.clipboard.writeText(DATA[DATA.length - 1 - i].message); event.target.textContent = '✓'; setTimeout(() => event.target.textContent = '📋 ข้อความ', 1500); }
+function cpLog(i) { const f = DATA[DATA.length - 1 - i]; const txt = f.log.map(l => \`[\${new Date(l.t).toLocaleTimeString()}] \${l.m || ''}\`).join('\\n'); navigator.clipboard.writeText(txt); event.target.textContent = '✓'; setTimeout(() => event.target.textContent = '📋 Log', 1500); }
 function toggleLog(i) { const el = document.getElementById('log' + i); el.style.display = el.style.display === 'none' ? 'block' : 'none'; }
+render();
 </script></body></html>`;
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(html);
@@ -455,11 +505,26 @@ wss.on('connection', (ws, req) => {
         version: String(msg.version || '').slice(0, 20),
         map: String(msg.map || '').slice(0, 30),
         playerName: cleanPlayerName(msg.playerName) || 'ผู้ไม่ประสงค์ออกนาม',
+        status: 'pending',
       };
       feedbackStore.push(fb);
       if (feedbackStore.length > 200) feedbackStore = feedbackStore.slice(-200);
       saveFeedback();
       log(`💬 Feedback [${fb.playerName}] v${fb.version}: ${fb.message.slice(0, 60)}`);
+      return;
+    }
+    // ★★ Feedback admin — เปลี่ยนสถานะ / ลบ (ต้องมี token)
+    if (msg.type === 'feedbackAdmin' && msg.token === ADMIN_TOKEN) {
+      const idx = feedbackStore.findIndex(f => f.t === msg.id);
+      if (msg.action === 'status' && idx >= 0 && msg.status) {
+        feedbackStore[idx].status = String(msg.status);
+        saveFeedback();
+        log(`💬 Feedback #${msg.id} → status: ${msg.status}`);
+      } else if (msg.action === 'delete' && idx >= 0) {
+        feedbackStore.splice(idx, 1);
+        saveFeedback();
+        log(`💬 Feedback #${msg.id} deleted`);
+      }
       return;
     }
     if (msg.type === 'roomJoin') {
