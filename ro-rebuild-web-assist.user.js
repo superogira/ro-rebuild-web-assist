@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.101.0
+// @version      4.101.1
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,7 +116,7 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.101.0';
+  const VERSION = '4.101.1';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
     { v: '4.101.0', d: '2026-08-16', items: [
@@ -5900,8 +5900,9 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
       sendBtn.disabled = true; sendBtn.textContent = 'กำลังส่ง...';
       statusEl.style.color = '#f39c12'; statusEl.textContent = 'กำลังส่ง...';
       const ts = new Date().toISOString().slice(0, 16).replace('T', ' ');
+      // ★ Telegram: ส่งเฉพาะข้อความผู้ใช้ (ไม่ส่ง log — กัน 400 bad request จาก HTML parse)
       const text = [
-        '💬 <b>Feedback</b>', '', msg, '',
+        '💬 Feedback', '', msg, '',
         '— — —',
         '🤖 v' + VERSION,
         '👤 ' + (playerName || '?'),
@@ -5909,30 +5910,14 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
         '⏰ ' + ts,
       ].join('\n');
       try {
-        // ★ ส่งข้อความหลัก
+        // ★ ส่งข้อความหลัก (ไม่ใช้ parse_mode — กัน 400 เมื่อข้อความมี < > &)
         const res = await fetch('https://api.telegram.org/bot' + FEEDBACK_BOT_TOKEN + '/sendMessage', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chat_id: FEEDBACK_CHAT_ID, text, parse_mode: 'HTML', disable_web_page_preview: true }),
+          body: JSON.stringify({ chat_id: FEEDBACK_CHAT_ID, text, disable_web_page_preview: true }),
         });
         if (!res.ok) throw new Error('HTTP ' + res.status);
-        // ★★ ถ้าแนบ log → ส่ง log เป็น document แยก (ผ่าน FormData)
-        if (attachLog && logBuf.length > 0) {
-          statusEl.textContent = 'กำลังส่ง log...';
-          const logText = logBuf.map(l => {
-            const d = new Date(l.t);
-            const t = d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0')+':'+d.getSeconds().toString().padStart(2,'0');
-            return `[${t}] ${l.msg || ''}`;
-          }).join('\n');
-          const blob = new Blob([logText], { type: 'text/plain' });
-          const fd = new FormData();
-          fd.append('chat_id', FEEDBACK_CHAT_ID);
-          fd.append('document', blob, `log-v${VERSION}-${Date.now()}.txt`);
-          fd.append('caption', `📋 Log ${logBuf.length} บรรทัด — จาก feedback ${ts}`);
-          const res2 = await fetch('https://api.telegram.org/bot' + FEEDBACK_BOT_TOKEN + '/sendDocument', { method: 'POST', body: fd });
-          if (!res2.ok) log('⚠️ ส่ง log แนบไม่สำเร็จ (HTTP ' + res2.status + ')');
-        }
-        // ★★ ส่งไป relay server ด้วย (เก็บในระบบ)
+        // ★★ ส่งไป relay server (เก็บในระบบ + log ถ้าแนบ)
         if (relayWs && relayWs.readyState === 1) {
           try {
             relayWs.send(JSON.stringify({
