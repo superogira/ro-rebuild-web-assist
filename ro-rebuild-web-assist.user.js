@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.106.0
+// @version      4.108.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,12 +116,25 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.106.0';
+  const VERSION = '4.108.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
-    { v: '4.106.0', d: '2026-08-17', items: [
-      '🔴 เข้าเกมครั้งแรก (SPAWN flag=1) — ไม่ตั้ง hpStatGrace + ไม่ reset HP',
-      '   แก้: SELECT_CHAR id ≠ SPAWN id → เข้าสาขา "ID เปลี่ยน" → grace 3s บล็อค HP apply → HP ค้าง ?',
+    { v: '4.108.0', d: '2026-08-17', items: [
+      '🔴 สลับตัวละคร (logout → login ตัวใหม่) HP ไม่แสดงของตัวใหม่',
+      '   เหตุ: SELECT_CHAR อัปเดต player_id เฉพาะตอน null → ค้างเป็น id ตัวเก่า',
+      '   + playerName เก่าบล็อค SPAWN ของตัวใหม่ (guard "ชื่อไม่ตรง") → HP/ตำแหน่งตายตลอด',
+      '   แก้: SELECT_CHAR = authoritative เสมอ → reset ทุกอย่างของตัวเก่า',
+      '   (playerName/hp/sp/entities/ตำแหน่ง/isDead/isResting) แล้วเริ่มใหม่กับตัวใหม่',
+    ]},
+    { v: '4.107.0', d: '2026-08-17', items: [
+      '🔴🔴 รากของปัญหา HP ? ตอนเข้าเกม — variable shadowing!',
+      '   ใน SPAWN handler: local "let hp = 40" บัง object hp ด้านนอก',
+      '   → "hp.cur = hp" กลายเป็น set property บนตัวเลข = no-op เงียบ ๆ (ไม่ error!)',
+      '   → debug log พิมพ์ 40/40 จาก local แต่ object จริงไม่เคยถูกแตะ → UI ค้าง ? ตลอด',
+      '   แก้: rename local เป็น sHp/sHpMax + log ยืนยัน "✅ applied" ว่าเข้า object จริง',
+      '🔴 แก้ dead code: if(flag===1) ซ้อนใน if(flag===1) → สาขา reset HP ตอน respawn/warp ไม่เคยทำงาน',
+      '   แยกด้วย playerName แทน: รู้ชื่อแล้ว = respawn/warp → reset, ยังไม่รู้ชื่อ = เข้าเกมครั้งแรก',
+      '🔴 SPAWN HP apply ไม่เช็ค grace แล้ว — packet สดผูก id ตรง = เชื่อถือได้เสมอ',
     ]},
     { v: '4.105.0', d: '2026-08-17', items: [
       '🔴 SPAWN (flag=1) มี HP/hpMax ของตัวเรา → apply ทันทีตั้งแต่เข้าเกม',
@@ -1161,7 +1174,30 @@
     //   format: [03][eid:4][len:2][mapname null-terminated]
     else if (op === 0x03 && u.length >= 7) {
       const eid = u32(u, 1);
-      if (playerId == null && eid) { playerId = eid; log('👤 player_id =', eid.toString(16), '(จาก SELECT_CHAR)'); relayRegisterPlayer(); }
+      // ★★ SELECT_CHAR = คำตอบตรงจาก server ตอนผู้ใช้กดเลือกตัวละคร → authoritative เสมอ
+      //   เดิม: อัปเดตเฉพาะตอน playerId == null → logout แล้ว login ตัวใหม่ → playerId ค้างเป็นตัวเก่า
+      //   → SPAWN ของตัวใหม่โดน guard "ชื่อ ≠ playerName เก่า" บล็อค → HP/ตำแหน่งไม่อัปเดตตลอด!
+      if (eid) {
+        if (playerId !== eid) {
+          if (playerId != null) {
+            log('🔄 สลับตัวละคร: player_id', playerId.toString(16), '→', eid.toString(16), '(จาก SELECT_CHAR)');
+            stalePlayerIds.set(playerId, nowMs() + 300000);
+          } else {
+            log('👤 player_id =', eid.toString(16), '(จาก SELECT_CHAR)');
+          }
+          // reset ทุกอย่างที่ผูกกับตัวละครเก่า — ตัวใหม่เริ่มสะอาด
+          entities.clear(); monsterAggro.clear(); mobAttackers.clear();
+          playerName = null;          // ★ ชื่อเก่าใช้ไม่ได้ — ให้ SPAWN ตัวใหม่ตั้งชื่อใหม่
+                                    //   (ไม่ reset แล้ว guard ชื่อจะบล็อค SPAWN self ของตัวใหม่!)
+          hp.cur = null; hp.max = null;
+          sp.cur = null; sp.max = null;
+          player.x = null; player.y = null;
+          isDead = false; postRespawnRest = false; isResting = false;
+          playerId = eid; relayRegisterPlayer();
+        } else if (!playerName) {
+          // ตัวเดิม re-login แต่ยังไม่รู้ชื่อ — ปล่อยให้ SPAWN ตั้ง
+        }
+      }
       const mapLen = u16(u, 5);
       if (u.length >= 7 + mapLen && mapLen > 0) {
         let name = new TextDecoder().decode(u.slice(7, 7 + mapLen));
@@ -1553,15 +1589,14 @@
               entities.clear();
               monsterAggro.clear(); mobAttackers.clear();
               playerId = id; relayRegisterPlayer();
-              // ★★ grace period เฉพาะ respawn/warp — ไม่ใช้ตอนเข้าเกมครั้งแรก (flag=1)
-              //   ปัญหา: เข้าเกมครั้งแรก → ID จาก SELECT_CHAR ≠ SPAWN → เข้าสาขานี้
-              //   → grace 3s บล็อค HP apply จาก SPAWN (ทั้งที่ HP ถูกต้อง!) → HP ค้างเป็น ?
-              if (flag === 1) {
-                // เข้าเกมครั้งแรก → HP จาก SPAWN นี้เชื่อถือได้เลย — ไม่ต้อง grace
-                log('   (เข้าเกมครั้งแรก flag=1 — ไม่ตั้ง grace)');
-              } else {
+              // ★★ reset HP เฉพาะ respawn/warp (รู้ชื่อตัวเองแล้ว) — ไม่ใช้ตอนเข้าเกมครั้งแรก
+              //   แยกด้วย playerName: ครั้งแรกยังไม่รู้ชื่อ → HP เริ่ม null อยู่แล้ว ไม่ต้อง reset
+              //   (เดิมเช็ค flag===1 ซ้อนใน if(flag===1) = dead code — else ไม่มีวันทำงาน)
+              if (playerName) {
                 hpStatGraceUntil = nowMs() + 3000;
                 hp.cur = null; hp.max = null;   // reset กันค่าเก่าทับ (respawn/warp เท่านั้น)
+              } else {
+                log('   (เข้าเกมครั้งแรก — ไม่ตั้ง grace)');
               }
               // ★★ รีเซ็ตตำแหน่ง — ID เปลี่ยน = อยู่ที่ใหม่แน่ๆ ตำแหน่งเดิมใช้ไม่ได้แล้ว
               player.x = null; player.y = null;
@@ -1608,8 +1643,10 @@
             if (u[i] === 0 && u[i + 1] === 0 && u[i + 2] <= 2) { nameEnd = i; kind = u[i + 2]; break; }
           }
         }
-        if (kind >= 0 && kind <= 2) {
-          let x = null, y = null, hp = null, hpMax = null;
+          if (kind >= 0 && kind <= 2) {
+          // ★★ ห้ามตั้งชื่อ local ว่า hp/hpMax — มันบัง (shadow) object hp ด้านนอก!
+          //   บั๊กเดิม: hp.cur = hp กลายเป็น set property บน number → no-op → HP ค้าง ? ตลอด
+          let x = null, y = null, sHp = null, sHpMax = null;
           // x/y/hp/hpMax relative to nameEnd (kind @ nameEnd+2 → data เริ่ม nameEnd+3)
           // ★ บอทหลัก: x @ nameEnd+3, y @ nameEnd+7 (i32 signed), hp @ +12, hpMax @ +16
           if (u.length >= nameEnd + 20) {
@@ -1619,24 +1656,24 @@
             if (rx >= -500 && rx <= 1000 && ry >= -500 && ry <= 1000) { x = rx; y = ry; }
             const v3 = u32(u, nameEnd + 12);
             const v4 = u32(u, nameEnd + 16);
-            if (v3 > 0 && v3 <= v4) { hp = v3; hpMax = v4; }
+            if (v3 > 0 && v3 <= v4) { sHp = v3; sHpMax = v4; }
           }
           const existing = entities.get(id) || {};
           // ★★ DEBUG: log SPAWN ของ kind=0 (ผู้เล่น) — เช็คว่า server ส่ง player ผ่าน SPAWN ไหม
           if (kind === 0 && id !== playerId) {
             log('👤 SPAWN player: id=' + id.toString(16) + ' name="' + name + '" @(' + x + ',' + y + ') flag=' + flag);
           }
-          // ★★★ DEBUG: SPAWN ตัวเรา — แสดง parse ครบทุก field (หาสาเหตุ HP ไม่ apply)
+          // ★★★ DEBUG: SPAWN ตัวเรา — ยืนยันว่า HP ถูก apply ลง object จริง
           if (id === playerId) {
-            const hexTail = Array.from(u.slice(Math.max(0, nameEnd - 2), Math.min(u.length, nameEnd + 24))).map(b => b.toString(16).padStart(2, '0')).join(' ');
-            log('👤 SPAWN self: name="' + name + '" nameEnd=' + nameEnd + ' kind=' + kind + ' @(' + x + ',' + y + ') hp=' + hp + '/' + hpMax + ' grace=' + (hpStatGraceUntil && nowMs() < hpStatGraceUntil ? 'BLOCK' : 'pass') + ' | tail: ' + hexTail);
+            const applied = (x != null && sHp != null && sHpMax != null && sHpMax > 0);
+            log('👤 SPAWN self: name="' + name + '" @(' + x + ',' + y + ') hp=' + sHp + '/' + sHpMax + (applied ? ' ✅ applied → ' + hp.cur + '/' + hp.max : ' ⚠️ ไม่ apply') + (hp.cur == null ? ' (hp.cur ยัง null!)' : ''));
           }
           entities.set(id, {
             id, kind, sub, name,
             x: x != null ? x : (existing.x != null ? existing.x : null),
             y: y != null ? y : (existing.y != null ? existing.y : null),
-            hp: hp != null ? hp : existing.hp,
-            hpMax: hpMax != null ? hpMax : existing.hpMax,
+            hp: sHp != null ? sHp : existing.hp,
+            hpMax: sHpMax != null ? sHpMax : existing.hpMax,
             alive: true, _lastSeenAt: nowMs(),
             _lastEngagedByOtherAt: existing._lastEngagedByOtherAt || 0,
             _lastDamageAt: existing._lastDamageAt || 0,
@@ -1646,8 +1683,10 @@
           //   → apply ทันที ไม่ต้องรอ STAT (แก้ HP ไม่รู้ตอนเข้าเกมครั้งแรก)
           if (id === playerId && x != null) {
             player.x = x; player.y = y;
-            if (hp != null && hpMax != null && hpMax > 0 && !(hpStatGraceUntil && nowMs() < hpStatGraceUntil)) {
-              hp.cur = hp; hp.max = hpMax;
+            // ★★ ไม่เช็ค grace — SPAWN HP ผูก id===playerId จาก packet สด = เชื่อถือได้เสมอ
+            //   (grace มีไว้กัน STAT เก่าของ ID อื่นเท่านั้น — applyStat เช็ค id อยู่แล้ว)
+            if (sHp != null && sHpMax != null && sHpMax > 0) {
+              hp.cur = sHp; hp.max = sHpMax;
             }
           }
           // ★★★ SPAWN SELF-DETECT: flag=2 + ชื่อตรง playerName → นี่คือตัวเรา! (แก้วนลูปหลังวาร์ปในแมปเดิม)
