@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.105.1
+// @version      4.106.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,13 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.105.1';
+  const VERSION = '4.106.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.106.0', d: '2026-08-17', items: [
+      '🔴 เข้าเกมครั้งแรก (SPAWN flag=1) — ไม่ตั้ง hpStatGrace + ไม่ reset HP',
+      '   แก้: SELECT_CHAR id ≠ SPAWN id → เข้าสาขา "ID เปลี่ยน" → grace 3s บล็อค HP apply → HP ค้าง ?',
+    ]},
     { v: '4.105.0', d: '2026-08-17', items: [
       '🔴 SPAWN (flag=1) มี HP/hpMax ของตัวเรา → apply ทันทีตั้งแต่เข้าเกม',
       '   แก้: HP เป็น null จนกว่า STAT จะส่งมา (ช้า) → heal/rest ไม่ทำงานช่วงแรก',
@@ -1549,9 +1553,16 @@
               entities.clear();
               monsterAggro.clear(); mobAttackers.clear();
               playerId = id; relayRegisterPlayer();
-              // ★ grace period 3s — ข้าม STAT HP ที่อาจผิดหลัง ID เปลี่ยน (mirror world.js:1265)
-              hpStatGraceUntil = nowMs() + 3000;
-              hp.cur = null; hp.max = null;   // reset กันค่าเก่าทับ
+              // ★★ grace period เฉพาะ respawn/warp — ไม่ใช้ตอนเข้าเกมครั้งแรก (flag=1)
+              //   ปัญหา: เข้าเกมครั้งแรก → ID จาก SELECT_CHAR ≠ SPAWN → เข้าสาขานี้
+              //   → grace 3s บล็อค HP apply จาก SPAWN (ทั้งที่ HP ถูกต้อง!) → HP ค้างเป็น ?
+              if (flag === 1) {
+                // เข้าเกมครั้งแรก → HP จาก SPAWN นี้เชื่อถือได้เลย — ไม่ต้อง grace
+                log('   (เข้าเกมครั้งแรก flag=1 — ไม่ตั้ง grace)');
+              } else {
+                hpStatGraceUntil = nowMs() + 3000;
+                hp.cur = null; hp.max = null;   // reset กันค่าเก่าทับ (respawn/warp เท่านั้น)
+              }
               // ★★ รีเซ็ตตำแหน่ง — ID เปลี่ยน = อยู่ที่ใหม่แน่ๆ ตำแหน่งเดิมใช้ไม่ได้แล้ว
               player.x = null; player.y = null;
               warpGuardUntil = nowMs() + 3000; lastWarpPlayerPos = null;
