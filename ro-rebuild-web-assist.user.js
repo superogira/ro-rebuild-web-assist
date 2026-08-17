@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.109.0
+// @version      4.110.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,17 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.109.0';
+  const VERSION = '4.110.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.110.0', d: '2026-08-17', items: [
+      '🔴 หนีผู้เล่น radius=0 (หนีทันทีทั้งแมป) ไม่ทำงาน — คนเข้าแมปไกล ๆ บอทไม่รู้',
+      '   เหตุ: นับเฉพาะผู้เล่นจาก SPAWN (มีชื่อ) แต่ server ส่ง SPAWN เฉพาะระยะมองเห็น!',
+      '   ส่วน 0x3c minimap (sub=13) มีผู้เล่นทุกคนในแมป แต่ถูกข้าม (name=\"\" กันหนีตัวเอง)',
+      '   แก้: radius=0 → นับ minimap dots ด้วย (fresh ≤30s + ไม่ใช่ตำแหน่งเราเป๊ะ กันผี/ตัวเอง)',
+      '   → คนเข้าแมปที่ไหนก็เจอทันที ไม่ต้องรอเดินมาใกล้',
+      '🔍 flee debug log — • = ผู้เล่นจาก minimap (ไม่มีชื่อ)',
+    ]},
     { v: '4.109.0', d: '2026-08-17', items: [
       '🔴 Ctrl+V ใน chat/feedback ไม่ทำงาน (ต้องคลิกขวา Paste)',
       '   เหตุ: keydown handler ที่เราทำไว้กัน Unity แย่งคีย์ preventDefault() ทุกปุ่ม',
@@ -2528,13 +2536,22 @@
     for (const e of entities.values()) {
       if (e.kind !== 0 || !e.alive || e.x == null) continue;
       if (e.id === playerId) continue;       // ยกเว้นตัวเอง
-      // ★★ นับเฉพาะผู้เล่นที่มาจาก SPAWN (มีชื่อจริง ไม่ใช่ empty string)
-      //   entity จาก 0x3c minimap มี name='' → น่าจะตัวเราเอง → ข้าม!
-      //   (แก้ปัญหาหนีตัวเองวนลูป — entity ID เปลี่ยนตลอด SELF-DETECT ไม่ทัน)
-      if (!e.name || !e.name.trim()) continue;
+      if (isStaleId(e.id, now)) continue;
+      if (!e.name || !e.name.trim()) {
+        // ★★ ผู้เล่นจาก 0x3c minimap (ไม่มีชื่อ) — นับเฉพาะ radius=0 (นับทุกคนในแมป)
+        //   เดิมข้ามหมด → ตั้ง radius=0 "หนีทันที" ก็จับคนไกลไม่ได้ เพราะ server ส่ง SPAWN
+        //   (แหล่งชื่อ) เฉพาะระยะมองเห็น ส่วน 0x3c sub=13 มีผู้เล่นทุกคนในแมป
+        //   → คนเข้าแมปไกล ๆ บอทไม่รู้ จนเดิน/วาร์ปมาใกล้ถึงหนี
+        //   กันผี/ตัวเอง: dot ต้อง fresh ≤30s (คนออกจากแมปแล้ว dot หยุดมา → ไม่นับทับ)
+        //   + ตำแหน่งตรงเราเป๊ะ (dist<1) = dot ตัวเราเองที่ SELF-DETECT ยังไม่ทัน → ข้าม
+        if (radius !== 0) continue;
+        if (!e._lastSeenAt || now - e._lastSeenAt > 30000) continue;
+        if (Math.hypot(e.x - player.x, e.y - player.y) < 1) continue;
+        n++;
+        continue;
+      }
       // ★★ ข้ามชื่อขยะ (ไม่มีตัวอักษร/ตัวเลขที่อ่านได้) — spawn parse ผิด
       if (!/[a-zA-Z0-9\u0E00-\u0E7F]/.test(e.name)) continue;
-      if (isStaleId(e.id, now)) continue;
       if (radius > 0 && Math.hypot(e.x - player.x, e.y - player.y) > radius) continue;  // radius=0 = นับทุกคนในแมป
       n++;
     }
@@ -2944,7 +2961,7 @@
             lastFleeDebugAt = now;
             // ★ แสดงแค่ 5 ตัวแรก — กัน log spam (players 34 ตัว = ยาวมาก!)
             const pes = [...entities.values()].filter(e => e.kind === 0 && e.id !== playerId && e.alive);
-            const detail = pes.length > 0 ? pes.slice(0, 5).map(e => `${e.id.toString(16)}@(${e.x},${e.y})`).join(' ') + (pes.length > 5 ? ` +${pes.length - 5} more` : '') : '(none)';
+            const detail = pes.length > 0 ? pes.slice(0, 5).map(e => (e.name && e.name.trim() ? '' : '•') + `${e.id.toString(16)}@(${e.x},${e.y})`).join(' ') + (pes.length > 5 ? ` +${pes.length - 5} more` : '') + ' (•=minimap)' : '(none)';
             log('🔍 flee: nearby=' + nearby + ' players=' + pes.length + ' r=' + CFG.fleePlayerRadius + ' [' + detail + ']');
           }
           if (nearby > 0) {
