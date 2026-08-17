@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.108.0
+// @version      4.108.1
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,13 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.108.0';
+  const VERSION = '4.108.1';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.108.1', d: '2026-08-17', items: [
+      '🔍 DEBUG: SPAWN self — dump bytes ทั้งหมดหลัง hpMax + pktLen',
+      '   สำรวจว่า SPAWN มี SP แฝงท้าย packet ไหม (ตอนนี้รู้แน่แค่ว่ามี 4 bytes = 0 ต่อท้าย)',
+    ]},
     { v: '4.108.0', d: '2026-08-17', items: [
       '🔴 สลับตัวละคร (logout → login ตัวใหม่) HP ไม่แสดงของตัวใหม่',
       '   เหตุ: SELECT_CHAR อัปเดต player_id เฉพาะตอน null → ค้างเป็น id ตัวเก่า',
@@ -1664,9 +1668,20 @@
             log('👤 SPAWN player: id=' + id.toString(16) + ' name="' + name + '" @(' + x + ',' + y + ') flag=' + flag);
           }
           // ★★★ DEBUG: SPAWN ตัวเรา — ยืนยันว่า HP ถูก apply ลง object จริง
+          //   + dump bytes หลัง hpMax (nameEnd+20) — สำรวจว่ามี SP แฝงท้าย packet ไหม
           if (id === playerId) {
             const applied = (x != null && sHp != null && sHpMax != null && sHpMax > 0);
-            log('👤 SPAWN self: name="' + name + '" @(' + x + ',' + y + ') hp=' + sHp + '/' + sHpMax + (applied ? ' ✅ applied → ' + hp.cur + '/' + hp.max : ' ⚠️ ไม่ apply') + (hp.cur == null ? ' (hp.cur ยัง null!)' : ''));
+            let extra = '';
+            if (u.length > nameEnd + 20) {
+              const tb = u.slice(nameEnd + 20);
+              const hex = Array.from(tb).map(b => b.toString(16).padStart(2, '0')).join(' ');
+              const vals = [];
+              for (let i = 0; i + 4 <= tb.length; i += 4) vals.push(u32(tb, i));
+              extra = ' | pktLen=' + u.length + ' after-hpMax: hex[' + hex + '] u32[' + vals.join(', ') + '] sp(0x27)=' + (sp.cur != null ? sp.cur + '/' + sp.max : '?');
+            } else {
+              extra = ' | pktLen=' + u.length + ' (จบพอดีที่ hpMax — ไม่มี field เพิ่ม)';
+            }
+            log('👤 SPAWN self: name="' + name + '" @(' + x + ',' + y + ') hp=' + sHp + '/' + sHpMax + (applied ? ' ✅ applied → ' + hp.cur + '/' + hp.max : ' ⚠️ ไม่ apply') + (hp.cur == null ? ' (hp.cur ยัง null!)' : '') + extra);
           }
           entities.set(id, {
             id, kind, sub, name,
