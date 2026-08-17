@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.105.0
+// @version      4.105.1
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,7 +116,7 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.105.0';
+  const VERSION = '4.105.1';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
     { v: '4.105.0', d: '2026-08-17', items: [
@@ -1614,6 +1614,11 @@
           // ★★ DEBUG: log SPAWN ของ kind=0 (ผู้เล่น) — เช็คว่า server ส่ง player ผ่าน SPAWN ไหม
           if (kind === 0 && id !== playerId) {
             log('👤 SPAWN player: id=' + id.toString(16) + ' name="' + name + '" @(' + x + ',' + y + ') flag=' + flag);
+          }
+          // ★★★ DEBUG: SPAWN ตัวเรา — แสดง parse ครบทุก field (หาสาเหตุ HP ไม่ apply)
+          if (id === playerId) {
+            const hexTail = Array.from(u.slice(Math.max(0, nameEnd - 2), Math.min(u.length, nameEnd + 24))).map(b => b.toString(16).padStart(2, '0')).join(' ');
+            log('👤 SPAWN self: name="' + name + '" nameEnd=' + nameEnd + ' kind=' + kind + ' @(' + x + ',' + y + ') hp=' + hp + '/' + hpMax + ' grace=' + (hpStatGraceUntil && nowMs() < hpStatGraceUntil ? 'BLOCK' : 'pass') + ' | tail: ' + hexTail);
           }
           entities.set(id, {
             id, kind, sub, name,
