@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.104.0
+// @version      4.105.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,13 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.104.0';
+  const VERSION = '4.105.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.105.0', d: '2026-08-17', items: [
+      '🔴 SPAWN (flag=1) มี HP/hpMax ของตัวเรา → apply ทันทีตั้งแต่เข้าเกม',
+      '   แก้: HP เป็น null จนกว่า STAT จะส่งมา (ช้า) → heal/rest ไม่ทำงานช่วงแรก',
+    ]},
     { v: '4.104.0', d: '2026-08-17', items: [
       '📋 Log view modal — real-time update ทุก 1s + auto-scroll (smart: ไม่บังคับเมื่อเลื่อนขึ้นดูเก่า)',
     ]},
@@ -1621,8 +1625,15 @@
             _lastEngagedByOtherAt: existing._lastEngagedByOtherAt || 0,
             _lastDamageAt: existing._lastDamageAt || 0,
           });
-          // ★ (C) SPAWN อัปเดต player.x/y ด้วย (mirror world.js:1289-1292) — กัน stale หลังวาร์ป
-          if (id === playerId && x != null) { player.x = x; player.y = y; }
+          // ★ (C) SPAWN อัปเดต player.x/y + HP ด้วย (mirror world.js:1289-1292) — กัน stale หลังวาร์ป
+          //   ★★ SPAWN มี hp/hpMax ของตัวเรา! (จาก packet capture: 5e 00 00 00 5e 00 00 00 = 94/94)
+          //   → apply ทันที ไม่ต้องรอ STAT (แก้ HP ไม่รู้ตอนเข้าเกมครั้งแรก)
+          if (id === playerId && x != null) {
+            player.x = x; player.y = y;
+            if (hp != null && hpMax != null && hpMax > 0 && !(hpStatGraceUntil && nowMs() < hpStatGraceUntil)) {
+              hp.cur = hp; hp.max = hpMax;
+            }
+          }
           // ★★★ SPAWN SELF-DETECT: flag=2 + ชื่อตรง playerName → นี่คือตัวเรา! (แก้วนลูปหลังวาร์ปในแมปเดิม)
           //   หลังวาร์ปสุ่ม entityId เปลี่ยน → SPAWN มาพร้อมชื่อของเรา → update playerId + position!
           //   ถ้าไม่ update → player.x/y ค้างที่ตำแหน่งเก่า → บอทตี entity เก่าที่อยู่ไกล → pending สูง → วนลูป!
