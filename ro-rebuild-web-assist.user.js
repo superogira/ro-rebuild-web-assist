@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.110.0
+// @version      4.111.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,16 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.110.0';
+  const VERSION = '4.111.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.111.0', d: '2026-08-17', items: [
+      '⚡ คูลดาวน์วาร์ปหนีผู้เล่น ตั้งได้ใน UI แล้ว (เดิม fix 5 วิ)',
+      '   ใน sub-tab Flee: "คูลดาวน์วาร์ปหนี (วินาที)" — 0 = หนีรัวสุดไม่ต้องรอ',
+      '   สำหรับโหมดแมปเดิม: คนวาร์ปตามหา เราหนีต่อได้เร็วขึ้น (0 = ติดลูปเกือบทันที',
+      '   ตัวจำกัดธรรมชาติ = รอรู้ตำแหน่งตัวเองหลังวาร์ป ~0.5-2s กัน spam packet)',
+      '   API: ASSIST.setFleeWarpCooldown(0)',
+    ]},
     { v: '4.110.0', d: '2026-08-17', items: [
       '🔴 หนีผู้เล่น radius=0 (หนีทันทีทั้งแมป) ไม่ทำงาน — คนเข้าแมปไกล ๆ บอทไม่รู้',
       '   เหตุ: นับเฉพาะผู้เล่นจาก SPAWN (มีชื่อ) แต่ server ส่ง SPAWN เฉพาะระยะมองเห็น!',
@@ -262,7 +269,7 @@
     'restEnabled', 'restHpPercent', 'restUntilPercent', 'restMaxSec', 'postCombatDelayMs', 'autoRespawnEnabled', 'autoRespawnDelayMs', 'telegramAlertCard', 'telegramAlertFlee', 'telegramAlertBotMention', 'telegramAlertNearby', 'telegramAlertWhisper', 'telegramBotToken', 'telegramChatId',
     'sellEnabled', 'sellNpcName', 'sellNpcMap', 'sellNpcX', 'sellNpcY', 'sellIntervalMin', 'sellOnFull', 'sellItemIds',
     'storageEnabled', 'kafraName', 'kafraMap', 'kafraMapX', 'kafraMapY', 'kafraChoice', 'depositOnFull', 'depositAfterSell', 'depositItemIds',
-    'farmMap', 'farmMapX', 'farmMapY', 'warpBackToFarm', 'fleeFromPlayers', 'fleeMode', 'fleeMaps', 'fleePlayerRadius',
+    'farmMap', 'farmMapX', 'farmMapY', 'warpBackToFarm', 'fleeFromPlayers', 'fleeMode', 'fleeMaps', 'fleePlayerRadius', 'fleeWarpCooldownSec',
     'navRecording', 'navMergeRadius', 'navWanderUseNav', 'navWanderMode',
     'itemNames',
   ];
@@ -514,6 +521,7 @@
     fleeMode: 'changeMap',        // ★★ 'changeMap' = เปลี่ยนแมป | 'sameMap' = วาร์ปสุ่มในแมปเดิม
     fleeMaps: [],                 // ★★ รายการแผนที่สำรอง ['moc_fild04','moc_fild08',...]
     fleePlayerRadius: 30,         // ★★ ระยะตรวจจับผู้เล่น (ช่อง)
+    fleeWarpCooldownSec: 5,       // ★★ คูลดาวน์วาร์ปหนีผู้เล่น (วินาที) — 0 = หนีรัวสุด (ตัวจำกัดธรรมชาติ = รอรู้ตำแหน่งตัวเองหลังวาร์ป)
 
     // ---------- AUTO-LOOT ----------
     lootEnabled: true,
@@ -2979,7 +2987,7 @@
                 //   ตำแหน่งใหม่หลังวาร์ป → ข้อมูลเก่าใช้ไม่ได้ → clear เป็นวิธีที่ถูกต้อง
                 entities.clear();
                 queue.clear(); recentDrops.clear();
-                fleeCooldownUntil = now + 5000;
+                fleeCooldownUntil = now + CFG.fleeWarpCooldownSec * 1000;   // ★ ตั้งได้ใน UI (0 = รัวสุด)
                 target = null; monsterAggro.clear(); mobAttackers.clear();
               }
               return;
@@ -2992,7 +3000,7 @@
               CFG.farmMap = next;        // ★ auto-set farm map (กัน warpBackToFarm ดึงกลับ)
               saveConfigDebounced();
               sendTeleport(next, -999, -999);
-              fleeCooldownUntil = now + 5000;  // รอ 5s ให้ entity data โหลด
+              fleeCooldownUntil = now + CFG.fleeWarpCooldownSec * 1000;  // ★ ตั้งได้ใน UI — รอให้ entity data โหลด
               target = null; monsterAggro.clear(); mobAttackers.clear();
               queue.clear(); recentDrops.clear();   // ★★ เคลียร์ loot แมปเก่า
               return;
@@ -4335,6 +4343,7 @@
     addTargetBlacklist(...x) { for (const e of x) if (!CFG.targetBlacklist.includes(e)) CFG.targetBlacklist.push(e); log('⚔️ blacklist =', CFG.targetBlacklist.join(', ')); },
     clearTargetBlacklist() { CFG.targetBlacklist = []; log('⚔️ ล้าง blacklist'); },
     setFleeMob(n) { CFG.fleeOnMobCount = n; log('🏃 flee รุม', n, 'ตัว' + (n ? '' : ' (off)')); },
+    setFleeWarpCooldown(sec) { CFG.fleeWarpCooldownSec = Math.max(0, Math.min(30, sec)); saveConfigDebounced(); log('🏃 คูลดาวน์วาร์ปหนี:', CFG.fleeWarpCooldownSec + 's' + (CFG.fleeWarpCooldownSec === 0 ? ' (รัวสุด)' : '')); },
     setFleeAggro(n) { CFG.fleeOnAggroCount = n; log('🏃 flee aggro', n, 'ตัว' + (n ? '' : ' (off)')); },
     setFleeProximity(n, radius) { CFG.fleeOnProximityCount = n; if (radius != null) CFG.fleeOnProximityRadius = radius; log('🏃 flee มอนรอบ', n, 'ตัวในระยะ', CFG.fleeOnProximityRadius); },
     setRanged(range) { CFG.rangedAttackRange = range; log('🏹 ranged range =', range, range ? '' : '(ใช้ attackRange)'); },
@@ -4386,6 +4395,7 @@
           enabled: CFG.fleeFromPlayers,
           maps: CFG.fleeMaps,
           radius: CFG.fleePlayerRadius,
+          cooldownSec: CFG.fleeWarpCooldownSec,
           cooldownLeft: fleeCooldownUntil > now ? (fleeCooldownUntil - now) + 'ms' : 'ready',
         },
         combat: { enabled: CFG.combatEnabled, manualMode, remoteWalk: remoteWalkTarget ? { x: remoteWalkTarget.x, y: remoteWalkTarget.y } : null },
@@ -5266,6 +5276,7 @@
             </div>
             <div class="field"><label>แผนที่สำรองเมื่อหนีผู้เล่น (คั่นด้วยจุลภาค)</label><input type="text" id="__assist_fleemaps" placeholder="moc_fild04,moc_fild08,gef_fild13"></div>
             <div class="field"><label>รัศมีตรวจจับผู้เล่น (ช่อง) — 0 = หนีทันทีที่มีผู้เล่นในแผนที่</label><input type="number" id="__assist_fleeradius" min="0" max="200" placeholder="30"></div>
+            <div class="field"><label>คูลดาวน์วาร์ปหนี (วินาที) — 0 = หนีรัวสุด ไม่ต้องรอ</label><input type="number" id="__assist_fleecd" min="0" max="30" step="1" placeholder="5"></div>
             <div class="btns"><button id="__assist_applyfleemap">ใช้ค่าหนีผู้เล่น</button></div>
             <hr style="border:none;border-top:1px solid #3a3f4b;margin:8px 0">
             <div class="field"><label>flee: รุม N ตัว (0=off)</label><input type="number" id="__assist_fleemob" min="0" max="20"></div>
@@ -5705,13 +5716,17 @@
     const _fr = root.querySelector('#__assist_fleeradius');
     if (_fm) _fm.value = (CFG.fleeMaps || []).join(',');
     if (_fr) _fr.value = CFG.fleePlayerRadius;
+    const _fcd = root.querySelector('#__assist_fleecd');
+    if (_fcd) _fcd.value = CFG.fleeWarpCooldownSec;
     root.querySelector('#__assist_applyfleemap').addEventListener('click', () => {
       const maps = root.querySelector('#__assist_fleemaps').value.split(',').map(s => s.trim()).filter(Boolean);
       const radius = parseInt(root.querySelector('#__assist_fleeradius').value, 10);
+      const cdSec = parseInt(root.querySelector('#__assist_fleecd').value, 10);
       CFG.fleeMaps = maps;
       if (!isNaN(radius) && radius >= 0) CFG.fleePlayerRadius = radius;
+      if (!isNaN(cdSec) && cdSec >= 0) CFG.fleeWarpCooldownSec = Math.min(30, cdSec);
       saveConfigDebounced();
-      log('🏃 หนีผู้เล่น: แผนที่สำรอง', maps.length, 'แผนที่, รัศมี', CFG.fleePlayerRadius, 'ช่อง' + (radius === 0 ? ' (หนีทันที)' : ''));
+      log('🏃 หนีผู้เล่น: แผนที่สำรอง', maps.length, 'แผนที่, รัศมี', CFG.fleePlayerRadius, 'ช่อง' + (radius === 0 ? ' (หนีทันที)' : '') + ', คูลดาวน์', CFG.fleeWarpCooldownSec + 's' + (CFG.fleeWarpCooldownSec === 0 ? ' (รัวสุด)' : ''));
     });
     // ---- flee wires (แยกจาก combat) ----
     root.querySelector('#__assist_applyflee').addEventListener('click', () => {
