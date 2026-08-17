@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.108.2
+// @version      4.109.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,18 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.108.2';
+  const VERSION = '4.109.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.109.0', d: '2026-08-17', items: [
+      '🔴 Ctrl+V ใน chat/feedback ไม่ทำงาน (ต้องคลิกขวา Paste)',
+      '   เหตุ: keydown handler ที่เราทำไว้กัน Unity แย่งคีย์ preventDefault() ทุกปุ่ม',
+      '   รวมถึง Ctrl+V → browser ไม่สร้าง paste event เลย (คลิกขวาไม่ผ่าน keydown เลยรอด)',
+      '   แก้: Ctrl/Cmd+V/C/X/A ไม่ preventDefault — คืนให้ browser ทำ → paste event ไหลเข้า handler เดิม',
+      '   (รูป→อัปโหลด, ข้อความ→แทรก, >3 บรรทัด→แนบไฟล์) + Ctrl+C ก็กลับมาใช้ได้ด้วย',
+      '🔴 กัน Ctrl+ตัวอักษร อื่นแทรกตัวอักษรลง input (เช่น Ctrl+S แทรก "s")',
+      '   (ยกเว้น AltGr = ctrl+alt พร้อมกัน — คีย์บอร์ดยุโรปยังพิมพ์ได้ปกติ)',
+    ]},
     { v: '4.108.2', d: '2026-08-17', items: [
       '🔍 DEBUG SPAWN self — ย้าย log มาพิมพ์หลัง apply แล้ว (เดิมพิมพ์ก่อน → ขึ้น null/null ทั้งที่ apply สำเร็จ)',
       '📋 สรุปจาก capture: หลัง hpMax ใน SPAWN เป็นก้อน data ตัวละคร 58 bytes ไม่มี sp/spMax ชัด',
@@ -5406,6 +5415,14 @@
       // หยุด Unity รับ key นี้
       e.stopPropagation();
       if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+      // ★★ clipboard shortcuts (Ctrl/Cmd + V/C/X/A) — ห้าม preventDefault เด็ดขาด!
+      //   preventDefault บน keydown = ฆ่า default action ของ browser → paste/copy event ไม่เกิดเลย
+      //   (บั๊กเดิม: Ctrl+V เงียบ ต้องคลิกขวา Paste เพราะบล็อกตัวเอง — คลิกขวาไม่ผ่าน keydown เลยรอด)
+      //   คืนให้ browser ทำ → paste event จะวิ่งไป handler ที่มีอยู่แล้ว (รูป→upload, ข้อความ→แทรก/แนบ)
+      //   ★ AltGr (คีย์บอร์ดยุโรป) = ctrl+alt พร้อมกัน → ไม่ใช่ shortcut จริง → ไม่ early-return
+      const kLow = (e.key || '').toLowerCase();
+      const isClipboardCombo = ['v', 'c', 'x', 'a'].includes(kLow) && ((e.ctrlKey && !e.altKey) || e.metaKey);
+      if (isClipboardCombo) return;
       e.preventDefault();
       // จัดการ input เอง (Unity กลืน key หมด แม้ input focus)
       handleInputKey(inp, e);
@@ -5507,8 +5524,12 @@
         }
       }
       else if (k.length === 1) {   // ตัวอักษร 1 ตัว (รวมตัวเลข ภาษาอังกฤษ)
-        inp.value = inp.value.slice(0, s) + k + inp.value.slice(en);
-        inp.selectionStart = inp.selectionEnd = s + 1;
+        // ★ คีย์ร่วมกับ Ctrl/Alt/Cmd ล้วน (ไม่ใช่ AltGr=ctrl+alt) → เป็น shortcut ไม่ใช่พิมพ์ ห้ามแทรก
+        const pureCtrl = e.ctrlKey && !e.altKey, pureAlt = e.altKey && !e.ctrlKey;
+        if (!(pureCtrl || pureAlt || e.metaKey)) {
+          inp.value = inp.value.slice(0, s) + k + inp.value.slice(en);
+          inp.selectionStart = inp.selectionEnd = s + 1;
+        }
       }
       // อื่นๆ (Shift/Ctrl/Alt/Tab ฯลฯ) ไม่ต้องทำอะไร
       try { inp.scrollLeft = inp.scrollWidth; } catch (_) {}   // ★★ scroll ตาม cursor (กันข้อความยาวไม่เลื่อน)
