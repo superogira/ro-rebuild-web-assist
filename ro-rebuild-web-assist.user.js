@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.111.0
+// @version      4.112.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,20 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.111.0';
+  const VERSION = '4.112.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.112.0', d: '2026-08-17', items: [
+      '🔴🔴 หนีตัวเองข้ามแมปวนลูป — "หนีผู้เล่น! 1 คน @(332,340)" รัว 9 ครั้งใน 2 วิ',
+      '   เหตุ 1: MAP_NAME เก็บ entity ตัวเองไว้ตอนเปลี่ยนแมป → ตำแหน่งแมปเก่าติดมา',
+      '   + entities.has(playerId) ทำให้ SELF-DETECT ไม่ทำงาน → dot จริงของเรา (id ใหม่)',
+      '   ใน minimap แมปใหม่ ถูกนับเป็น "ผู้เล่นคนอื่น" → หนีตัวเอง (พิกัดผีเดิมทุกครั้ง!)',
+      '   เหตุ 2: changeMap หนีไม่ clear entities รอ MAP_NAME — แต่วาร์ปล้ม (ไม่มี MAP_NAME)',
+      '   = ผีค้าง 30s → หนีใหม่ทุก tick ต่อเนื่อง',
+      '   แก้: MAP_NAME clear ทั้งหมดไม่เก็บ myEntry + ต่อ warpGuard ให้ SELF-DETECT จับ dot ใหม่',
+      '   + changeMap flee clear entities ทันที (วาร์ปล้มก็ไม่ผีค้าง)',
+      '🛡️ เบรกฉุกเฉิน: หนี >5 ครั้งใน 10s → พัก 10s อัตโนมัติ (กันยิง teleport รัวแม้ cooldown=0)',
+    ]},
     { v: '4.111.0', d: '2026-08-17', items: [
       '⚡ คูลดาวน์วาร์ปหนีผู้เล่น ตั้งได้ใน UI แล้ว (เดิม fix 5 วิ)',
       '   ใน sub-tab Flee: "คูลดาวน์วาร์ปหนี (วินาที)" — 0 = หนีรัวสุดไม่ต้องรอ',
@@ -1176,11 +1187,17 @@
           log('🗺️ แมป:', name, player.x != null ? '@(' + Math.round(player.x) + ',' + Math.round(player.y) + ')' : '(pos ยังไม่รู้)');
           // ★★★ clear entities ของแมปเก่า — กัน monster ค้างติดมาแมปใหม่ (mirror world.js:293-306)
           //   ปัญหา: ไม่ clear → Merman/Strouf จากแมปเก่ายังค้าง → บอทพยายามตีมอนที่ไม่มีจริง
-          //   ★ เก็บตัวเองไว้ (re-add self หลัง clear)
-          const myEntry = playerId != null ? entities.get(playerId) : null;
+          //   ★★ ห้ามเก็บ myEntry ไว้! (บั๊กหนีตัวเองข้ามแมปวนลูป)
+          //   เหตุ 1: entry เก่ามีตำแหน่งแมปเก่า → flee block sync กลับเป็น player.x/y
+          //     → บอทคิดว่ายืนอยู่พิกัดแมปเก่าทั้งที่วาร์ปไปแล้ว
+          //   เหตุ 2: entities.has(playerId) = true → SELF-DETECT (post-warp) ไม่ทำงาน
+          //     → dot จริงของเรา (id ใหม่) ใน minimap แมปใหม่ถูกนับเป็น "ผู้เล่นคนอื่น"
+          //     → หนีตัวเองรัว ๆ ข้ามแมป (วาร์ปส่วนใหญ่ล้ม = ยิ่งวนยิ่งหนี)
           entities.clear();
-          if (myEntry) entities.set(playerId, myEntry);
           monsterAggro.clear(); mobAttackers.clear();
+          // ★ ต่อ warpGuard ใหม่ — แมปเพิ่งเปลี่ยน entityId ใหม่ ให้ SELF-DETECT จับ dot ตัวเองจาก minimap ได้
+          //   (กัน server ช้า ส่ง minimap มาหลัง guard 3s จาก teleport หมดแล้ว → dot เรากลายเป็นผี)
+          warpGuardUntil = nowMs() + 3000;
           target = null;
           queue.clear(); recentDrops.clear();   // ★★ เคลียร์ loot แมปเก่า (กันเก็บของจากแมปเดิม)
           log('🧹 ล้าง entities + loot แมปเก่า (เปลี่ยนแมป)');
@@ -2942,6 +2959,7 @@
   // ★★ Flee from players — วาร์ปหนีผู้เล่นไปแผนที่สำรอง
   let fleeMapIdx = 0;
   let fleeCooldownUntil = 0;
+  let fleeBurstTimes = [];               // ★ timestamps การหนีล่าสุด — กันหนีถี่ผิดปกติ (dot ผี/วาร์ปล้ม)
   let lastFleeDebugAt = 0;
   let last3cDebugAt = 0;
   let lastDamageDebugAt = 0;
@@ -2977,6 +2995,17 @@
             const pes = [...entities.values()].filter(e => e.kind === 0 && e.id !== playerId && e.alive && e.x != null);
             const posInfo = pes.length === 1 ? ' @(' + pes[0].x + ',' + pes[0].y + ')' : '';
             const botPos = player.x != null ? ' bot@(' + Math.round(player.x) + ',' + Math.round(player.y) + ')' : '';
+            // ★★ กันหนีถี่ผิดปกติ — >5 ครั้งใน 10s = ข้อมูลผี/วาร์ปล้มรัว ๆ → พัก 10s
+            //   (แม้ตั้ง cooldown=0 ก็ต้องมีเบรก — กันยิง teleport รัวเมื่อข้อมูลผิด)
+            fleeBurstTimes.push(now);
+            fleeBurstTimes = fleeBurstTimes.filter(t => now - t < 10000);
+            if (fleeBurstTimes.length > 5) {
+              fleeBurstTimes = [];
+              fleeCooldownUntil = now + 10000;
+              log('⚠️ หนีผู้เล่นถี่ผิดปกติ (>5 ครั้ง/10s) — พัก 10s (สงสัย dot ผี หรือวาร์ปล้มต่อเนื่อง)');
+              logImportant('flee', '⚠️ หนีถี่ผิดปกติ — พัก 10s');
+              return;
+            }
             // ★★ sameMap mode — วาร์ปสุ่มในแมปเดิม (ไม่เปลี่ยนแมป)
             if (CFG.fleeMode === 'sameMap') {
               log('🏃 หนีผู้เล่น!', nearby, 'คน' + posInfo + botPos + ' → วาร์ปสุ่มในแมปเดิม');
@@ -3000,6 +3029,10 @@
               CFG.farmMap = next;        // ★ auto-set farm map (กัน warpBackToFarm ดึงกลับ)
               saveConfigDebounced();
               sendTeleport(next, -999, -999);
+              // ★★ clear entities เลย ไม่รอ MAP_NAME — วาร์ปอาจล้ม (server ยังโหลดแมป)
+              //   ถ้าล้มแล้วไม่ clear → dot/minimap แมปเก่าค้าง 30s → นับเป็นผู้เล่น → หนีรัวไม่จบ
+              //   (ถ้ามีคนจริงอยู่แมปเดิม minimap จะส่ง dot ใหม่มาในไม่กี่วิ → หนีรอบใหม่เอง)
+              entities.clear();
               fleeCooldownUntil = now + CFG.fleeWarpCooldownSec * 1000;  // ★ ตั้งได้ใน UI — รอให้ entity data โหลด
               target = null; monsterAggro.clear(); mobAttackers.clear();
               queue.clear(); recentDrops.clear();   // ★★ เคลียร์ loot แมปเก่า
