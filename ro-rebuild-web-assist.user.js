@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.121.0
+// @version      4.122.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,18 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.121.0';
+  const VERSION = '4.122.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.122.0', d: '2026-08-18', items: [
+      '🔴🔴 หนีผีอีก — คราวนี้ตัวการคือ 0x07 ghost ไม่ใช่ minimap',
+      '   อาการ: "ผู้เล่น 1 คน" โผล่ห่าง 1.4 ช่อง กลางกอง loot ที่เพิ่งเก็บ (ไม่มี SPAWN player)',
+      '   เหตุ: มอนเดินเข้ามาจากนอกจอ / มอนมากินของ → ส่ง 0x07 MOVE มาก่อน SPAWN',
+      '   → handler เดิมสมมติว่า "ไม่เคย SPAWN = ผู้เล่น" (สมมติฐานผิด!)',
+      '   → ถูกนับเป็นผู้เล่น (name=\'\') ตาม rule radius=0 → หนีผี',
+      '   แก้: tag แหล่งที่มา entity — _src=beacon (radar ยืนยัน player) / _src=move (ไม่รู้)',
+      '   → flee นับเฉพาะ beacon เท่านั้น + flee debug แสดงเฉพาะ entity ที่นับได้จริง',
+    ]},
     { v: '4.121.0', d: '2026-08-18', items: [
       '📍ใหม่: minimap beacon ของเราเอง (id ตรง playerId) → อัปเดตตำแหน่งทุก 4 ช่องที่เดิน',
       '   (จาก capture: server ส่ง 0x3c marker ของเราทุก 4 ช่อง — flag=01 เหมือนคนอื่น แยกด้วย id เท่านั้น)',
@@ -1202,10 +1211,11 @@
       } else {
         const e = entities.get(id);
         if (e) { e.x = x; e.y = y; e._lastSeenAt = nowMs(); }
-        // ★★ entity ใหม่จาก MOVE_UPDATE ที่ไม่เคย SPAWN = ผู้เล่นคนอื่น
-        //   (monster/NPC จะได้ SPAWN ก่อนเสมอ — server ไม่ส่ง SPAWN สำหรับผู้เล่นคนอื่น)
-        //   ถ้าเป็น monster จริงๆ SPAWN จะมาแก้ kind=1 ภายหลัง
-        else { entities.set(id, { id, kind: 0, x, y, alive: true, _lastSeenAt: nowMs(), name: '' }); }
+        // ★★ entity ใหม่จาก MOVE_UPDATE ที่ไม่เคย SPAWN — ไม่รู้ว่าเป็นอะไร!
+        //   ★ อาจเป็น "มอน" ที่เดินเข้ามาจากนอกจอ/มอนมากินของ (SPAWN ยังไม่มาถึง)
+        //   → tag _src='move' และห้ามนับเป็นผู้เล่นใน flee (เคยแอบดิสเป็น player → หนีผี)
+        //   ถ้าเป็น player จริง เดี๋ยว beacon 0x3c flag=1 จะยืนยันให้ (_src='beacon')
+        else { entities.set(id, { id, kind: 0, x, y, alive: true, _lastSeenAt: nowMs(), name: '', _src: 'move' }); }
       }
     }
     // 0x0b ATTACK_RESULT: ถ้าตัวเราเป็นคนตี → กำลังสู้
@@ -1607,7 +1617,7 @@
             //   ตำแหน่งเราหลังวาร์ปมาจาก: SPAWN self / 0x07 MOVE / combatLoop sync จาก entity ตัวเอง
             let m = entities.get(eid);
             if (m) { m.x = ex; m.y = ey; m._lastSeenAt = now; }
-            else { entities.set(eid, { id: eid, kind: 0, x: ex, y: ey, alive: true, _lastSeenAt: now, name: '' }); }
+            else { entities.set(eid, { id: eid, kind: 0, x: ex, y: ey, alive: true, _lastSeenAt: now, name: '', _src: 'beacon' }); }
             // ★ marker ของเราเอง (id ตรง playerId) → อัปเดตตำแหน่งเรา
             //   (จาก capture: server ส่ง beacon ทุก 4 ช่องที่เดิน — เติมช่องว่างระหว่าง 0x07 response)
             if (playerId != null && eid === playerId) { player.x = ex; player.y = ey; }
@@ -1624,7 +1634,7 @@
             //   ★★ ห้าม SELF-DETECT จาก minimap — id เราไม่เปลี่ยนตอนวาร์ป (ดู comment ด้านบน)
             let m = entities.get(id);
             if (m) { m.x = x; m.y = y; m._lastSeenAt = now; }
-            else { entities.set(id, { id, kind: 0, x, y, alive: true, _lastSeenAt: now, name: '' }); }
+            else { entities.set(id, { id, kind: 0, x, y, alive: true, _lastSeenAt: now, name: '', _src: 'beacon' }); }
             // ★ marker ของเราเอง → อัปเดตตำแหน่งเรา (beacon ทุก 4 ช่อง — เหมือน multi path)
             if (playerId != null && id === playerId) { player.x = x; player.y = y; }
           } else {
@@ -2722,13 +2732,14 @@
       if (e.id === playerId) continue;       // ยกเว้นตัวเอง
       if (isStaleId(e.id, now)) continue;
       if (!e.name || !e.name.trim()) {
-        // ★★ ผู้เล่นจาก 0x3c minimap (ไม่มีชื่อ) — นับเฉพาะ radius=0 (นับทุกคนในแมป)
-        //   เดิมข้ามหมด → ตั้ง radius=0 "หนีทันที" ก็จับคนไกลไม่ได้ เพราะ server ส่ง SPAWN
-        //   (แหล่งชื่อ) เฉพาะระยะมองเห็น ส่วน 0x3c sub=13 มีผู้เล่นทุกคนในแมป
-        //   → คนเข้าแมปไกล ๆ บอทไม่รู้ จนเดิน/วาร์ปมาใกล้ถึงหนี
-        //   กันผี/ตัวเอง: dot ต้อง fresh ≤30s (คนออกจากแมปแล้ว dot หยุดมา → ไม่นับทับ)
-        //   + ตำแหน่งตรงเราเป๊ะ (dist<1) = dot ตัวเราเองที่ SELF-DETECT ยังไม่ทัน → ข้าม
+        // ★★ ผู้เล่นจาก 0x3c minimap beacon (ไม่มีชื่อ) — นับเฉพาะ radius=0 (นับทุกคนในแมป)
+        //   ★★ เชื่อเฉพาะ _src='beacon' เท่านั้น! (radar ของ server ระบุชัดว่าเป็น player)
+        //   _src='move' (0x07 ghost ไม่เคย SPAWN) อาจเป็น "มอน" เดินจากนอกจอ/มอนมากินของ
+        //   → เคยแอบดิสเป็น player ทำให้หนีผี (โผล่ห่าง 1.4 ช่องกลางกอง loot)
         if (radius !== 0) continue;
+        if (e._src !== 'beacon') continue;
+        //   กันผี/ตัวเอง: dot ต้อง fresh ≤30s (คนออกจากแมปแล้ว dot หยุดมา → ไม่นับทับ)
+        //   + ตำแหน่งตรงเราเป๊ะ (dist<1) = dot ตัวเราเอง → ข้าม
         if (!e._lastSeenAt || now - e._lastSeenAt > 30000) continue;
         if (Math.hypot(e.x - player.x, e.y - player.y) < 1) continue;
         n++;
@@ -3145,8 +3156,10 @@
           if (now - (lastFleeDebugAt || 0) > 5000) {
             lastFleeDebugAt = now;
             // ★ แสดงแค่ 5 ตัวแรก — กัน log spam (players 34 ตัว = ยาวมาก!)
-            const pes = [...entities.values()].filter(e => e.kind === 0 && e.id !== playerId && e.alive);
-            const detail = pes.length > 0 ? pes.slice(0, 5).map(e => (e.name && e.name.trim() ? '' : '•') + `${e.id.toString(16)}@(${e.x},${e.y})`).join(' ') + (pes.length > 5 ? ` +${pes.length - 5} more` : '') + ' (•=minimap)' : '(none)';
+            // ★ แสดงเฉพาะ entity ที่ "นับได้" (มีชื่อจาก SPAWN หรือ beacon) — ให้ตรงกับ nearby
+            const pes = [...entities.values()].filter(e => e.kind === 0 && e.id !== playerId && e.alive
+              && ((e.name && e.name.trim()) || e._src === 'beacon'));
+            const detail = pes.length > 0 ? pes.slice(0, 5).map(e => (e.name && e.name.trim() ? '' : '•') + `${e.id.toString(16)}@(${e.x},${e.y})`).join(' ') + (pes.length > 5 ? ` +${pes.length - 5} more` : '') + ' (•=beacon)' : '(none)';
             log('🔍 flee: nearby=' + nearby + ' players=' + pes.length + ' r=' + CFG.fleePlayerRadius + ' [' + detail + ']');
           }
           if (nearby > 0) {
