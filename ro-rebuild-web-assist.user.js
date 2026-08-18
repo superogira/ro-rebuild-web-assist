@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.115.0
+// @version      4.116.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,17 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.115.0';
+  const VERSION = '4.116.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.116.0', d: '2026-08-18', items: [
+      '🔴 นั่งพักแล้ว ยังยิงเก็บของตอนนั่ง จนต้องวาร์ปไปเก็บ — การนั่งพัง',
+      '   ลำดับเดิม: ฆ่าได้ → นั่งทันที (HP ต่ำ) ทั้งที่ drop ยังอยู่ในคิว',
+      '   → loot loop ยิง 0x52 ตอนนั่ง fail 4 ครั้ง → วาร์ปไปเก็บ → นั่งไม่เป็นนั่ง',
+      '   แก้: มีของรอเก็บ (queue/warpQueue) = ยังไม่นั่ง — เก็บให้เสร็จก่อน',
+      '   + ของเข้าคิวระหว่างนั่ง → ลุกไปเก็บก่อน แล้วนั่งใหม่เอง',
+      '   (ใช้กับทั้ง auto-rest ปกติและ post-respawn rest)',
+    ]},
     { v: '4.115.0', d: '2026-08-18', items: [
       '🔴🔴 หนีผู้เล่นเงียบหายไปเฉย ๆ หลังวาร์ปพร้อมคนตาม (จาก log ทดสอบจริง)',
       '   ลำดับบั๊ก: คนตามวาร์ปตามมาพร้อมกัน → dot ของเขาใน minimap โดน SELF-DETECT',
@@ -3180,7 +3188,8 @@
     //   เหมือน auto-rest ปกติ แต่ trigger จาก flag postRespawnRest ไม่ใช่ HP%
     if (postRespawnRest && CFG.restEnabled && hp.cur != null) {
       const pct = hpPct();
-      if (!isResting && pct != null && pct < CFG.restUntilPercent) {
+      // ★ มีของรอเก็บ (drop จากรอบที่ตาย) → เก็บก่อนค่อยนั่ง
+      if (!isResting && pct != null && pct < CFG.restUntilPercent && queue.size === 0 && warpQueue.size === 0) {
         if (sendSit()) {
           isResting = true;
           restUntil = now + CFG.restMaxSec * 1000;
@@ -3189,7 +3198,12 @@
         return;
       }
       if (isResting) {
-        if (pct != null && pct >= CFG.restUntilPercent || now >= restUntil) {
+        if (queue.size > 0 || warpQueue.size > 0) {
+          // ★ ลุกไปเก็บของก่อน — postRespawnRest ยัง true → เก็บเสร็จนั่งต่อเอง
+          if (sendStand()) { log('🪑 [post-respawn] ลุกไปเก็บของก่อน — เก็บเสร็จนั่งต่อ'); }
+          isResting = false;
+        }
+        else if (pct != null && pct >= CFG.restUntilPercent || now >= restUntil) {
           if (sendStand()) { log('🪑 [post-respawn] ลุกยืน: HP', pct.toFixed(0) + '% → กลับฟาร์ม'); }
           isResting = false;
           postRespawnRest = false;   // ★ เคลียร์ flag — กลับสู่ฟาร์มปกติ
@@ -3222,7 +3236,9 @@
     //   ถ้า HP ต่ำ + ไม่โดนรุม → นั่งพัก; ถ้ากำลังนั่งอยู่ → จัดการลุก/นั่งต่อ
     if (CFG.restEnabled && pct != null && hp.cur != null && pct > 0) {
       // ★ pct=0 = tracking ผิด (ไม่ตายจริง) → ไม่นั่งพัก (รอ STAT แก้)
-      if (!isResting && pct < CFG.restHpPercent && mobCount === 0) {
+      // ★★ มีของรอเก็บ → ยังไม่นั่ง! เก็บให้เสร็จก่อน (ยืนเก็บได้/ไม่ต้องวาร์ปไปเก็บตอนนั่ง)
+      //   (บั๊กเดิม: นั่งก่อน → loot loop ยิงเก็บตอนนั่ง fail รัว → วาร์ปไปเก็บ → การนั่งพัง)
+      if (!isResting && pct < CFG.restHpPercent && mobCount === 0 && queue.size === 0 && warpQueue.size === 0) {
         // เริ่มนั่งพัก
         if (sendSit()) {
           isResting = true;
@@ -3232,8 +3248,14 @@
         return;
       }
       if (isResting) {
+        // ★★ ของเข้าคิวระหว่างนั่ง (drop มาช้ากว่า combat window) → ลุกไปเก็บก่อน
+        //   เก็บเสร็จคิวว่าง → เงื่อนไขด้านบนจะให้นั่งใหม่เอง
+        if (queue.size > 0 || warpQueue.size > 0) {
+          if (sendStand()) { log('🪑 ลุกยืน: มีของรอเก็บ — เก็บก่อนแล้วค่อยพักต่อ'); }
+          isResting = false;
+        }
         // ★★ นั่งแล้ว HP=0/null (tracking ผิด) → ลุกทันที (ไม่ต้องรอ timeout)
-        if (pct == null || pct <= 0) {
+        else if (pct == null || pct <= 0) {
           if (sendStand()) { log('⚠️ HP=0 ขณะนั่ง (tracking ผิด) → ลุกทันที'); }
           isResting = false;
           hp.cur = null; hp.max = null;   // reset รอ STAT
