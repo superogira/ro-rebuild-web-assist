@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.123.0
+// @version      4.124.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,17 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.123.0';
+  const VERSION = '4.124.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.124.0', d: '2026-08-18', items: [
+      '🔴 HP ต่ำกว่าเกณฑ์นั่งพักแต่บอทยังไล่ตีมอนต่อไปเรื่อย ๆ ไม่นั่ง',
+      '   เหตุ: ฆ่าได้ → เข้าเป้าใหม่ทันที (แพ้การแข่งกับการนั่งพักใน tick) →',
+      '   โดนตีระหว่างสู้ → mobCount≥1 บล็อคการนั่ง (ถูกต้อง) → วนแบบนี้จนตาย',
+      '   (ใน log: ต่อสู้ต่อเนื่อง 5 ตัวไม่หยุด แล้ว ☠️ ตาย หลังไล่ตี Condor รัว ๆ)',
+      '   แก้: HP < restHpPercent + ไม่โดนตี + ไม่มีของรอเก็บ = ห้ามเปิดสู้ตัวใหม่',
+      '   → ปล่อยให้ auto-rest ทำงานแทน (นั่งฟื้นก่อนค่อยกลับมาฟาร์ม)',
+    ]},
     { v: '4.123.0', d: '2026-08-18', items: [
       '🔴🔴🔴 บอทหันไปตีผู้เล่น! (จาก log จริง: 🎯 เลือกเป้า: superogira0 → ⚔️ ตี superogira0)',
       '   เหตุ: entity ของผู้เล่นเปลี่ยน kind 0→1 กลางทาง (SPAWN parse พลาด หรือ 0x3c batch/0x14',
@@ -3674,6 +3682,16 @@
         CFG.combatEnabled = false;
         log('✅ ฆ่ามอน (manual) เสร็จ — หยุด combat');
         return;
+      }
+      // ★★★ HP ต่ำกว่าเกณฑ์นั่งพัก + ไม่โดนตี + ไม่มีของรอเก็บ → ห้ามเปิดสู้ตัวใหม่!
+      //   (บั๊กเดิม: ฆ่าได้ → เข้าเป้าใหม่ทันที → โดนตี → นั่งไม่ได้ → วนสู้รัว ๆ จน HP ยิ่งต่ำ/ตาย
+      //    การนั่งพักชนะ tick ไม่ไหวเพราะแพ้การแข่ง acquire — ปิดทาง acquire เลยให้จบ)
+      if (CFG.restEnabled) {
+        const _pct = hpPct();
+        if (_pct != null && _pct > 0 && _pct < CFG.restHpPercent
+            && getMobAttackerCount() === 0 && queue.size === 0 && warpQueue.size === 0) {
+          return;   // ปล่อยให้ส่วน auto-rest ทำงานใน tick ถัดไป (จะนั่งเอง)
+        }
       }
       const t = acquireTarget(now);
       if (t) { target = t; noMonsterSince = 0; return; }
