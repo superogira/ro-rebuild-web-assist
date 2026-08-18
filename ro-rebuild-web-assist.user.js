@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.124.0
+// @version      4.125.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,18 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.124.0';
+  const VERSION = '4.125.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.125.0', d: '2026-08-18', items: [
+      '📊 แยก Log เป็น 2 แหล่ง: 📋 กิจกรรม (สิ่งที่บอททำ) กับ 🔍 Debug (ข้อมูลระบบเพื่อวิเคราะห์)',
+      '   Debug: SPAWN self dump / SPAWN player / flee scan ทุก 5s / SELF-DETECT /',
+      '   AUTO-DETECT / false despawn guard / ตัวกรอง item ข้าม / /where / ล้าง entities',
+      '   → Log กิจกรรมสะอาดขึ้นเยอะ (ไม่โดน 344 บรรทัดร้านค้าในเมืองทับ)',
+      '   ดูได้ทั้งใน mini-bar 📋 (ปุ่มสลับ กิจกรรม/Debug) และ sub-tab Log',
+      '   ปุ่มคัดลอกคัดลอกตาม view ที่เลือก / feedback แนบทั้งสองแบบ /',
+      '   monitor ได้รับ dbgLogs เพิ่ม (200 บรรทัด) เก็บไว้ใช้วิเคราะห์',
+    ]},
     { v: '4.124.0', d: '2026-08-18', items: [
       '🔴 HP ต่ำกว่าเกณฑ์นั่งพักแต่บอทยังไล่ตีมอนต่อไปเรื่อย ๆ ไม่นั่ง',
       '   เหตุ: ฆ่าได้ → เข้าเป้าใหม่ทันที (แพ้การแข่งกับการนั่งพักใน tick) →',
@@ -762,6 +771,17 @@
     while (logBuf.length > LOG_BUF_MAX) logBuf.shift();
     if (CFG.verbose) console.log('[ASSIST]', ...a);
   }
+  // ★★ Debug log — แยกจาก log กิจกรรม: ข้อมูลระบบ/parse/detect ที่เยอะและเอาไว้วิเคราะห์
+  //   (SPAWN dump, flee scan, SELF-DETECT, despawn guard, ฯลฯ)
+  //   ดูได้ใน Log modal แท็บ "Debug" / แนบไปกับ feedback / ส่ง monitor
+  const DBG_BUF_MAX = 300;
+  const dbgBuf = [];
+  function dbg(...a) {
+    const msg = a.map(x => (typeof x === 'object' ? (() => { try { return JSON.stringify(x); } catch (e) { return String(x); } })() : String(x))).join(' ');
+    dbgBuf.push({ t: Date.now(), msg });
+    while (dbgBuf.length > DBG_BUF_MAX) dbgBuf.shift();
+    if (CFG.verbose) console.log('[ASSIST·dbg]', ...a);
+  }
   // ★ important log buffer — card drop + chat ที่พูดถึง bot
   const IMPORTANT_BUF_MAX = 200;
   const importantLogBuf = [];
@@ -1182,7 +1202,7 @@
       }
     }
     if (!shouldLoot(d.itemId)) {
-      log('⛔ ข้าม', nameOf(d.itemId), '(ตัวกรอง mode=' + CFG.filter.mode + ') drop', d.dropId);
+      dbg('⛔ ข้าม', nameOf(d.itemId), '(ตัวกรอง mode=' + CFG.filter.mode + ') drop', d.dropId);
       return;
     }
     queue.set(d.dropId, { dropId: d.dropId, itemId: d.itemId, x: d.x, y: d.y, attempts: 0, lastAttemptAt: 0, addedAt: now });
@@ -1370,7 +1390,7 @@
           warpGuardUntil = nowMs() + 3000;
           target = null;
           queue.clear(); recentDrops.clear();   // ★★ เคลียร์ loot แมปเก่า (กันเก็บของจากแมปเดิม)
-          log('🧹 ล้าง entities + loot แมปเก่า (เปลี่ยนแมป)');
+          dbg('🧹 ล้าง entities + loot แมปเก่า (เปลี่ยนแมป)');
           bossAlertedIds.clear();   // ★ ล้าง boss alert cache (เริ่มนับใหม่ในแมปใหม่)
           navWanderReset();   // ★ เปลี่ยนแมป → reset wander state (ล้าง target เก่า)
           navPatrolReset();   // ★ reset patrol state ด้วย
@@ -1570,7 +1590,7 @@
                 const pe = entities.get(playerId);
                 if (pe) { pe.x = wx; pe.y = wy; pe._lastSeenAt = nowMs(); }
               }
-              log('📍 /where → (' + wx + ',' + wy + ') แมป ' + wm[3] + (wm[3] !== currentMap ? ' (ต่างจากปัจจุบัน ' + currentMap + ')' : ''));
+              dbg('📍 /where → (' + wx + ',' + wy + ') แมป ' + wm[3] + (wm[3] !== currentMap ? ' (ต่างจากปัจจุบัน ' + currentMap + ')' : ''));
             }
           }
         }
@@ -1816,7 +1836,7 @@
               log('⚠️ flag=1 แต่ชื่อ "' + name + '" ≠ "' + playerName + '" → ไม่ใช่เรา → ข้าม');
             } else {
               // ID เปลี่ยนจริง (respawn/warp) → track oldId + clear + grace period
-              log('🔄 player_id เปลี่ยน:', playerId.toString(16), '→', id.toString(16));
+              dbg('🔄 player_id เปลี่ยน:', playerId.toString(16), '→', id.toString(16));
               // ★ stale เฉพาะ id เก่าที่ยืนยันแล้ว (id ที่ claim จาก minimap อาจเป็นของคนอื่น)
               if (selfIdConfirmed) stalePlayerIds.set(playerId, nowMs() + 300000);  // stale 5 นาที
               entities.clear();
@@ -1890,13 +1910,13 @@
           // ★★ guard: id ที่เคยบน radar ผู้เล่น = ผู้เล่นแน่นอน — ห้าม parse พลาดทำให้เป็นมอน
           //   (เคยเกิดจริง: SPAWN ของผู้เล่นถูกอ่าน kind=1 → บอทหันไปตีผู้เล่น!)
           if (kind === 1 && isBeaconPlayer(id, nowMs())) {
-            log('⚠️ SPAWN ของผู้เล่น ' + (name || id.toString(16)) + ' ถูกอ่าน kind=1 → แก้เป็น 0 (id เคยบน radar)');
+            dbg('⚠️ SPAWN ของผู้เล่น ' + (name || id.toString(16)) + ' ถูกอ่าน kind=1 → แก้เป็น 0 (id เคยบน radar)');
             kind = 0;
           }
           if (kind === 0 && name && name.trim()) beaconPlayerIds.set(id, nowMs());
           // ★★ DEBUG: log SPAWN ของ kind=0 (ผู้เล่น) — เช็คว่า server ส่ง player ผ่าน SPAWN ไหม
           if (kind === 0 && id !== playerId) {
-            log('👤 SPAWN player: id=' + id.toString(16) + ' name="' + name + '" @(' + x + ',' + y + ') flag=' + flag);
+            dbg('👤 SPAWN player: id=' + id.toString(16) + ' name="' + name + '" @(' + x + ',' + y + ') flag=' + flag);
           }
           entities.set(id, {
             id, kind, sub, name,
@@ -1933,7 +1953,7 @@
               extra = ' | pktLen=' + u.length + ' (จบพอดีที่ hpMax)';
             }
             const ok = (hp.cur === sHp && hp.max === sHpMax);
-            log('👤 SPAWN self: name="' + name + '" @(' + x + ',' + y + ') hp=' + sHp + '/' + sHpMax + (ok ? ' ✅ applied → ' + hp.cur + '/' + hp.max : ' ⚠️ ไม่ apply (hp.cur=' + hp.cur + ')') + extra);
+            dbg('👤 SPAWN self: name="' + name + '" @(' + x + ',' + y + ') hp=' + sHp + '/' + sHpMax + (ok ? ' ✅ applied → ' + hp.cur + '/' + hp.max : ' ⚠️ ไม่ apply (hp.cur=' + hp.cur + ')') + extra);
           }
           // ★★★ SPAWN SELF-DETECT: flag=2 + ชื่อตรง playerName → นี่คือตัวเรา! (แก้วนลูปหลังวาร์ปในแมปเดิม)
           //   หลังวาร์ปสุ่ม entityId เปลี่ยน → SPAWN มาพร้อมชื่อของเรา → update playerId + position!
@@ -2089,7 +2109,7 @@
           selfIdConfirmed = true;   // โดนมอนตีซ้ำ 3 ครั้งใน 10s = ตัวเราแน่
           entities.delete(oldId);   // ★★ ลบ entity เก่า (กันค้างเป็น "player" → หนีตัวเอง)
           _victimIdCount.clear();
-          log('🔄 AUTO-DETECT playerId:', oldId != null ? oldId.toString(16) : '?', '→', playerId.toString(16), '(โดนมอนตีซ้ำ', cnt, 'ครั้ง)');
+          dbg('🔄 AUTO-DETECT playerId:', oldId != null ? oldId.toString(16) : '?', '→', playerId.toString(16), '(โดนมอนตีซ้ำ', cnt, 'ครั้ง)');
           relayRegisterPlayer();
         }
         }
@@ -2239,9 +2259,9 @@
         // guard 2: ★★ เป็น target ปัจจุบัน + ส่ง attack ไปแล้วภายใน 5s (ยังไม่โดน แต่อาจกำลังเดินเข้า)
         const recentAttack = target && target.id === id && target.firstAttackAt && now - target.firstAttackAt < 5000;
         if (recentDamage) {
-          log('🛡️ false despawn guard: มอน', e.name || id.toString(16), 'โดนดาเมจ', (now - e._lastDamageAt) + 'ms ที่แล้ว → ไม่ลบ');
+          dbg('🛡️ false despawn guard: มอน', e.name || id.toString(16), 'โดนดาเมจ', (now - e._lastDamageAt) + 'ms ที่แล้ว → ไม่ลบ');
         } else if (recentAttack) {
-          log('🛡️ false despawn guard: target', e.name || id.toString(16), 'ส่ง attack', (now - target.firstAttackAt) + 'ms ที่แล้ว → ไม่ลบ');
+          dbg('🛡️ false despawn guard: target', e.name || id.toString(16), 'ส่ง attack', (now - target.firstAttackAt) + 'ms ที่แล้ว → ไม่ลบ');
         } else {
           entities.delete(id);
           if (e._isMiniBoss || e._isBoss) { bossAlertedIds.delete(id); log((e._isBoss ? '👑 Boss' : '👹 Mini Boss') + ' ตาย — จะ alert ใหม่เมื่อเกิดใหม่'); }
@@ -3198,7 +3218,7 @@
             const pes = [...entities.values()].filter(e => e.kind === 0 && e.id !== playerId && e.alive
               && ((e.name && e.name.trim()) || e._src === 'beacon'));
             const detail = pes.length > 0 ? pes.slice(0, 5).map(e => (e.name && e.name.trim() ? '' : '•') + `${e.id.toString(16)}@(${e.x},${e.y})`).join(' ') + (pes.length > 5 ? ` +${pes.length - 5} more` : '') + ' (•=beacon)' : '(none)';
-            log('🔍 flee: nearby=' + nearby + ' players=' + pes.length + ' r=' + CFG.fleePlayerRadius + ' [' + detail + ']');
+            dbg('🔍 flee: nearby=' + nearby + ' players=' + pes.length + ' r=' + CFG.fleePlayerRadius + ' [' + detail + ']');
           }
           if (nearby > 0) {
             // ★ แสดงตำแหน่งผู้เล่น (ถ้า nearby=1 แสดงตำแหน่งเดียวกัน)
@@ -3270,7 +3290,7 @@
       if (now - (lastWhereReqAt || 0) > 5000) {
         if (sendWhere()) {
           lastWhereReqAt = now;
-          log('📍 ตำแหน่งยังไม่รู้ → ถาม /where (จะได้พิกัดแม่นยำจาก server)');
+          dbg('📍 ตำแหน่งยังไม่รู้ → ถาม /where (จะได้พิกัดแม่นยำจาก server)');
         }
       }
     }
@@ -4780,6 +4800,7 @@
     },
     resetStats() { resetStats(); log('📊 รีเซ็ตสถิติแล้ว'); },
     getLogs() { return logBuf.slice(); },
+    getDbgLogs() { return dbgBuf.slice(); },
     clearLogs() { logBuf.length = 0; log('🧹 ล้าง log'); },
     getImportantLogs() { return importantLogBuf.slice(); },
     clearImportantLogs() { importantLogBuf.length = 0; log('🧹 ล้าง log สำคัญ'); },
@@ -5690,6 +5711,10 @@
           <div class="btns"><button class="danger" id="__assist_clearalert">ล้าง log สำคัญ</button></div>
         </div>
         <div class="__assist_page" data-page="log">
+          <div class="btns" style="margin-bottom:6px">
+            <button id="__assist_logsrc_act" style="background:#2a4a6a;color:#8cf;border:1px solid #4a7ab5;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer">📋 กิจกรรม</button>
+            <button id="__assist_logsrc_dbg" style="background:#333;color:#aaa;border:1px solid #555;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer">🔍 Debug</button>
+          </div>
           <div class="logbox" id="__assist_logbox"></div>
           <div class="btns"><button id="__assist_copylog">📋 คัดลอก log</button><button id="__assist_clearlog">ล้าง log</button></div>
         </div>
@@ -6244,7 +6269,10 @@
     root.querySelector('#__assist_copylog').addEventListener('click', (e) => {
       // ★ stopPropagation — กัน Unity ตอบสนองต่อ click นี้
       e.stopPropagation(); if (e.stopImmediatePropagation) e.stopImmediatePropagation();
-      const logs = ASSIST.getLogs();
+      // ★ คัดลอกตาม toggle ที่เลือกอยู่ใน logbox (กิจกรรม/Debug)
+      const _box = root.querySelector('#__assist_logbox');
+      const isDbg = _box && _box.dataset.dbg === '1';
+      const logs = isDbg ? ASSIST.getDbgLogs() : ASSIST.getLogs();
       if (!logs.length) { log('⚠️ ไม่มี log ให้คัดลอก'); return; }
       const text = logs.map(l => {
         const d = new Date(l.t);
@@ -6405,6 +6433,7 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
               type: 'feedback',
               message: msg,
               log: attachLog ? logBuf.slice(-500).map(l => ({ t: l.t, m: (l.msg || '').slice(0, 200) })) : null,
+              dbgLog: attachLog ? dbgBuf.slice(-300).map(l => ({ t: l.t, m: (l.msg || '').slice(0, 200) })) : null,
               version: VERSION,
               map: currentMap || '',
               playerName: playerName || '',
@@ -6571,6 +6600,8 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
           <span id="__assist_logview_title" style="font-size:15px;font-weight:700;color:#82b1ff">📋 Log (0)</span>
           <span>
+            <button id="__assist_logview_tab_act" style="background:#2a4a6a;color:#8cf;border:1px solid #4a7ab5;border-radius:6px;padding:5px 12px;font-size:11px;cursor:pointer;margin-right:4px;font-family:inherit">📋 กิจกรรม</button>
+            <button id="__assist_logview_tab_dbg" style="background:#333;color:#aaa;border:1px solid #555;border-radius:6px;padding:5px 12px;font-size:11px;cursor:pointer;margin-right:6px;font-family:inherit">🔍 Debug</button>
             <button id="__assist_logview_copy" style="background:#333;color:#aaa;border:1px solid #555;border-radius:6px;padding:5px 12px;font-size:11px;cursor:pointer;margin-right:6px;font-family:inherit">📋 คัดลอกทั้งหมด</button>
             <button id="__assist_logview_close" style="background:none;border:none;color:#888;font-size:18px;cursor:pointer">✕</button>
           </span>
@@ -6580,16 +6611,32 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
     document.body.appendChild(overlay);
     const content = overlay.querySelector('#__assist_logview_content');
     const titleEl = overlay.querySelector('#__assist_logview_title');
+    // ★★ view ปัจจุบัน: 'act' = log กิจกรรม / 'dbg' = debug log (แยก buffer)
+    let view = 'act';
+    const tabAct = overlay.querySelector('#__assist_logview_tab_act');
+    const tabDbg = overlay.querySelector('#__assist_logview_tab_dbg');
+    function syncTabStyle() {
+      tabAct.style.background = view === 'act' ? '#2a4a6a' : '#333';
+      tabAct.style.color = view === 'act' ? '#8cf' : '#aaa';
+      tabAct.style.borderColor = view === 'act' ? '#4a7ab5' : '#555';
+      tabDbg.style.background = view === 'dbg' ? '#4a2a3a' : '#333';
+      tabDbg.style.color = view === 'dbg' ? '#f9c' : '#aaa';
+      tabDbg.style.borderColor = view === 'dbg' ? '#a55' : '#555';
+    }
+    tabAct.onclick = (e) => { e.stopPropagation(); view = 'act'; syncTabStyle(); renderLogs(); };
+    tabDbg.onclick = (e) => { e.stopPropagation(); view = 'dbg'; syncTabStyle(); renderLogs(); };
 
     // ★★ render log lines → reuse for initial + refresh
     function renderLogs() {
-      content.innerHTML = logBuf.map(l => {
+      const buf = view === 'dbg' ? dbgBuf : logBuf;
+      content.innerHTML = buf.map(l => {
         const d = new Date(l.t);
         const ts = d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0')+':'+d.getSeconds().toString().padStart(2,'0');
-        return `<div style="padding:1px 0;border-bottom:1px solid #1a1a2a;word-break:break-word"><span style="color:#555;font-size:9px">[${ts}]</span> <span style="color:#bbb">${(l.msg || '').replace(/</g,'&lt;')}</span></div>`;
+        return `<div style="padding:1px 0;border-bottom:1px solid #1a1a2a;word-break:break-word"><span style="color:#555;font-size:9px">[${ts}]</span> <span style="color:${view === 'dbg' ? '#c9b' : '#bbb'}">${(l.msg || '').replace(/</g,'&lt;')}</span></div>`;
       }).join('');
-      titleEl.textContent = '📋 Log (' + logBuf.length + ')';
+      titleEl.textContent = (view === 'dbg' ? '🔍 Debug Log (' : '📋 Log (') + buf.length + ')';
     }
+    syncTabStyle();
     renderLogs();
     content.scrollTop = content.scrollHeight;   // เลื่อนไปล่างสุดครั้งแรก
 
@@ -6607,7 +6654,9 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
     overlay.onclick = (e) => { if (e.target === overlay) close(); };
     overlay.querySelector('#__assist_logview_copy').onclick = (e) => {
       e.stopPropagation();
-      const text = logBuf.map(l => {
+      // ★ คัดลอกตาม view ที่กำลังดู (กิจกรรม หรือ Debug)
+      const buf = view === 'dbg' ? dbgBuf : logBuf;
+      const text = buf.map(l => {
         const d = new Date(l.t);
         const ts = d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0')+':'+d.getSeconds().toString().padStart(2,'0');
         return `[${ts}] ${l.msg || ''}`;
@@ -6831,6 +6880,7 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
       alerts: importantLogBuf.slice(-30),
       // ★★ normal log — ส่ง log ล่าสุด 200 รายการ (สำหรับ remote monitor)
       logs: logBuf.slice(-500).map(l => ({ t: l.t, m: (l.msg || '').slice(0, 150) })),
+      dbgLogs: dbgBuf.slice(-200).map(l => ({ t: l.t, m: (l.msg || '').slice(0, 150) })),
       // ★ map entities — สำหรับแสดง dots บนแผนที่ใน remote monitor
       mapEntities: (() => {
         const now = nowMs(); const out = [];
@@ -7410,8 +7460,27 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
     const logPage = root.querySelector('.__assist_page[data-page="log"]');
     if (logPage && logPage.classList.contains('active')) {
       const box = root.querySelector('#__assist_logbox');
+      // ★ toggle แหล่ง log: กิจกรรม (logBuf) / Debug (dbgBuf)
+      const srcAct = root.querySelector('#__assist_logsrc_act');
+      const srcDbg = root.querySelector('#__assist_logsrc_dbg');
+      if (srcAct && !srcAct._wired) {
+        srcAct._wired = true;
+        srcAct.onclick = () => { box.dataset.dbg = ''; delete box.dataset.sig; syncLogSrc(); };
+        srcDbg.onclick = () => { box.dataset.dbg = '1'; delete box.dataset.sig; syncLogSrc(); };
+      }
+      function syncLogSrc() {
+        const isDbg = box.dataset.dbg === '1';
+        srcAct.style.background = isDbg ? '#333' : '#2a4a6a';
+        srcAct.style.color = isDbg ? '#aaa' : '#8cf';
+        srcAct.style.borderColor = isDbg ? '#555' : '#4a7ab5';
+        srcDbg.style.background = isDbg ? '#4a2a3a' : '#333';
+        srcDbg.style.color = isDbg ? '#f9c' : '#aaa';
+        srcDbg.style.borderColor = isDbg ? '#a55' : '#555';
+      }
+      syncLogSrc();
       if (box) {
-        const logs = ASSIST.getLogs();
+        const isDbg = box.dataset.dbg === '1';
+        const logs = isDbg ? ASSIST.getDbgLogs() : ASSIST.getLogs();
         const wasNearBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 30;
         // ★ rebuild เมื่อจำนวนเปลี่ยน OR log ล่าสุดเปลี่ยน (กันค้างตอน buffer เต็ม 200 แล้ว shift)
         const lastT = logs.length ? logs[logs.length - 1].t : 0;
