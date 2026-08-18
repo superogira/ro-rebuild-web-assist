@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.113.0
+// @version      4.114.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,18 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.113.0';
+  const VERSION = '4.114.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.114.0', d: '2026-08-18', items: [
+      '🔴 กันยึ่งของคนอื่น — ฆ่ามอนพร้อมกัน ของเขาตกใกล้ ๆ บอทเคย claim หมด',
+      '   รูรั่วเดิม: "เพิ่งได้ EXP ใน 2s" = claim ทุก drop ไม่สนระยะ',
+      '   → ฆ่ามอนพร้อมคนอื่น = ยิงเก็บของเขา (โดน 0x20 ปฏิเสธ เปล่า ๆ)',
+      '   แก้: EXP window ต้องผูกตำแหน่งแล้ว (ใกล้เรา ≤ pickRadius+3)',
+      '   + ผู้เล่นอื่นยืนใกล้ drop กว่าเราชัดเจน (margin 1 ช่อง) → ไม่ยุ่ง + blacklist 60s',
+      '   ★ ของใกล้พิกัดมอนที่เราฆ่า หรือตกที่ตัวเรา = เก็บได้เลย (ไม่โดนกฎนี้)',
+      '   กันกรณีคน AFK ยืนใกล้จุดฆ่ามอนของนักธนู → ของเราไม่หลุด)',
+    ]},
     { v: '4.113.0', d: '2026-08-18', items: [
       '🔴 ของ drop จากมอนที่คนอื่นตี — บอทยิงเก็บซ้ำเปล่า ๆ 5 ครั้ง',
       '   จาก capture: request 0x52 เหมือนกันเป๊ะทั้งของเรา/ของคนอื่น แต่ของคนอื่น',
@@ -279,7 +288,7 @@
     'healEnabled', 'healAtPercent', 'healItems', 'healMode', 'healDelayMs', 'healAtMax',
     'buffEnabled', 'buffItems', 'buffRebuffDelayMs', 'autoClearConsoleMin', 'monitorServerEnabled', 'monitorServerUrl', 'monitorSendIntervalMs',
     'skillEnabled', 'skills', 'disabledSkillIds',
-    'lootEnabled', 'lootDelayAfterDropMs', 'lootUseKillPos', 'pickRadiusKill', 'filter', 'sendThrottleMs',
+    'lootEnabled', 'lootDelayAfterDropMs', 'lootUseKillPos', 'pickRadiusKill', 'lootRespectOthers', 'filter', 'sendThrottleMs',
     'warpLootEnabled',
     'combatEnabled', 'targetWhitelist', 'targetBlacklist', 'attackRange', 'rangedAttackRange',
     'maxAcquireDistance', 'searchRadii', 'maxChaseDistance', 'antiKS', 'avoidOtherPlayers', 'targetLowestHpFirst',
@@ -545,6 +554,7 @@
     // ---------- AUTO-LOOT ----------
     lootEnabled: true,
     pickRadius: 2,                // ระยะ (ช่อง) จากตัวเรา ที่จะถือว่าของเป็นของเรา
+    lootRespectOthers: true,      // ★★ ผู้เล่นอื่นยืนใกล้ drop กว่าเรา (ชัดเจน) → ไม่ยุ่ง + blacklist 60s
     combatWindowMs: 2500,         // ของตกต้องมาภายในเวลานี้หลังเราตี/ฆ่า
     lootDelayAfterDropMs: 600,      // ★ รอ N ms หลังของตก แล้วค่อยเริ่มเก็บ (0 = เก็บทันที, กันดูเป็นบอท)
     lootUseKillPos: true,         // ★ เช็ค item ใกล้พิกัดมอนที่เราฆ่า (นักธนูฆ่าไกล → ของตกไกล)
@@ -1020,7 +1030,6 @@
     if (now - lastCombatAt > CFG.combatWindowMs) return;
     // ★ เช็คว่า item อยู่ใกล้เราหรือใกล้พิกัดมอนที่เราฆ่า
     const nearPlayer = (player.x != null && dist(player, d) <= CFG.pickRadius);
-    const nearExp = (now - lastExpAt) < 2000;
     // ★ nearKillPos: เช็คว่า item อยู่ใกล้พิกัดมอนที่เราฆ่าล่าสุดหรือไม่ (นักธนูยิงไกล)
     let nearKillPos = false;
     if (CFG.lootUseKillPos) {
@@ -1031,8 +1040,27 @@
         if (Math.hypot(k.x - d.x, k.y - d.y) <= r) { nearKillPos = true; break; }
       }
     }
-    // ★ เก็บถ้า: ใกล้ตัวเรา OR เพิ่งได้ EXP OR ใกล้พิกัดมอนที่เราฆ่า
-    if (!(nearPlayer || nearExp || nearKillPos)) return;
+    // ★★ เก็บได้เลยถ้า: ของใกล้พิกัดมอนที่เราฆ่า (ชัวร์ — ฆ่าเอง) OR ตกที่ตัวเรา (r≤pickRadius)
+    //   (ทั้งสองกรณีไม่ต้องดูใครใกล้กว่า — ของเราแน่ ๆ กันกรณีคน AFK ยืนใกล้จุดฆ่ามอนของเรา)
+    if (!nearKillPos && !nearPlayer) {
+      // ★★ fallback: เพิ่งได้ EXP + ของใกล้เราในรัศมีกว้างขึ้น (เผื่อของ scatter จากมอนเรา)
+      //   เดิม: เพิ่งได้ EXP แล้ว claim ทุก drop ไม่สนระยะ → ฆ่ามอนพร้อมคนอื่น = ยึ่งของเขา!
+      const nearExpWide = (now - lastExpAt) < 2000 && player.x != null && dist(player, d) <= CFG.pickRadius + 3;
+      if (!nearExpWide) return;
+      // ★★ ผู้เล่นคนอื่นยืนใกล้ของนี้กว่าเรา (ชัดเจน margin 1 ช่อง) → ของเขา — ไม่ยุ่ง
+      //   + blacklist 60s กันมาเช็คซ้ำ (drop packet ไม่มี mob id จึงต้องใช้ระยะตัดสิน)
+      if (CFG.lootRespectOthers && player.x != null) {
+        const dMe = Math.hypot(player.x - d.x, player.y - d.y);
+        for (const e of entities.values()) {
+          if (e.kind !== 0 || !e.alive || e.x == null || e.id === playerId) continue;
+          if (!e.name || !e.name.trim()) continue;   // ข้าม minimap dot (name='') — กันผี
+          if (Math.hypot(e.x - d.x, e.y - d.y) + 1 < dMe) {
+            dropBlacklist.set(d.dropId, Date.now() + 60000);
+            return;
+          }
+        }
+      }
+    }
     if (!shouldLoot(d.itemId)) {
       log('⛔ ข้าม', nameOf(d.itemId), '(ตัวกรอง mode=' + CFG.filter.mode + ') drop', d.dropId);
       return;
