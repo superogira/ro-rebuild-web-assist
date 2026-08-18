@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.129.0
+// @version      4.129.1
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,16 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.129.0';
+  const VERSION = '4.129.1';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.129.1', d: '2026-08-18', items: [
+      '⚠️ ช่อง username/password ใน sub-tab Auto → disabled + hint',
+      '   (การพิมพ์รหัสเองยังใช้ไม่ได้ — Unity ไม่รับ synthetic text จะแก้ภายหลัง)',
+      '   ระบบใช้ "รหัสที่เกมจำไว้ + Enter + เลือกตัวละครอัตโนมัติ" เต็มรูปแบบแทน —',
+      '   ผู้ใช้ล็อกอินผ่านหน้าเกมเอง 1 ครั้งให้เกมจำรหัส แล้วปล่อยให้ระบบทำงานตลอด',
+      '🧹 ถอนโค้ดพิมพ์ user/pass เอง (ขั้น fallback ที่ไม่ work) — เหลือกด Enter เท่านั้น',
+    ]},
     { v: '4.129.0', d: '2026-08-18', items: [
       '🎯 CHAR-SELECT NUDGE — แก้ค้างหน้าเลือกตัวละคร (จากทดสอบจริง)',
       '   ข้อค้นพบ: WS เปิด = เกมกด login แล้วเสมอ → ห้ามส่ง 0x08 ซ้ำ (server เมิง)',
@@ -5875,8 +5882,12 @@
           <div class="__assist_subpage" data-sub="auto">
             <h4>🤖 Auto-Login — ล็อกอิน + เลือกตัวละครเองเมื่อเข้าเกม</h4>
             <div class="btns"><button id="__assist_autologinbtn" class="off">Auto-Login: ?</button></div>
-            <div class="field"><label>Username</label><input type="text" id="__assist_aluser" placeholder="username" autocomplete="off"></div>
-            <div class="field"><label>Password</label><input type="password" id="__assist_alpass" placeholder="password" autocomplete="new-password"></div>
+            <div style="font-size:10px;color:#9aa0a6;margin:6px 0;line-height:1.6;background:#23262e;border-radius:6px;padding:8px;">
+              ⚠️ <b style="color:#e8a13a">การกรอก username/password เองยังใช้ไม่ได้</b> (Unity ไม่รับ synthetic text — จะแก้ไขภายหลัง)<br>
+              ✅ ระบบใช้ <b>"รหัสที่เกมจำไว้ + กด Enter"</b> แทน — โปรดล็อกอินผ่านหน้าเกมด้วยตัวเอง 1 ครั้งให้เกมจำรหัสไว้ จากนั้น auto-login จะทำงานครบวงจร (คลิก splash → Enter → เลือกตัวละคร → เข้าเกม)
+            </div>
+            <div class="field" style="opacity:.45"><label>Username (ยังใช้ไม่ได้ — รอแก้ไข)</label><input type="text" id="__assist_aluser" placeholder="ยังไม่รองรับการกรอกเอง" autocomplete="off" disabled></div>
+            <div class="field" style="opacity:.45"><label>Password (ยังใช้ไม่ได้ — รอแก้ไข)</label><input type="password" id="__assist_alpass" placeholder="ยังไม่รองรับการกรอกเอง" autocomplete="new-password" disabled></div>
             <div class="field"><label>Character slot (เริ่มนับ 0 — ตัวแรก = 0)</label><input type="number" id="__assist_alslot" min="0" max="9" step="1"></div>
             <div class="btns"><button id="__assist_applyauto">💾 ใช้ค่า auto-login</button></div>
             <div style="font-size:10px;color:#e8a13a;margin-top:6px;">⚠️ username/password จะถูกเก็บใน localStorage ของเบราว์เซอร์ (รอดจาก refresh) — ห้ามใช้ในเครื่องส่วนรวม และค่าเหล่านี้จะไม่ถูกส่งไป monitor/feedback เด็ดขาด</div>
@@ -6308,12 +6319,10 @@
     const _ars = root.querySelector('#__assist_arstall');
     if (_ars) _ars.value = CFG.autoRefreshStallSec || 180;
     root.querySelector('#__assist_applyauto')?.addEventListener('click', () => {
-      const u = _alu ? _alu.value.trim() : '', p = _alp ? _alp.value : '', s = _als ? parseInt(_als.value, 10) : 0;
-      if (u) CFG.autoLoginUser = u;
-      if (p) CFG.autoLoginPass = p;   // ช่องว่าง = ไม่เปลี่ยนรหัสเดิม
+      const s = _als ? parseInt(_als.value, 10) : 0;
       if (!isNaN(s) && s >= 0) CFG.autoLoginSlot = s;
       saveConfigDebounced();
-      log('🤖 บันทึก auto-login: user=' + CFG.autoLoginUser + ' slot=' + CFG.autoLoginSlot + (CFG.autoLoginPass ? ' (มีรหัส)' : ' (ยังไม่มีรหัส!)'));
+      log('🤖 บันทึก auto-login: slot=' + CFG.autoLoginSlot + ' (โหมดใช้รหัสที่เกมจำไว้ — ช่อง user/pass ยังใช้ไม่ได้ รอแก้ไข)');
     });
     root.querySelector('#__assist_applyrefresh')?.addEventListener('click', () => {
       const sec = _ars ? parseInt(_ars.value, 10) : NaN;
@@ -6589,7 +6598,7 @@
 
     log('🖥️ แสดง panel แล้ว (คลิกที่แถบมุมขวาบนเพื่อเปิด)');
     // ★★ สรุปสถานะ auto-login/refresh ตอนสตาร์ท — ให้เห็นชัดว่า config โหลดครบไหม
-    const _alSum = 'Auto-Login: ' + (CFG.autoLoginEnabled ? 'เปิด (user: ' + CFG.autoLoginUser + ', slot: ' + CFG.autoLoginSlot + (CFG.autoLoginPass ? '' : ' ⚠️ยังไม่มี password!') + ')' : 'ปิด')
+    const _alSum = 'Auto-Login: ' + (CFG.autoLoginEnabled ? 'เปิด (โหมด: รหัสที่เกมจำไว้ + Enter + เลือกตัวละครอัตโนมัติ)' : 'ปิด')
       + ' | Auto-Refresh: ' + (CFG.autoRefreshEnabled ? 'เปิด (' + CFG.autoRefreshStallSec + 's)' : 'ปิด');
     log('🤖', _alSum);
     console.log('[ASSIST] 🤖 ' + _alSum);
@@ -6642,21 +6651,13 @@
       }, 8000);
       setTimeout(() => clearInterval(splashTimer), 310000);   // หมดเวลาใน ~5 นาที
     }
-    // ★★★ KEYBOARD auto-login — 2 โหมด (จากการทดสอบจริง):
-    //   ★ เกมมีระบบจำ user/pass เอง! → แค่ "กด Enter" ที่หน้า login ก็เข้า (โหมดหลัก)
-    //   ★ fallback: พิมพ์ user → Tab → pass → Enter เอง (เคสเบราว์เซอร์ใหม่ที่เกมยังไม่จำ)
-    //   (จากทดสอบ: synthetic keydown ตัวอักษรไม่เข้า InputField ของ Unity แต่ Enter ทำงาน!)
-    if (CFG.autoLoginEnabled && CFG.autoLoginUser && CFG.autoLoginPass) {
+    // ★★★ KEYBOARD auto-login (พิสูจน์จากการใช้งานจริง): เกมมีระบบจำ user/pass เอง
+    //   → แค่ "กด Enter" ที่หน้า login ก็เข้าได้เลย
+    //   ⚠️ การ "พิมพ์" user/password เองยังใช้ไม่ได้ (Unity InputField ไม่รับ synthetic
+    //   text input) — จะแก้ในเวอร์ชั่นถัดไป ตอนนี้ผู้ใช้ต้องล็อกอินผ่านหน้าเกมเอง
+    //   1 ครั้ง (ให้เกมจำรหัสไว้) แล้ว auto-login จะทำงานครบวงจรหลังจากนั้น
+    if (CFG.autoLoginEnabled) {
       const kbSleep = (ms) => new Promise(r => setTimeout(r, ms));
-      const kbKey = async (target, key, code) => {
-        try {
-          target.dispatchEvent(new KeyboardEvent('keydown', { key, code, bubbles: true, cancelable: true }));
-          await kbSleep(45);
-          target.dispatchEvent(new KeyboardEvent('keyup', { key, code, bubbles: true, cancelable: true }));
-          await kbSleep(45);
-        } catch (e) {}
-      };
-      const kbTypeStr = async (target, s) => { for (const c of s) { await kbKey(target, c, 'Key' + c.toUpperCase()); } };
       let kbTries = 0;
       const kbTimer = setInterval(async () => {
         const wsOpen = activeWS && activeWS.readyState === 1;
@@ -6664,21 +6665,12 @@
         kbTries++;
         try {
           const cv = document.querySelector('canvas') || document.body;
-          // ★ ขั้น 1: กด Enter — ใช้รหัสที่เกมจำไว้ (เร็วและได้ผลที่สุดจากทดสอบจริง)
           log('⌨️ [auto-login] กด Enter ที่หน้า login (ใช้รหัสที่เกมจำไว้) ครั้ง', kbTries + '/8');
-          await kbKey(cv, 'Enter', 'Enter');
-          await kbSleep(5000);   // รอ 5s — ถ้าสำเร็จ WS จะเปิด
-          const wsOpen2 = activeWS && activeWS.readyState === 1;
-          if (wsOpen2 || playerId != null) { clearInterval(kbTimer); return; }
-          // ★ ขั้น 2 (fallback): เกมไม่จำรหัส → ลองพิมพ์เอง user → Tab → pass → Enter
-          log('⌨️ [auto-login] Enter ไม่พอ → ลองพิมพ์ user/pass เอง (เคสเกมยังไม่จำรหัส)');
-          await kbTypeStr(cv, CFG.autoLoginUser);
-          await kbKey(cv, 'Tab', 'Tab');
-          await kbTypeStr(cv, CFG.autoLoginPass);
-          await kbSleep(250);
-          await kbKey(cv, 'Enter', 'Enter');
+          cv.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true }));
+          await kbSleep(45);
+          cv.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true }));
         } catch (e) {}
-        // หลัง Enter ถ้าสำเร็จ WS จะเปิดภายใน 2-3s → รอบตรวจถัดไปจะเห็นและหยุดเอง
+        // ถ้าสำเร็จ WS จะเปิดภายใน 2-3s → รอบตรวจถัดไปจะเห็นและหยุดเอง
       }, 20000);
     }
   }
