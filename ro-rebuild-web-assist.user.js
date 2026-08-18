@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.127.2
+// @version      4.127.3
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,15 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.127.2';
+  const VERSION = '4.127.3';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.127.3', d: '2026-08-18', items: [
+      '⏳ ระหว่างรอเกมโหลด: log สถานะทุก ~30s (รอแล้วกี่วิ คลิกกี่ครั้ง)',
+      '🔄 ถ้าไม่มี WS ใน 3 นาที = โหลดพัง → refresh แล้วเริ่มใหม่เอง',
+      '   (สูงสุด 3 รอบต่อเนื่อง กันวนไม่จบ — counter เคลียร์เมื่อโหลดสำเร็จ)',
+      '   + alert Telegram ทุกครั้งที่ refresh แก้เกมพัง',
+    ]},
     { v: '4.127.2', d: '2026-08-18', items: [
       '🖱️ splash click ยืดเวลา: ทุก 8s นานสุด ~5 นาที (เดิม 4 ครั้ง/28s ไม่พอ —',
       '   ทดสอบจริง Unity เพิ่งเริ่มโหลดตอน 21s และใช้เวลาโหลดต่ออีกนาน)',
@@ -6542,10 +6548,34 @@
     //   หยุดทันทีเมื่อ WS ต่อ (ตอนนั้นถึงจะมีหน้า login ของเกมก็ไม่คลิกแทนแน่นอน)
     if (CFG.autoLoginEnabled) {
       let _splashClicks = 0;
+      let _splashStartedAt = Date.now();
       const splashTimer = setInterval(() => {
         const wsOpen = activeWS && activeWS.readyState === 1;
-        if (wsOpen || playerId != null || autoLoginPhase === 'failed' || _splashClicks >= 36) { clearInterval(splashTimer); return; }
+        if (wsOpen || playerId != null || autoLoginPhase === 'failed') {
+          clearInterval(splashTimer);
+          if (wsOpen) { try { sessionStorage.removeItem('roAssistAlRetry'); } catch (_) {} }   // โหลดสำเร็จ → ลบ retry counter
+          return;
+        }
         _splashClicks++;
+        // ★ ทุก ~30s บอกสถานะ — ให้รู้ว่ายังรอเกมโหลดอยู่ (ไม่ใช่ตายเงียบ)
+        if (_splashClicks % 4 === 0) {
+          const waited = Math.round((Date.now() - _splashStartedAt) / 1000);
+          log('⏳ [auto-login] รอเกมโหลด... ' + waited + 's แล้ว ยังไม่มี WS (คลิกแล้ว ' + _splashClicks + ' ครั้ง)');
+        }
+        // ★ โหลดพังจริง — ไม่มี WS ใน 3 นาที → refresh แล้วเริ่มใหม่ (สูงสุด 3 รอบ กันวนไม่จบ)
+        if (Date.now() - _splashStartedAt > 180000) {
+          clearInterval(splashTimer);
+          let retry = 0;
+          try { retry = parseInt(sessionStorage.getItem('roAssistAlRetry') || '0', 10) || 0; } catch (_) {}
+          if (retry >= 3) {
+            log('⚠️ [auto-login] เกมไม่ต่อ WS หลัง refresh แล้ว ' + retry + ' รอบ — หยุด (โหลดเองไม่ได้ ลองปิด-เปิดเบราว์เซอร์)');
+            return;
+          }
+          try { sessionStorage.setItem('roAssistAlRetry', String(retry + 1)); } catch (_) {}
+          logImportant('flee', '🔄 [auto-login] เกมไม่ต่อ WS ใน 3 นาที → refresh รอบที่ ' + (retry + 1) + '/3');
+          setTimeout(() => location.reload(), 1500);
+          return;
+        }
         try {
           const cv = document.querySelector('canvas') || document.body;
           const r = cv.getBoundingClientRect ? cv.getBoundingClientRect() : { left: 0, top: 0, width: innerWidth, height: innerHeight };
