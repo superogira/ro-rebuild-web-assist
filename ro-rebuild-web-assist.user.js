@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.116.0
+// @version      4.117.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,15 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.116.0';
+  const VERSION = '4.117.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.117.0', d: '2026-08-18', items: [
+      '🧊 ดีเลย์ก่อนนั่งพักหลังเก็บของเสร็จ (default 1000ms) — กันดูเป็นบอท',
+      '   เดิม: เก็บของชิ้นสุดท้ายเสร็จ → นั่งทันทีใน tick ถัดไป = ไวผิดธรรมชาติ',
+      '   ตั้งได้ใน sub-tab Rest: "ดีเลย์ก่อนนั่ง (ms)" + ASSIST.setRestDelay(ms)',
+      '🎨 Rest inputs แสดงค่าปัจจุบันแล้ว (เดิมช่องว่างตลอด ต้องพิมพ์ใหม่ทุกครั้ง)',
+    ]},
     { v: '4.116.0', d: '2026-08-18', items: [
       '🔴 นั่งพักแล้ว ยังยิงเก็บของตอนนั่ง จนต้องวาร์ปไปเก็บ — การนั่งพัง',
       '   ลำดับเดิม: ฆ่าได้ → นั่งทันที (HP ต่ำ) ทั้งที่ drop ยังอยู่ในคิว',
@@ -311,7 +317,7 @@
     'maxAcquireDistance', 'searchRadii', 'maxChaseDistance', 'antiKS', 'avoidOtherPlayers', 'targetLowestHpFirst',
     'fleeOnMobCount', 'fleeOnAggroCount', 'fleeOnProximityCount', 'fleeOnProximityRadius', 'fleeMonsters', 'fleeMonsterRadius', 'maxEngageSec', 'maxEngageSecSlow', 'slowMonsterSubIds',
     'wanderEnabled', 'warpFindEnabled', 'warpToMonster', 'stuckWarpOnAbandon', 'stepAsideOnAbandon', 'warpToBoss', 'warpToMiniBoss', 'bossAlertRadius', 'noMonsterWarpSec',
-    'restEnabled', 'restHpPercent', 'restUntilPercent', 'restMaxSec', 'postCombatDelayMs', 'autoRespawnEnabled', 'autoRespawnDelayMs', 'telegramAlertCard', 'telegramAlertFlee', 'telegramAlertBotMention', 'telegramAlertNearby', 'telegramAlertWhisper', 'telegramBotToken', 'telegramChatId',
+    'restEnabled', 'restHpPercent', 'restUntilPercent', 'restMaxSec', 'restDelayMs', 'postCombatDelayMs', 'autoRespawnEnabled', 'autoRespawnDelayMs', 'telegramAlertCard', 'telegramAlertFlee', 'telegramAlertBotMention', 'telegramAlertNearby', 'telegramAlertWhisper', 'telegramBotToken', 'telegramChatId',
     'sellEnabled', 'sellNpcName', 'sellNpcMap', 'sellNpcX', 'sellNpcY', 'sellIntervalMin', 'sellOnFull', 'sellItemIds',
     'storageEnabled', 'kafraName', 'kafraMap', 'kafraMapX', 'kafraMapY', 'kafraChoice', 'depositOnFull', 'depositAfterSell', 'depositItemIds',
     'farmMap', 'farmMapX', 'farmMapY', 'warpBackToFarm', 'fleeFromPlayers', 'fleeMode', 'fleeMaps', 'fleePlayerRadius', 'fleeWarpCooldownSec',
@@ -512,6 +518,7 @@
     restHpPercent: 40,            // HP ต่ำกว่า 30% → นั่งพัก
     restUntilPercent: 90,         // ฟื้นถึง 90% → ลุก
     restMaxSec: 40,               // นั่งนานสุด 60 วิ (กันค้าง — HP ไม่ขยับ = มีปัญหา)
+    restDelayMs: 1000,            // ★ ดีเลย์ก่อนนั่งพักหลังเก็บของเสร็จ — กันดูเป็นบอท (นั่งทันที = ไม่ธรรมชาติ)
 
     // ---------- AUTO-RESPAWN ----------
     //  ตาย (0x24 DEATH) → ส่ง respawn packet (0x29) → กลับจุด save
@@ -948,6 +955,7 @@
   //   → เลิกลองทันที + blacklist ชั่วคราว กัน tryClaim ซ้ำวนลูป
   let lastPickupDropId = null;         // dropId ที่เพิ่งส่ง 0x52 ล่าสุด (map เข้ากับ 0x20 ที่ตามมา)
   const dropBlacklist = new Map();     // dropId -> expireAt (60s — ของคนอื่น ไม่ต้องลองซ้ำ)
+  let lastLootActivityAt = 0;          // ★ เวลาเก็บของสำเร็จล่าสุด — ใช้ดีเลย์ก่อนนั่งพัก (กันดูเป็นบอท)
   // ★ recent kill positions — จดพิกัดมอนที่เราฆ่า เพื่อเช็ค item drop ใกล้หรือไม่
   //   สำคัญสำหรับนักธนู: ยิงมอนตายไกล → ของตกที่พิกัดมอน ไม่ใช่ที่ตัวเรา
   const recentKillPos = [];            // [{x, y, t}] — ล่าสุด 20 ตำแหน่ง, TTL 15 วินาที
@@ -1211,6 +1219,7 @@
           stats.sessionGold += price;
         }
         log('✅ เก็บได้', nameOf(itemId), 'drop', dropId);
+        lastLootActivityAt = Date.now();   // ★ จำเวลาไว้ — นั่งพักได้หลังดีเลย์ restDelayMs
         if (lastPickupDropId === dropId) lastPickupDropId = null;   // ★ สำเร็จแล้ว — เลิก map รอ 0x20
         // ★ Card detection — เก็บการ์ดได้ → log สำคัญ
         const itemName = itemDisplayName(itemId);
@@ -3238,7 +3247,10 @@
       // ★ pct=0 = tracking ผิด (ไม่ตายจริง) → ไม่นั่งพัก (รอ STAT แก้)
       // ★★ มีของรอเก็บ → ยังไม่นั่ง! เก็บให้เสร็จก่อน (ยืนเก็บได้/ไม่ต้องวาร์ปไปเก็บตอนนั่ง)
       //   (บั๊กเดิม: นั่งก่อน → loot loop ยิงเก็บตอนนั่ง fail รัว → วาร์ปไปเก็บ → การนั่งพัง)
-      if (!isResting && pct < CFG.restHpPercent && mobCount === 0 && queue.size === 0 && warpQueue.size === 0) {
+      //   + พักหลังเก็บของเสร็จอย่างน้อย restDelayMs — เก็บเสร็จแล้วนั่งทันที = ดูเป็นบอท
+      if (!isResting && pct < CFG.restHpPercent && mobCount === 0
+          && queue.size === 0 && warpQueue.size === 0
+          && now - lastLootActivityAt >= CFG.restDelayMs) {
         // เริ่มนั่งพัก
         if (sendSit()) {
           isResting = true;
@@ -4323,6 +4335,7 @@
     setRestHp(pct) { CFG.restHpPercent = pct; log('🪑 นั่งพักตอน HP <', pct + '%'); },
     setRestUntil(pct) { CFG.restUntilPercent = pct; log('🪑 ลุกยืนตอน HP ≥', pct + '%'); },
     setRestMaxSec(sec) { CFG.restMaxSec = sec; log('🪑 นั่งนานสุด', sec + 's'); },
+    setRestDelay(ms) { CFG.restDelayMs = Math.max(0, ms); saveConfigDebounced(); log('🪑 ดีเลย์ก่อนนั่ง:', CFG.restDelayMs + 'ms'); },
     isResting() { return isResting; },
 
     // ---------- Auto-Sell ----------
@@ -5444,6 +5457,7 @@
             <div class="field"><label>HP% ที่จะนั่งพัก (ต่ำกว่านี้ → นั่ง)</label><input type="number" id="__assist_resthp" min="1" max="99"></div>
             <div class="field"><label>HP% ที่จะลุกยืน (ฟื้นถึงนี้ → ลุก)</label><input type="number" id="__assist_restuntil" min="1" max="100"></div>
             <div class="field"><label>นั่งนานสุด (วินาที) — กันค้าง</label><input type="number" id="__assist_restmaxsec" min="5" max="300"></div>
+            <div class="field"><label>ดีเลย์ก่อนนั่ง (ms) — หลังเก็บของเสร็จ รอก่อนค่อยนั่ง (กันดูเป็นบอท)</label><input type="number" id="__assist_restdelay" min="0" max="10000" step="100"></div>
             <div class="btns"><button id="__assist_applyrest">ใช้ค่า rest</button></div>
             <h4>💀 Auto-Respawn (เกิดใหม่อัตโนมัติเมื่อตาย)</h4>
             <div class="btns"><button id="__assist_respawnbtn" class="on">Respawn: ?</button></div>
@@ -5900,10 +5914,19 @@
       const hp = parseInt(root.querySelector('#__assist_resthp').value, 10);
       const until = parseInt(root.querySelector('#__assist_restuntil').value, 10);
       const sec = parseInt(root.querySelector('#__assist_restmaxsec').value, 10);
+      const delay = parseInt(root.querySelector('#__assist_restdelay').value, 10);
       if (!isNaN(hp)) ASSIST.setRestHp(hp);
       if (!isNaN(until)) ASSIST.setRestUntil(until);
       if (!isNaN(sec)) ASSIST.setRestMaxSec(sec);
+      if (!isNaN(delay) && delay >= 0) ASSIST.setRestDelay(delay);
     });
+    // ★ populate rest inputs ครั้งเดียวตอนเริ่ม (เดิมไม่เคย fill — ช่องว่างตลอด)
+    const _rhp = root.querySelector('#__assist_resthp'), _run2 = root.querySelector('#__assist_restuntil');
+    const _rms = root.querySelector('#__assist_restmaxsec'), _rdl = root.querySelector('#__assist_restdelay');
+    if (_rhp) _rhp.value = CFG.restHpPercent;
+    if (_run2) _run2.value = CFG.restUntilPercent;
+    if (_rms) _rms.value = CFG.restMaxSec;
+    if (_rdl) _rdl.value = CFG.restDelayMs;
     // ---- sell wires ----
     root.querySelector('#__assist_sellbtn').addEventListener('click', () => CFG.sellEnabled ? ASSIST.sellOff() : ASSIST.sellOn());
     root.querySelector('#__assist_sellnow').addEventListener('click', () => ASSIST.sellNow());
