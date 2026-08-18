@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.127.3
+// @version      4.128.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,18 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.127.3';
+  const VERSION = '4.128.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.128.0', d: '2026-08-18', items: [
+      '⌨️★★ KEYBOARD auto-login: พิมพ์ user/pass ลงฟอร์มเกมเองผ่าน synthetic keyboard!',
+      '   ข้อค้นพบ: เกมเปิด WS ตอนกดปุ่ม Login เท่านั้น (ไม่ใช่ตอนโหลดเสร็จ)',
+      '   → รอ WS เองไม่มีวี่วัน ต้องกรอกฟอร์มให้เกม: พิมพ์ user → Tab → pass → Enter',
+      '   ลองทุก 22s สูงสุด 8 ครั้ง (หยุดทันทีเมื่อ WS เปิด = login สำเร็จ)',
+      '🤖 ปรับ flow หลัง WS ต่อ: ดู 9s ก่อนว่าเกมล็อกอินเอง (session เดิม) →',
+      '   ไม่มีค่อยส่ง 0x08 เอง + ถ้าเกมส่ง SELECT_CHAR เอง (0x03 OUT) เราไม่แทรก',
+      '   + IN 0x00 → รอ 2.5s ให้เกมเลือกตัวเองก่อน แล้วค่อยส่ง packet แทน',
+    ]},
     { v: '4.127.3', d: '2026-08-18', items: [
       '⏳ ระหว่างรอเกมโหลด: log สถานะทุก ~30s (รอแล้วกี่วิ คลิกกี่ครั้ง)',
       '🔄 ถ้าไม่มี WS ใน 3 นาที = โหลดพัง → refresh แล้วเริ่มใหม่เอง',
@@ -1302,24 +1311,24 @@
     }
     const op = u[0];
 
-    // 0x00 LOGIN_RESULT: [00][02 00 00 00][type:2][token:22]... — เฉพาะตอนรอ auto-login
-    //   (ปกติเกม client จัดการเอง — เราดักตอบเฉพาะกรณีเราเป็นคนส่ง login เท่านั้น)
+    // 0x00 LOGIN_RESULT: [00][02 00 00 00][type:2][token:22]... — เกมเองหรือเราส่งก็ได้
     //   ★ token 22 bytes (ยืนยันจาก capture: echo กลับ 24 bytes = type 2 + token 22)
-    if (op === 0x00 && autoLoginPhase === 'loginSent' && u.length >= 29) {
+    //   เราจะส่ง SELECT_CHAR เองถ้า 2.5s เกมไม่เลือกตัวละครเอง (ดู handleOut — ถ้าเกมส่งเองเราจะยกเลิก)
+    if (op === 0x00 && (autoLoginPhase === 'loginSent' || autoLoginPhase === 'observing') && u.length >= 29) {
       if (u[1] === 0x02) {
         autoLoginToken = u.slice(5, 29);   // [type:2][token:22] — echo กลับไปกับ SELECT_CHAR
         autoLoginPhase = 'acctOk';
-        log('🤖 [auto-login] login สำเร็จ → เลือกตัวละคร slot', CFG.autoLoginSlot, 'ใน 1.5s');
-        console.log('[ASSIST] 🤖 auto-login: login สำเร็จ → เลือกตัวละครใน 1.5s');
+        log('🤖 [auto-login] login ผ่าน (ได้ token) → เลือกตัวละคร slot', CFG.autoLoginSlot, 'ใน 2.5s (ถ้าเกมไม่เลือกเอง)');
+        console.log('[ASSIST] 🤖 auto-login: login ผ่าน → เลือกตัวละครใน 2.5s');
         setTimeout(() => {
           if (autoLoginPhase === 'acctOk' && activeWS && activeWS.readyState === 1) {
             if (sendSelectCharPacket(autoLoginToken, CFG.autoLoginSlot)) {
               autoLoginPhase = 'charSent';
-              log('🤖 [auto-login] ส่งเลือกตัวละครแล้ว — รอเข้าเกม...');
+              log('🤖 [auto-login] ส่งเลือกตัวละครแล้ว (packet) — รอเข้าเกม...');
             }
           }
-        }, 1500);
-      } else {
+        }, 2500);
+      } else if (autoLoginPhase === 'loginSent') {
         autoLoginPhase = 'failed';
         const hexHead = Array.from(u.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join(' ');
         log('⚠️ [auto-login] login ไม่สำเร็จ (head: ' + hexHead + ') — เช็ค username/password (หยุดลองรอบนี้)');
@@ -1517,7 +1526,7 @@
     else if (op === 0x03 && u.length >= 7) {
       const eid = u32(u, 1);
       // ★ auto-login: SELECT_CHAR ตอบกลับ = เข้าเกมสำเร็จ
-      if (autoLoginPhase === 'charSent') {
+      if (autoLoginPhase === 'charSent' || autoLoginPhase === 'clientSelect') {
         autoLoginPhase = 'done';
         log('🤖 [auto-login] เข้าเกมสำเร็จ! (slot', CFG.autoLoginSlot + ') — ระบบทำงานต่ออัตโนมัติ');
         console.log('[ASSIST] 🤖 auto-login: เข้าเกมสำเร็จ! ✅');
@@ -2384,6 +2393,12 @@
   function handleOut(u) {
     if (!u.length) return;
     if (u[0] === 0x0b) markCombat();
+    // ★★ auto-login: เกม client ส่ง SELECT_CHAR (0x03) เอง (session เดิม/พิมพ์ผ่านคีย์บอร์ดจำลอง)
+    //   → เลิกแผนที่เราจะส่งเอง (กันส่งซ้ำซ้อน server อาจงง)
+    if (u[0] === 0x03 && autoLoginPhase === 'acctOk') {
+      autoLoginPhase = 'clientSelect';
+      log('🤖 [auto-login] เกม client เลือกตัวละครเองแล้ว — ไม่แทรก (รอเข้าเกม)');
+    }
     // ★ ดัก click-move (0x07) ของผู้เล่น → บันทึก trail (ถ้า navRecording=on)
     //   บอทสั่งเอง (sendMove) จะตั้ง navBotMoving=true ก่อน → ข้ามไม่บันทึก
     if (u[0] === 0x07 && u.length >= 5) {
@@ -4382,23 +4397,23 @@
     }
     activeWS = ws; log('🔌 ต่อ WebSocket แล้ว');
     try { gameServerUrl = ws.url || ''; } catch (_) {}   // ★ เก็บ URL เซิร์ฟเวอร์เกม
-    // ★★ AUTO-LOGIN: WS ต่อเกมใหม่ + เปิดใช้งาน + ยังไม่ได้ล็อกอิน → ส่ง login เอง (delay สุ่ม กันดูเป็นบอท)
+    // ★★ AUTO-LOGIN: WS ต่อแล้ว — ดู 9s ก่อนว่าเกม client ล็อกอินเองไหม
+    //   (เกมเปิด WS ตอนกดปุ่ม Login เท่านั้น! ถ้า WS มาแล้ว = มีคน/session ล็อกอินอยู่)
+    //   ถ้า 9s ไม่มีอะไรค่อยส่ง 0x08 เอง (เคส client ติดหน้าจอ แต่ WS ต่ออยู่)
     if (CFG.autoLoginEnabled && CFG.autoLoginUser && CFG.autoLoginPass
         && (autoLoginPhase === 'idle' || autoLoginPhase === 'done')
         && Date.now() - autoLoginAttemptAt > 30000) {
       autoLoginAttemptAt = Date.now();
-      const delay = 1500 + Math.random() * 2000;
-      log('🤖 [auto-login] เตรียมล็อกอินอัตโนมัติในอีก ' + (delay / 1000).toFixed(1) + 's (user: ' + CFG.autoLoginUser + ')');
-      console.log('[ASSIST] 🤖 auto-login: จะส่งในอีก ' + (delay / 1000).toFixed(1) + 's');
-      autoLoginPhase = 'waitingLogin';
+      autoLoginPhase = 'observing';
+      log('🤖 [auto-login] WS ต่อแล้ว — ดู 9s ว่าเกมล็อกอินเอง (session เดิม)...');
       setTimeout(() => {
-        if (autoLoginPhase === 'waitingLogin' && activeWS && activeWS.readyState === 1) {
+        if (autoLoginPhase === 'observing' && activeWS && activeWS.readyState === 1 && playerId == null) {
           if (sendLoginPacket(CFG.autoLoginUser, CFG.autoLoginPass)) {
             autoLoginPhase = 'loginSent';
-            log('🤖 [auto-login] ส่งข้อมูลล็อกอินแล้ว — รอคำตอบจาก server...');
+            log('🤖 [auto-login] เกมไม่ขยับ → ส่ง login เองผ่าน packet...');
           } else { autoLoginPhase = 'failed'; }
         }
-      }, delay);
+      }, 9000);
     }
     const origSend = ws.send.bind(ws);
     ws.send = function (data) {
@@ -6590,6 +6605,40 @@
         } catch (e) { clearInterval(splashTimer); }
       }, 8000);
       setTimeout(() => clearInterval(splashTimer), 310000);   // หมดเวลาใน ~5 นาที
+    }
+    // ★★★ KEYBOARD auto-login: พิมพ์ user/pass ลงฟอร์มของเกมเอง!
+    //   ข้อค้นพบสำคัญ: เกมเปิด WS ตอนกดปุ่ม Login เท่านั้น (ไม่ใช่ตอนโหลดเสร็จ)
+    //   → ต้องกรอกฟอร์มให้เกม → เกมกด login เอง → เปิด WS เอง → ระบบไหลต่อ
+    //   Unity WebGL รับ DOM keyboard events (เหมือน pointer ที่พิสูจน์แล้ว)
+    //   สมมติ: หน้า login ฟอร์ม username ถูก focus อัตโนมัติ → พิมพ์ user → Tab → พิมพ์ pass → Enter
+    if (CFG.autoLoginEnabled && CFG.autoLoginUser && CFG.autoLoginPass) {
+      const kbSleep = (ms) => new Promise(r => setTimeout(r, ms));
+      const kbKey = async (target, key, code) => {
+        try {
+          target.dispatchEvent(new KeyboardEvent('keydown', { key, code, bubbles: true, cancelable: true }));
+          await kbSleep(45);
+          target.dispatchEvent(new KeyboardEvent('keyup', { key, code, bubbles: true, cancelable: true }));
+          await kbSleep(45);
+        } catch (e) {}
+      };
+      const kbTypeStr = async (target, s) => { for (const c of s) { await kbKey(target, c, 'Key' + c.toUpperCase()); } };
+      let kbTries = 0;
+      const kbTimer = setInterval(async () => {
+        const wsOpen = activeWS && activeWS.readyState === 1;
+        if (wsOpen || playerId != null || autoLoginPhase === 'failed' || kbTries >= 8) { clearInterval(kbTimer); return; }
+        kbTries++;
+        log('⌨️ [auto-login] ลองพิมพ์ user/pass ลงฟอร์มเกม (ครั้ง', kbTries + '/8)');
+        try {
+          const cv = document.querySelector('canvas') || document.body;
+          await kbTypeStr(cv, CFG.autoLoginUser);
+          await kbKey(cv, 'Tab', 'Tab');          // ข้ามไปช่อง password
+          await kbTypeStr(cv, CFG.autoLoginPass);
+          await kbSleep(250);
+          await kbKey(cv, 'Enter', 'Enter');      // กด login!
+        } catch (e) {}
+        // หลัง Enter ถ้าสำเร็จ WS จะเปิดภายใน 2-3s → รอบตรวจถัดไปจะเห็นและหยุดเอง
+      }, 22000);
+      setTimeout(() => { /* เริ่มครั้งแรกผ่าน interval เอง */ }, 0);
     }
   }
 
