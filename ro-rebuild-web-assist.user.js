@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.125.0
+// @version      4.125.1
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,14 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.125.0';
+  const VERSION = '4.125.1';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.125.1', d: '2026-08-18', items: [
+      'ⓘ Debug: บรรทัดสถานะทุก 10 วิ — HP/SP เต็มค่า + %, ตำแหน่ง, เป้าปัจจุบัน,',
+      '   จำนวนโดนตี/ผู้เล่นใกล้, คิวเก็บของ → เห็น HP ไหลไปไหนระหว่างเหตุการณ์',
+      '   (เดิม HP โผล่แค่ตอน SPAWN/ใช้ยา/นั่งพัก — ช่วงกลาง ๆ มองไม่เห็นเลย)',
+    ]},
     { v: '4.125.0', d: '2026-08-18', items: [
       '📊 แยก Log เป็น 2 แหล่ง: 📋 กิจกรรม (สิ่งที่บอททำ) กับ 🔍 Debug (ข้อมูลระบบเพื่อวิเคราะห์)',
       '   Debug: SPAWN self dump / SPAWN player / flee scan ทุก 5s / SELF-DETECT /',
@@ -3189,6 +3194,7 @@
   let fleeCooldownUntil = 0;
   let fleeBurstTimes = [];               // ★ timestamps การหนีล่าสุด — กันหนีถี่ผิดปกติ (dot ผี/วาร์ปล้ม)
   let lastFleeDebugAt = 0;
+  let lastStatusDbgAt = 0;             // ★ throttle บรรทัดสถานะใน Debug log (ทุก 10s)
   let last3cDebugAt = 0;
   let lastDamageDebugAt = 0;
   let respawnAttemptCount = 0;   // ★ กัน death loop — max 5 ครั้ง
@@ -3366,6 +3372,20 @@
     }
     const pct = hpPct();
     const mobCount = getMobAttackerCount();
+
+    // ★★ Debug: บรรทัดสถานะทุก 10 วิ — HP/SP/ตำแหน่ง/เป้า/ผู้เล่น ไว้วิเคราะห์ย้อนหลัง
+    //   (ดูในแท็บ 🔍 Debug — เห็นว่า HP ไหลไปไหนระหว่างเหตุการณ์ต่าง ๆ)
+    if (now - (lastStatusDbgAt || 0) > 10000) {
+      lastStatusDbgAt = now;
+      const tgtName = target && target.id != null ? ((entities.get(target.id) || {}).name || target.id.toString(16)) : '-';
+      dbg('ⓘ สถานะ: HP ' + (hp.cur != null ? hp.cur + '/' + hp.max + ' (' + (pct != null ? pct.toFixed(0) : '?') + '%)' : '?')
+        + ' SP ' + (sp.cur != null ? sp.cur + '/' + sp.max : '?')
+        + (isResting ? ' [นั่งพัก]' : '')
+        + ' | ' + (currentMap || '?') + (player.x != null ? ' @(' + Math.round(player.x) + ',' + Math.round(player.y) + ')' : ' (ไม่รู้ตำแหน่ง)')
+        + ' | เป้า: ' + tgtName
+        + ' | โดนตี:' + mobCount + ' ผู้เล่น:' + countNearbyPlayers(CFG.fleePlayerRadius)
+        + ' | คิวเก็บ:' + queue.size);
+    }
 
     // === -1. AUTO-REST (priority สูงสุด — ก่อน flee) ===
     //   ถ้า HP ต่ำ + ไม่โดนรุม → นั่งพัก; ถ้ากำลังนั่งอยู่ → จัดการลุก/นั่งต่อ
