@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.127.1
+// @version      4.127.2
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,15 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.127.1';
+  const VERSION = '4.127.2';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.127.2', d: '2026-08-18', items: [
+      '🖱️ splash click ยืดเวลา: ทุก 8s นานสุด ~5 นาที (เดิม 4 ครั้ง/28s ไม่พอ —',
+      '   ทดสอบจริง Unity เพิ่งเริ่มโหลดตอน 21s และใช้เวลาโหลดต่ออีกนาน)',
+      '   + ยิง pointerdown/up ด้วย (Unity WebGL ฟัง pointer events เป็นหลัก)',
+      '   หยุดทันทีเมื่อ WS ต่อ/เข้าเกม/login fail',
+    ]},
     { v: '4.127.1', d: '2026-08-18', items: [
       '🖱️ Auto-login: ถ้าไม่มี WS ภายใน ~7s → คลิกกลางจอไล่หน้า splash "คลิกเริ่มเกม"',
       '   (สูงสุด 4 ครั้งใน 60s และคลิกเฉพาะตอน WS ยังไม่ต่อ — เข้าเกมแล้วไม่แตะ)',
@@ -6530,25 +6536,30 @@
       + ' | Auto-Refresh: ' + (CFG.autoRefreshEnabled ? 'เปิด (' + CFG.autoRefreshStallSec + 's)' : 'ปิด');
     log('🤖', _alSum);
     console.log('[ASSIST] 🤖 ' + _alSum);
-    // ★★ เกมค้างหน้า splash ("คลิกเริ่มเกม") → ไม่มี WS ภายใน 15s → คลิกกลางจอให้เอง
-    //   (คลิกเฉพาะตอน WS ยังไม่ต่อ — พอเข้าเกมแล้วจะไม่คลิกแทนแน่นอน กันส่งเดินพร่าเพร่า)
+    // ★★ เกมค้างหน้า splash ("คลิกเริ่มเกม") → ไม่มี WS → คลิกกลางจอให้เอง
+    //   (จากทดสอบจริง: ต้องคลิกถึงเริ่มโหลด — ใช้เวลา 21s+ กว่า audio context จะ resume
+    //    และ Unity โหลดต่ออีกนาน → ยืดเป็นทุก 8s นานสุด 5 นาที)
+    //   หยุดทันทีเมื่อ WS ต่อ (ตอนนั้นถึงจะมีหน้า login ของเกมก็ไม่คลิกแทนแน่นอน)
     if (CFG.autoLoginEnabled) {
       let _splashClicks = 0;
       const splashTimer = setInterval(() => {
         const wsOpen = activeWS && activeWS.readyState === 1;
-        if (wsOpen || _splashClicks >= 4 || playerId != null) { clearInterval(splashTimer); return; }
+        if (wsOpen || playerId != null || autoLoginPhase === 'failed' || _splashClicks >= 36) { clearInterval(splashTimer); return; }
         _splashClicks++;
         try {
           const cv = document.querySelector('canvas') || document.body;
-          const r = cv.getBoundingClientRect ? cv.getBoundingClientRect() : { width: innerWidth, height: innerHeight };
+          const r = cv.getBoundingClientRect ? cv.getBoundingClientRect() : { left: 0, top: 0, width: innerWidth, height: innerHeight };
           const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-          cv.dispatchEvent(new MouseEvent('mousedown', { clientX: cx, clientY: cy, bubbles: true }));
-          cv.dispatchEvent(new MouseEvent('mouseup', { clientX: cx, clientY: cy, bubbles: true }));
-          cv.dispatchEvent(new MouseEvent('click', { clientX: cx, clientY: cy, bubbles: true }));
-          log('🖱️ [auto-login] ยังไม่มี WS → คลิกกลางจอไล่หน้า splash (ครั้ง', _splashClicks + '/4)');
+          // ★ Unity WebGL ฟัง pointer events เป็นหลัก — ยิงทั้ง pointer + mouse + click
+          const evts = ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click'];
+          for (const t of evts) {
+            const E = (t.startsWith('pointer')) ? PointerEvent : MouseEvent;
+            cv.dispatchEvent(new E(t, { clientX: cx, clientY: cy, bubbles: true, pointerId: 1, isPrimary: true }));
+          }
+          if (_splashClicks <= 5 || _splashClicks % 5 === 0) log('🖱️ [auto-login] ยังไม่มี WS → คลิกกลางจอไล่หน้า splash (ครั้ง', _splashClicks + ')');
         } catch (e) { clearInterval(splashTimer); }
-      }, 7000);
-      setTimeout(() => clearInterval(splashTimer), 60000);   // หมดเวลาใน 60s
+      }, 8000);
+      setTimeout(() => clearInterval(splashTimer), 310000);   // หมดเวลาใน ~5 นาที
     }
   }
 
