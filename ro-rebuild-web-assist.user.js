@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.118.1
+// @version      4.119.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,19 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.118.1';
+  const VERSION = '4.119.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.119.0', d: '2026-08-18', items: [
+      '🔴🔴 ตัวใหม่ชื่อไทยเกิดกลางเมือง → HP เป็น ? และ HP กลายเป็น 100000/100000 ของ Target Dummy',
+      '   สาเหตุ 1: AUTO-DETECT "โดนตีซ้ำ 3 ครั้ง = เรา" ฉก id ของ Target Dummy',
+      '   (คนทดสอบตี dummy กันรัว ๆ ตอนเกิดใหม่ → ระบบเข้าใจว่า dummy คือเรา!)',
+      '   แก้: ห้าม AUTO-DETECT ถ้า playerId ยืนยันแล้ว (selfIdConfirmed)',
+      '   + attacker ต้องเป็น "มอน" (kind=1) เท่านั้น — คนตี entity อื่น ≠ เราโดนมอนตี',
+      '   สาเหตุ 2: ชื่อไทย (UTF-8) ทำ nameLen คลาด → SPAWN ของตัวเอง parse พิกัด/HP ไม่ได้',
+      '   แก้: parser ใหม่ — ลองหลายตำแหน่งจบชื่อ แล้วเลือกอันที่พิกัด valid',
+      '   (ยืนยันด้วย simulation: ไทย nameLen คลาด/nameLen บ้า ก็ยังได้ x/y/hp ถูก)',
+    ]},
     { v: '4.118.1', d: '2026-08-18', items: [
       '🐛 แก้ ReferenceError: syncToggle is not defined ตอนกด toggle ตีกลับมอน blacklist',
       '   (เรียก helper ที่ประกาศอยู่คนละ scope — แก้เป็น set className เองใน handler)',
@@ -1770,58 +1780,51 @@
         }
         // z @ 19-22 (i32 signed) — ข้าม
         const nameLenField = u32(u, 23); // nameLen @ 23 (u32 — น่าเชื่อถือไม่ได้สำหรับ UTF-8 ไทย)
-        // หา nameEnd: เริ่มจาก 27+nameLenField ถ้าดูเหมือน ASCII, ไม่งั้น scan จาก offset 27
-        let nameEnd = 27 + nameLenField;
-        let name = '';
-        if (nameLenField > 0 && nameLenField < 32) {
-          const candidate = u.slice(27, 27 + nameLenField);
-          const lastByte = candidate[candidate.length - 1];
-          const looksTruncated = (lastByte >= 0x80);   // ถ้า byte สุดท้ายเป็น UTF-8 continuation → ตัดกลางคัน
-          if (looksTruncated) {
-            // scan หา [00 00][kind<=2] จาก offset 27 (ข้าม z + nameLen)
-            for (let i = 27; i < u.length - 2; i++) {
-              if (u[i] === 0 && u[i + 1] === 0 && u[i + 2] <= 2) { nameEnd = i; break; }
-            }
-          }
-          try { name = new TextDecoder('utf8', { fatal: false }).decode(u.slice(27, nameEnd)); } catch (e) { name = ''; }
-        } else {
-          // nameLen ผิดปกติ → scan หา [00 00][kind<=2] จาก offset 27
-          nameEnd = -1;
-          for (let i = 27; i < u.length - 2; i++) {
-            if (u[i] === 0 && u[i + 1] === 0 && u[i + 2] <= 2) { nameEnd = i; break; }
-          }
-          if (nameEnd < 0) nameEnd = u.length;   // ไม่เจอ → ใช้ท้าย packet
-          try { name = new TextDecoder('utf8', { fatal: false }).decode(u.slice(27, nameEnd)); } catch (e) { name = ''; }
+        // ★★ หา nameEnd แบบ "ลองหลายตำแหน่ง → เลือกอันที่พิกัด valid" — ทนชื่อไทย/UTF-8
+        //   บั๊กเดิม: ชื่อไทย (เช่น @_นักเวท_@) ทำ nameLen คลาด → nameEnd เพี้ยน → พิกัด/HP = null ทั้ง packet
+        //   candidates: (1) 27+nameLenField ตรงตาม field  (2) ทุกจุด pattern [00 00][kind≤2]
+        const dec = (ne) => { try { return new TextDecoder('utf8', { fatal: false }).decode(u.slice(27, ne)); } catch (e) { return ''; } };
+        const kindAt = (ne) => (u[ne] === 0 && u[ne + 1] === 0) ? u[ne + 2] : u[ne];
+        const parseFields = (ne) => {
+          // data เริ่ม ne+3: x @ +3, y @ +7 (i32 signed), hp @ +12, hpMax @ +16
+          if (u.length < ne + 20) return null;
+          let rx = u32(u, ne + 3); rx = rx > 0x7fffffff ? rx - 0x100000000 : rx;
+          let ry = u32(u, ne + 7); ry = ry > 0x7fffffff ? ry - 0x100000000 : ry;
+          const coordOk = (rx >= -500 && rx <= 1000 && ry >= -500 && ry <= 1000);
+          const v3 = u32(u, ne + 12), v4 = u32(u, ne + 16);
+          const hpOk = (v3 > 0 && v3 <= v4);
+          return { x: coordOk ? rx : null, y: coordOk ? ry : null, sHp: hpOk ? v3 : null, sHpMax: hpOk ? v4 : null, coordOk };
+        };
+        const cands = [];
+        if (nameLenField > 0 && nameLenField < 64) cands.push(27 + nameLenField);
+        // ★ ทุก offset ที่ byte=0 (จุดจบชื่อ/อาจเป็น terminator) — จริงๆ terminator เป็น 00 เดี่ยว
+        //   (pattern เดิม [00 00][≤2] ไม่ตรงโครงสร้างจริง: [name][00][03][00][x:4]...)
+        for (let i = 27; i < u.length - 2; i++) {
+          if (u[i] === 0) cands.push(i);
         }
-        // kind @ nameEnd + 2 (หลัง 00 00 ตัวที่ 2) — เหมือนบอทหลักที่ scan pattern หา kind
-        // จริงๆ nameEnd ใน path scan = index ของ 00 ตัวแรก → kind อยู่ที่ nameEnd+2
-        // ใน path nameLen (ไม่ scan) → nameEnd = 27+nameLenField → kind @ nameEnd ตรงๆ
-        // แก้โดยใช้ logic เดียวกับบอทหลัก: kind = byte หลัง name
-        let kind = -1;
-        // ถ้า nameEnd มาจาก scan (มี 00 00 ก่อน) → kind @ nameEnd+2
-        if (u[nameEnd] === 0 && u[nameEnd + 1] === 0) kind = u[nameEnd + 2];
-        else kind = u[nameEnd];   // nameEnd = จุดสิ้นสุดชื่อ (path nameLen)
-        if (kind < 0 || kind > 2) {
-          // kind ไม่ valid → scan ใหม่หา pattern [00 00][0-2]
-          for (let i = 27; i < u.length - 2; i++) {
-            if (u[i] === 0 && u[i + 1] === 0 && u[i + 2] <= 2) { nameEnd = i; kind = u[i + 2]; break; }
+        let nameEnd = (nameLenField > 0 && nameLenField < 64) ? 27 + nameLenField : (cands.length ? cands[0] : u.length);
+        let kind = -1, x = null, y = null, sHp = null, sHpMax = null;
+        let _picked = false;
+        for (const c of cands) {
+          const k = kindAt(c);
+          if (k < 0 || k > 2) continue;
+          const f = parseFields(c);
+          if (f && f.coordOk) { nameEnd = c; kind = k; x = f.x; y = f.y; sHp = f.sHp; sHpMax = f.sHpMax; _picked = true; break; }
+        }
+        if (!_picked) {
+          // ไม่มี candidate ไหนพิกัด valid → ใช้อันแรกที่ kind valid (พิกัด/HP อาจ null เหมือนพฤติกรรมเดิม)
+          for (const c of cands) {
+            const k = kindAt(c);
+            if (k < 0 || k > 2) continue;
+            const f = parseFields(c);
+            nameEnd = c; kind = k;
+            if (f) { x = f.x; y = f.y; sHp = f.sHp; sHpMax = f.sHpMax; }
+            break;
           }
         }
+        const name = dec(nameEnd);
           if (kind >= 0 && kind <= 2) {
-          // ★★ ห้ามตั้งชื่อ local ว่า hp/hpMax — มันบัง (shadow) object hp ด้านนอก!
-          //   บั๊กเดิม: hp.cur = hp กลายเป็น set property บน number → no-op → HP ค้าง ? ตลอด
-          let x = null, y = null, sHp = null, sHpMax = null;
-          // x/y/hp/hpMax relative to nameEnd (kind @ nameEnd+2 → data เริ่ม nameEnd+3)
-          // ★ บอทหลัก: x @ nameEnd+3, y @ nameEnd+7 (i32 signed), hp @ +12, hpMax @ +16
-          if (u.length >= nameEnd + 20) {
-            let rx = u32(u, nameEnd + 3); rx = rx > 0x7fffffff ? rx - 0x100000000 : rx;
-            let ry = u32(u, nameEnd + 7); ry = ry > 0x7fffffff ? ry - 0x100000000 : ry;
-            // ★ VALID_COORD: พิกัดต้องอยู่ในช่วงแผนที่ [-500, 1000] — ถ้าไม่ใช่ = nameEnd ผิด → ไม่รับ
-            if (rx >= -500 && rx <= 1000 && ry >= -500 && ry <= 1000) { x = rx; y = ry; }
-            const v3 = u32(u, nameEnd + 12);
-            const v4 = u32(u, nameEnd + 16);
-            if (v3 > 0 && v3 <= v4) { sHp = v3; sHpMax = v4; }
-          }
+          // ★★ x/y/sHp/sHpMax parse แล้วด้านบน (parseFields ลองหลาย nameEnd — ทนชื่อไทย)
           const existing = entities.get(id) || {};
           // ★★ DEBUG: log SPAWN ของ kind=0 (ผู้เล่น) — เช็คว่า server ส่ง player ผ่าน SPAWN ไหม
           if (kind === 0 && id !== playerId) {
@@ -1996,7 +1999,14 @@
       }
       // ★★ AUTO-DETECT playerId: ถ้า 0x0b มาซ้ำๆ โดย victim = ID เดิม (ไม่ใช่ playerId ปัจจุบัน)
       //   → ID นั้นคือตัวเรา → อัปเดต playerId (SELECT_CHAR/SPAWN อาจให้ค่าผิด)
-      else if (op === 0x0b && victimId !== playerId && victimId !== 0 && victimId !== attacker && attacker !== playerId) {
+      //   ★★★ gate 1: playerId ปัจจุบัน "ยืนยันแล้ว" (ชื่อตรง/SELECT_CHAR) → ห้าม AUTO-DETECT
+      //     (บั๊กจริง: เกิดใหม่กลางเมือง คนตี Target Dummy กันรัว → victim=dummy โดนนับ 3 ครั้ง
+      //      → AUTO-DETECT ฉก id dummy เป็น playerId → HP เรากลายเป็น 100000/100000 ของ dummy!)
+      //   ★★★ gate 2: attacker ต้องเป็น "มอน" (kind=1) เท่านั้น — คนตี entity อื่น ≠ เราโดนมอนตี
+      else if (op === 0x0b && victimId !== playerId && victimId !== 0 && victimId !== attacker && attacker !== playerId
+               && !selfIdConfirmed) {
+        const atkEnt = entities.get(attacker);
+        if (atkEnt && atkEnt.kind === 1) {
         _victimIdCount = _victimIdCount || new Map();
         const cnt = (_victimIdCount.get(victimId) || 0) + 1;
         _victimIdCount.set(victimId, cnt);
@@ -2008,11 +2018,12 @@
           const oldId = playerId;
           playerId = victimId;
           if (selfIdConfirmed) stalePlayerIds.set(oldId, now + 300000);
-          selfIdConfirmed = true;   // โดนตีซ้ำ 3 ครั้งใน 10s = ตัวเราแน่
+          selfIdConfirmed = true;   // โดนมอนตีซ้ำ 3 ครั้งใน 10s = ตัวเราแน่
           entities.delete(oldId);   // ★★ ลบ entity เก่า (กันค้างเป็น "player" → หนีตัวเอง)
           _victimIdCount.clear();
-          log('🔄 AUTO-DETECT playerId:', oldId != null ? oldId.toString(16) : '?', '→', playerId.toString(16), '(โดนตีซ้ำ', cnt, 'ครั้ง)');
+          log('🔄 AUTO-DETECT playerId:', oldId != null ? oldId.toString(16) : '?', '→', playerId.toString(16), '(โดนมอนตีซ้ำ', cnt, 'ครั้ง)');
           relayRegisterPlayer();
+        }
         }
       }
       // มอนตีเรา → mark mobAttacker + ★★ ลด HP ทันที (ไม่รอ STAT!)
