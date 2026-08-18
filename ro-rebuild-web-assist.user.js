@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.122.0
+// @version      4.123.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,18 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.122.0';
+  const VERSION = '4.123.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.123.0', d: '2026-08-18', items: [
+      '🔴🔴🔴 บอทหันไปตีผู้เล่น! (จาก log จริง: 🎯 เลือกเป้า: superogira0 → ⚔️ ตี superogira0)',
+      '   เหตุ: entity ของผู้เล่นเปลี่ยน kind 0→1 กลางทาง (SPAWN parse พลาด หรือ 0x3c batch/0x14',
+      '   สร้างใหม่เป็นมอนตอน entity หายชั่วขณะ) → acquireTarget มองเป็นมอน → ตีคน',
+      '   (โชคดี server เงียบไม่ยอมให้ตีคน — แต่ถ้า PvP เปิดคือเรื่องใหญ่)',
+      '   แก้: beaconPlayerIds — id ที่เคยปรากฏบน radar ผู้เล่น (0x3c flag=1) = ผู้เล่นแน่นอน',
+      '   (มอนไม่มีบน radar) ห้ามกลายเป็นมอน/ห้ามถูกตี ไม่ว่า packet ไหนจะ parse พลาด',
+      '   ปิดครบ 4 จุด: SPAWN (แก้ kind) / isTargetable / defensive retarget / 0x3c batch + 0x14',
+    ]},
     { v: '4.122.0', d: '2026-08-18', items: [
       '🔴🔴 หนีผีอีก — คราวนี้ตัวการคือ 0x07 ghost ไม่ใช่ minimap',
       '   อาการ: "ผู้เล่น 1 คน" โผล่ห่าง 1.4 ช่อง กลางกอง loot ที่เพิ่งเก็บ (ไม่มี SPAWN player)',
@@ -1007,6 +1016,16 @@
   //   → เลิกลองทันที + blacklist ชั่วคราว กัน tryClaim ซ้ำวนลูป
   let lastPickupDropId = null;         // dropId ที่เพิ่งส่ง 0x52 ล่าสุด (map เข้ากับ 0x20 ที่ตามมา)
   let lastWhereReqAt = 0;              // ★ throttle ส่ง /where (0x37) เมื่อตำแหน่งหาย
+  // ★★ beaconPlayerIds — id ที่เคยปรากฏบน radar ผู้เล่น (0x3c flag=1) = เป็น "ผู้เล่น" แน่นอน
+  //   (มอนไม่มีบน radar — boss ใช้ flag 3/4) ใช้กันผู้เล่นถูกมองเป็นมอน (kind พลาด) → บอทตีคน!
+  //   id -> lastSeenAt (TTL 5 นาที)
+  const beaconPlayerIds = new Map();
+  function isBeaconPlayer(id, now) {
+    const t = beaconPlayerIds.get(id);
+    if (t == null) return false;
+    if (now - t > 300000) { beaconPlayerIds.delete(id); return false; }
+    return true;
+  }
   const dropBlacklist = new Map();     // dropId -> expireAt (60s — ของคนอื่น ไม่ต้องลองซ้ำ)
   let lastLootActivityAt = 0;          // ★ เวลาเก็บของสำเร็จล่าสุด — ใช้ดีเลย์ก่อนนั่งพัก (กันดูเป็นบอท)
   // ★ recent kill positions — จดพิกัดมอนที่เราฆ่า เพื่อเช็ค item drop ใกล้หรือไม่
@@ -1621,6 +1640,7 @@
             // ★ marker ของเราเอง (id ตรง playerId) → อัปเดตตำแหน่งเรา
             //   (จาก capture: server ส่ง beacon ทุก 4 ช่องที่เดิน — เติมช่องว่างระหว่าง 0x07 response)
             if (playerId != null && eid === playerId) { player.x = ex; player.y = ey; }
+            beaconPlayerIds.set(eid, now);   // ★ เคยบน radar = ผู้เล่น (กันถูกมองเป็นมอน)
           }
         }
       } else if (sub === 1 && u.length >= 12) {
@@ -1637,6 +1657,7 @@
             else { entities.set(id, { id, kind: 0, x, y, alive: true, _lastSeenAt: now, name: '', _src: 'beacon' }); }
             // ★ marker ของเราเอง → อัปเดตตำแหน่งเรา (beacon ทุก 4 ช่อง — เหมือน multi path)
             if (playerId != null && id === playerId) { player.x = x; player.y = y; }
+            beaconPlayerIds.set(id, now);   // ★ เคยบน radar = ผู้เล่น (กันถูกมองเป็นมอน)
           } else {
             // ★ flag=3 = Mini Boss, flag=4 = Boss
             const isRealBoss = (flag === 4);
@@ -1858,6 +1879,13 @@
           if (kind >= 0 && kind <= 2) {
           // ★★ x/y/sHp/sHpMax parse แล้วด้านบน (parseFields ลองหลาย nameEnd — ทนชื่อไทย)
           const existing = entities.get(id) || {};
+          // ★★ guard: id ที่เคยบน radar ผู้เล่น = ผู้เล่นแน่นอน — ห้าม parse พลาดทำให้เป็นมอน
+          //   (เคยเกิดจริง: SPAWN ของผู้เล่นถูกอ่าน kind=1 → บอทหันไปตีผู้เล่น!)
+          if (kind === 1 && isBeaconPlayer(id, nowMs())) {
+            log('⚠️ SPAWN ของผู้เล่น ' + (name || id.toString(16)) + ' ถูกอ่าน kind=1 → แก้เป็น 0 (id เคยบน radar)');
+            kind = 0;
+          }
+          if (kind === 0 && name && name.trim()) beaconPlayerIds.set(id, nowMs());
           // ★★ DEBUG: log SPAWN ของ kind=0 (ผู้เล่น) — เช็คว่า server ส่ง player ผ่าน SPAWN ไหม
           if (kind === 0 && id !== playerId) {
             log('👤 SPAWN player: id=' + id.toString(16) + ' name="' + name + '" @(' + x + ',' + y + ') flag=' + flag);
@@ -1947,7 +1975,7 @@
         const x = i16(u, p + 4), y = i16(u, p + 6);
         // sanity check พิกัด (กัน garbage)
         if (x >= -500 && x <= 1000 && y >= -500 && y <= 1000) {
-          if (id !== playerId && !isStaleId(id, now)) {
+          if (id !== playerId && !isStaleId(id, now) && !isBeaconPlayer(id, now)) {
             const e = entities.get(id);
             if (e) { e.x = x; e.y = y; e._lastSeenAt = now; }
             else { entities.set(id, { id, kind: 1, x, y, alive: true, _lastSeenAt: now }); }
@@ -1961,7 +1989,7 @@
       const id = u32(u, 1);
       const x = i16(u, 5), y = i16(u, 7);
       if (x >= -500 && x <= 1000 && y >= -500 && y <= 1000) {   // sanity
-        if (id !== playerId && !isStaleId(id, nowMs())) {
+        if (id !== playerId && !isStaleId(id, nowMs()) && !isBeaconPlayer(id, nowMs())) {
           const e = entities.get(id);
           if (e) { e.x = x; e.y = y; e._lastSeenAt = nowMs(); }
           else { entities.set(id, { id, kind: 1, x, y, alive: true, _lastSeenAt: nowMs() }); }
@@ -2682,6 +2710,8 @@
     const ab = abandonCooldown.get(m.id);
     if (ab && now < ab) return false;
     if (ab && now >= ab) abandonCooldown.delete(m.id);    // หมดอายุ → ล้าง
+    // ★★ ห้ามตีผู้เล่นเด็ดขาด — id ที่เคยบน radar ผู้เล่น (beacon) = ผู้เล่น แม้ kind จะเพี้ยนเป็น 1
+    if (isBeaconPlayer(m.id, now)) return false;
     // ★ ผ่อน guard: ต้องเคยเห็น SPAWN (มี sub) หรืออยู่ใกล้ตัวเรามาก (≤12 ช่อง — NPC มักนิ่ง ไม่ใช่อันตราย)
     //   กัน ghost entity ไกลๆ แต่ยอมรับมอนใกล้ที่อาจยังไม่ได้ SPAWN
     if (m.sub == null) {
@@ -3447,6 +3477,7 @@
         // (mirror บอทหลัก bot.js:600-607 — แค่ alive + kind ไม่สน cooldown/distance/avoidPlayers)
         // ★ ยกเว้น: มอนใน blacklist + ผู้ใช้ปิด fightBackBlacklisted → ไม่ตีกลับ (เคารพ blacklist เด็ดขาด)
         if (!CFG.fightBackBlacklisted && matchList(am, CFG.targetBlacklist)) continue;
+        if (isBeaconPlayer(aid, now)) continue;   // ★★ ห้ามตีผู้เล่น (เคยบน radar) แม้ kind พลาด
         if (am.kind !== 1) continue;   // ★★ ต้องเป็น monster (kind=1) เท่านั้น — ห้ามตี player (kind=0)!
         const d = Math.hypot(am.x - player.x, am.y - player.y);
         if (d < attackerDist) { attackerDist = d; attacker = am; }
