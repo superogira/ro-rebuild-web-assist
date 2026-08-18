@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.125.1
+// @version      4.126.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,14 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.125.1';
+  const VERSION = '4.126.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.126.0', d: '2026-08-18', items: [
+      '❤️ log ตีมอนแสดง HP มอนแล้ว: ⚔️ ตี Eggshell Picky @(248,229) dist 1.4 HP 65/120 (54%)',
+      '   แหล่งค่า: SPAWN (HP เริ่มต้น) + ลดจากดาเมจเราแบบ real-time',
+      '   ข้อจำกัด: ถ้าคนอื่นตีมอนตัวเดียวกัน HP ที่แสดงจะค้างสูงกว่าจริง',
+    ]},
     { v: '4.125.1', d: '2026-08-18', items: [
       'ⓘ Debug: บรรทัดสถานะทุก 10 วิ — HP/SP เต็มค่า + %, ตำแหน่ง, เป้าปัจจุบัน,',
       '   จำนวนโดนตี/ผู้เล่นใกล้, คิวเก็บของ → เห็น HP ไหลไปไหนระหว่างเหตุการณ์',
@@ -3680,7 +3685,9 @@
               target.lastAttackAt = now; target.pendingAttacks++;
               if (!target.firstAttackAt) { target.firstAttackAt = now; }   // ★ จดเวลาส่งครั้งแรก
               if (!target.engageAt) { target.engageAt = now; }
-              log('⚔️ ตี', m.name || m.id.toString(16), target.id.toString(16), '@(' + Math.round(m.x) + ',' + Math.round(m.y) + ') dist', dist.toFixed(1), '(pending', target.pendingAttacks + ')');
+              // ★ HP มอน: จาก SPAWN (ค่าเริ่ม) + ลดจากดาเมจเรา (real-time) — ถ้าคนอื่นตีด้วยจะค้างสูงกว่าจริง
+              const hpInfo = (m.hp != null && m.hpMax > 0) ? ' HP ' + m.hp + '/' + m.hpMax + ' (' + (monsterHpPct(m) * 100).toFixed(0) + '%)' : '';
+              log('⚔️ ตี', m.name || m.id.toString(16), target.id.toString(16), '@(' + Math.round(m.x) + ',' + Math.round(m.y) + ') dist', dist.toFixed(1) + hpInfo, '(pending', target.pendingAttacks + ')');
             }
           }
           return;
