@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.126.0
+// @version      4.127.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,20 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.126.0';
+  const VERSION = '4.127.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.127.0', d: '2026-08-18', items: [
+      '🤖 Auto-Login! WS ต่อเกม → ล็อกอินเอง → เลือกตัวละคร slot ที่ตั้งไว้ (จาก capture)',
+      '   protocol: OUT [08][00000000][uLen][user][pLen][pass] → IN 0x00 (token 20B)',
+      '   → OUT [03][type:2][token][slot] → IN 0x03 เข้าเกม — delay สุ่ม 1.5-3.5s กันดูเป็นบอท',
+      '🔄 Auto-Refresh: เข้าเกมแล้ว packet เงียบเกินเกณฑ์ (default 180s) หรือ WS หลุดนาน',
+      '   → alert Telegram + refresh หน้า → auto-login กลับเข้าเกมเอง',
+      '⚙️ ตั้งค่าใน sub-tab 🔑 Auto (username/password/slot/toggle ทั้งสองระบบ)',
+      '   + API: ASSIST.setAutoLogin(user,pass,slot) / autoLoginOn() / setAutoRefresh(sec)',
+      '🔒 เก็บใน localStorage (รอดจาก refresh) — ห้ามใช้เครื่องส่วนรวม!',
+      '   ตรวจแล้ว: ค่าพวกนี้ไม่หลุดไป monitor/feedback/console แน่นอน',
+    ]},
     { v: '4.126.0', d: '2026-08-18', items: [
       '❤️ log ตีมอนแสดง HP มอนแล้ว: ⚔️ ตี Eggshell Picky @(248,229) dist 1.4 HP 65/120 (54%)',
       '   แหล่งค่า: SPAWN (HP เริ่มต้น) + ลดจากดาเมจเราแบบ real-time',
@@ -399,7 +410,7 @@
     'skillEnabled', 'skills', 'disabledSkillIds',
     'lootEnabled', 'lootDelayAfterDropMs', 'lootUseKillPos', 'pickRadiusKill', 'lootRespectOthers', 'filter', 'sendThrottleMs',
     'warpLootEnabled',
-    'combatEnabled', 'targetWhitelist', 'targetBlacklist', 'fightBackBlacklisted', 'attackRange', 'rangedAttackRange',
+    'combatEnabled', 'targetWhitelist', 'targetBlacklist', 'fightBackBlacklisted', 'autoLoginEnabled', 'autoLoginUser', 'autoLoginPass', 'autoLoginSlot', 'autoRefreshEnabled', 'autoRefreshStallSec', 'attackRange', 'rangedAttackRange',
     'maxAcquireDistance', 'searchRadii', 'maxChaseDistance', 'antiKS', 'avoidOtherPlayers', 'targetLowestHpFirst',
     'fleeOnMobCount', 'fleeOnAggroCount', 'fleeOnProximityCount', 'fleeOnProximityRadius', 'fleeMonsters', 'fleeMonsterRadius', 'maxEngageSec', 'maxEngageSecSlow', 'slowMonsterSubIds',
     'wanderEnabled', 'warpFindEnabled', 'warpToMonster', 'stuckWarpOnAbandon', 'stepAsideOnAbandon', 'warpToBoss', 'warpToMiniBoss', 'bossAlertRadius', 'noMonsterWarpSec',
@@ -692,6 +703,15 @@
     targetWhitelist: [],          // [] = ตีมอน kind=1 ทุกตัว; ['Poring', 4000] = เฉพาะ (รองรับชื่อ + sprite id)
     targetBlacklist: [],          // ไม่ตีมอนเหล่านี้ (ชื่อหรือ sprite id)
     fightBackBlacklisted: true,   // ★ โดนมอนใน blacklist ตี → ตีกลับไหม? (false = เคารพ blacklist เด็ดขาด แม้โดนตี)
+    // ★★ Auto-Login / Auto-Refresh (เก็บใน localStorage ทั้งหมด — รอดจาก refresh)
+    //   ⚠️ password เก็บแบบ plain text ใน localStorage ของเบราว์เซอร์ (เฉพาะ origin นี้)
+    //      ห้ามใช้ในเครื่องส่วนรวม! และระบบจะไม่ส่งค่าเหล่านี้ไป monitor/feedback เด็ดขาด
+    autoLoginEnabled: false,      // WS ต่อเกม → ล็อกอินเอง → เลือกตัวละครเอง
+    autoLoginUser: '',
+    autoLoginPass: '',
+    autoLoginSlot: 0,             // slot ตัวละคร (เริ่มนับ 0 — slot แรก = 0)
+    autoRefreshEnabled: false,    // packet เงียบ/WS หลุดนาน → refresh หน้า (แล้ว auto-login กลับมาเอง)
+    autoRefreshStallSec: 180,     // ถือว่าค้างเมื่อไม่มี packet ต่อเนื่อง N วินาที
     attackRange: 2,               // ระยะโจมตี (ช่อง) — ใกล้กว่านี้สั่งตี, ไกลกว่าเดินไป
     rangedAttackRange: 8,         // 0 = ใช้ attackRange; >0 = นักธนูตีไกลได้ N ช่อง
     maxAcquireDistance: 30,       // ★ เลือกเป้า + ส่ง ATTACK ได้ในระยะนี้ (cap สูงสุด)
@@ -1131,6 +1151,37 @@
     return true;
   }
 
+  // ★★★ AUTO-LOGIN — จาก packet capture (testmage):
+  //   1) OUT [08][00 00 00 00][uLen:1][user][pLen:1][pass]
+  //   2) IN  [00][02 00 00 00][type:2 = 2c 00][token:20]... ← session token สำหรับเลือกตัวละคร
+  //   3) OUT [03][type:2][token:20][slot:1]  ← echo token + slot (slot แรก = 0x00)
+  //   4) IN  [03][eid:4][len:2][mapname]    ← เข้าเกม (handler เดิมรับต่อ)
+  let autoLoginPhase = 'idle';        // idle → waitingLogin → loginSent → acctOk → charSent → done / failed
+  let autoLoginToken = null;          // Uint8Array 22 bytes ([type:2][token:20]) จาก IN 0x00
+  let autoLoginAttemptAt = 0;         // กันส่งซ้ำ (1 ครั้งต่อ WS connection)
+  let lastGamePacketAt = Date.now();  // ★ packet ล่าสุดจาก server — ใช้ตรวจ "ค้าง" (auto-refresh)
+  function sendLoginPacket(user, pass) {
+    if (!activeWS || activeWS.readyState !== 1) return false;
+    const uB = new TextEncoder().encode(user);
+    const pB = new TextEncoder().encode(pass);
+    if (!uB.length || !pB.length || uB.length > 24 || pB.length > 24) return false;
+    const b = new Uint8Array(1 + 4 + 1 + uB.length + 1 + pB.length);
+    let p = 0;
+    b[p++] = 0x08;
+    b[p++] = 0; b[p++] = 0; b[p++] = 0; b[p++] = 0;   // const 00 00 00 00 จาก capture
+    b[p++] = uB.length; b.set(uB, p); p += uB.length;
+    b[p++] = pB.length; b.set(pB, p);
+    activeWS.send(b);
+    return true;
+  }
+  function sendSelectCharPacket(token, slot) {
+    if (!activeWS || activeWS.readyState !== 1) return false;
+    const b = new Uint8Array(1 + token.length + 1);
+    b[0] = 0x03; b.set(token, 1); b[b.length - 1] = slot & 0xff;
+    activeWS.send(b);
+    return true;
+  }
+
   // ★ เขียน signed int16 LE ลง Uint8Array ที่ offset (รองรับค่าติดลบ เช่น -999)
   function writeI16LE(b, off, v) {
     const x = v & 0xffff;
@@ -1223,6 +1274,7 @@
   // ---------- ประมวลผล packet ----------
   function handleIn(u) {
     if (!u.length) return;
+    lastGamePacketAt = Date.now();   // ★★ auto-refresh watchdog — เกมส่งอะไรมา = ยังไม่ค้าง
     // ★★ Packet capture
     if (ASSIST._captureUntil && Date.now() < ASSIST._captureUntil) {
       ASSIST._captureBuf.push({ t: Date.now(), data: new Uint8Array(u) });
@@ -1231,6 +1283,30 @@
       log('📡 Capture หมดเวลา — พิมพ์ ASSIST.captureStop() เพื่อดูผล');
     }
     const op = u[0];
+
+    // 0x00 LOGIN_RESULT: [00][02 00 00 00][type:2][token:22]... — เฉพาะตอนรอ auto-login
+    //   (ปกติเกม client จัดการเอง — เราดักตอบเฉพาะกรณีเราเป็นคนส่ง login เท่านั้น)
+    //   ★ token 22 bytes (ยืนยันจาก capture: echo กลับ 24 bytes = type 2 + token 22)
+    if (op === 0x00 && autoLoginPhase === 'loginSent' && u.length >= 29) {
+      if (u[1] === 0x02) {
+        autoLoginToken = u.slice(5, 29);   // [type:2][token:22] — echo กลับไปกับ SELECT_CHAR
+        autoLoginPhase = 'acctOk';
+        log('🤖 [auto-login] login สำเร็จ → เลือกตัวละคร slot', CFG.autoLoginSlot, 'ใน 1.5s');
+        setTimeout(() => {
+          if (autoLoginPhase === 'acctOk' && activeWS && activeWS.readyState === 1) {
+            if (sendSelectCharPacket(autoLoginToken, CFG.autoLoginSlot)) {
+              autoLoginPhase = 'charSent';
+              log('🤖 [auto-login] ส่งเลือกตัวละครแล้ว — รอเข้าเกม...');
+            }
+          }
+        }, 1500);
+      } else {
+        autoLoginPhase = 'failed';
+        const hexHead = Array.from(u.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join(' ');
+        log('⚠️ [auto-login] login ไม่สำเร็จ (head: ' + hexHead + ') — เช็ค username/password (หยุดลองรอบนี้)');
+      }
+      return;
+    }
 
     // 0x25 STAT: HP/SP ของ entity → [25][eid:4][statType:4][cur:4][max:4][flag:1]
     //   ★★ ห้ามตั้ง playerId จากที่นี่! STAT ส่งมาให้หลาย entity (player + monster)
@@ -1421,6 +1497,11 @@
     //   format: [03][eid:4][len:2][mapname null-terminated]
     else if (op === 0x03 && u.length >= 7) {
       const eid = u32(u, 1);
+      // ★ auto-login: SELECT_CHAR ตอบกลับ = เข้าเกมสำเร็จ
+      if (autoLoginPhase === 'charSent') {
+        autoLoginPhase = 'done';
+        log('🤖 [auto-login] เข้าเกมสำเร็จ! (slot', CFG.autoLoginSlot + ') — ระบบทำงานต่ออัตโนมัติ');
+      }
       // ★★ SELECT_CHAR = คำตอบตรงจาก server ตอนผู้ใช้กดเลือกตัวละคร → authoritative เสมอ
       //   เดิม: อัปเดตเฉพาะตอน playerId == null → logout แล้ว login ตัวใหม่ → playerId ค้างเป็นตัวเก่า
       //   → SPAWN ของตัวใหม่โดน guard "ชื่อ ≠ playerName เก่า" บล็อค → HP/ตำแหน่งไม่อัปเดตตลอด!
@@ -3205,6 +3286,27 @@
   let respawnAttemptCount = 0;   // ★ กัน death loop — max 5 ครั้ง
   let _victimIdCount = null;   // ★ auto-detect playerId — นับ victim ID ที่โดนตีซ้ำ
   let _victimIdCountAt = 0;
+  // ★★ AUTO-REFRESH watchdog — เข้าเกมแล้วแต่ packet เงียบผิดปกติ (ค้าง) หรือ WS หลุดนาน
+  //   → refresh หน้าเว็บ แล้ว auto-login พากลับเข้าเกมเอง (ถ้าเปิดไว้)
+  //   ปกติ server ส่ง packet มาตลอด (0x26 regen ทุก ~6s / beacon / 0x07) — เงียบยาว = ค้างแน่นอน
+  const autoRefreshWatchdog = setInterval(() => {
+    if (!CFG.autoRefreshEnabled) return;
+    const now = Date.now();
+    const silentSec = (now - lastGamePacketAt) / 1000;
+    const wsOk = activeWS && activeWS.readyState === 1;
+    // เคส 1: ต่ออยู่แต่เงียบเกินเกณฑ์ (client ค้าง / server ไม่ตอบ)
+    if (playerId != null && silentSec > CFG.autoRefreshStallSec) {
+      logImportant('flee', '🔄 [auto-refresh] ไม่มี packet ' + Math.round(silentSec) + 's → refresh หน้าแล้ว login ใหม่');
+      clearInterval(autoRefreshWatchdog);
+      setTimeout(() => location.reload(), 1500);   // หน่วงให้ alert ไป Telegram ก่อน
+    }
+    // เคส 2: WS ปิดนานเกิน (เกม client ไม่ต่อกลับเอง) — เผื่อเวลาเกิน stall + 60s
+    else if (!wsOk && playerId != null && silentSec > CFG.autoRefreshStallSec + 60) {
+      logImportant('flee', '🔄 [auto-refresh] WebSocket หลุด ' + Math.round(silentSec) + 's → refresh หน้าแล้ว login ใหม่');
+      clearInterval(autoRefreshWatchdog);
+      setTimeout(() => location.reload(), 1500);
+    }
+  }, 10000);
   const combatLoop = setInterval(() => {
     const now = nowMs();
     // ★★ Flee from players — ทำงานไม่สน combat on/off (priority สูงสุด)
@@ -4260,6 +4362,23 @@
     }
     activeWS = ws; log('🔌 ต่อ WebSocket แล้ว');
     try { gameServerUrl = ws.url || ''; } catch (_) {}   // ★ เก็บ URL เซิร์ฟเวอร์เกม
+    // ★★ AUTO-LOGIN: WS ต่อเกมใหม่ + เปิดใช้งาน + ยังไม่ได้ล็อกอิน → ส่ง login เอง (delay สุ่ม กันดูเป็นบอท)
+    if (CFG.autoLoginEnabled && CFG.autoLoginUser && CFG.autoLoginPass
+        && (autoLoginPhase === 'idle' || autoLoginPhase === 'done')
+        && Date.now() - autoLoginAttemptAt > 30000) {
+      autoLoginAttemptAt = Date.now();
+      const delay = 1500 + Math.random() * 2000;
+      log('🤖 [auto-login] เตรียมล็อกอินอัตโนมัติในอีก ' + (delay / 1000).toFixed(1) + 's (user: ' + CFG.autoLoginUser + ')');
+      autoLoginPhase = 'waitingLogin';
+      setTimeout(() => {
+        if (autoLoginPhase === 'waitingLogin' && activeWS && activeWS.readyState === 1) {
+          if (sendLoginPacket(CFG.autoLoginUser, CFG.autoLoginPass)) {
+            autoLoginPhase = 'loginSent';
+            log('🤖 [auto-login] ส่งข้อมูลล็อกอินแล้ว — รอคำตอบจาก server...');
+          } else { autoLoginPhase = 'failed'; }
+        }
+      }, delay);
+    }
     const origSend = ws.send.bind(ws);
     ws.send = function (data) {
       try { const u = syncU8(data); if (u) handleOut(u); } catch (e) {}
@@ -4314,6 +4433,19 @@
     },
     // ★ ถามตำแหน่งแม่นยำจาก server (/where) — คำตอบมาเป็นแชทระบบ แล้ว 0x2c handler apply ให้เอง
     where() { if (sendWhere()) { log('📍 ส่ง /where แล้ว — รอคำตอบจาก server'); } else { log('⚠️ WebSocket ยังไม่พร้อม'); } },
+    // ★★ Auto-Login / Auto-Refresh (เก็บใน localStorage — รอดจาก refresh)
+    setAutoLogin(user, pass, slot) {
+      if (user) CFG.autoLoginUser = String(user);
+      if (pass) CFG.autoLoginPass = String(pass);
+      if (slot != null) CFG.autoLoginSlot = parseInt(slot, 10) || 0;
+      saveConfigDebounced();
+      log('🤖 auto-login: user=' + CFG.autoLoginUser + ' slot=' + CFG.autoLoginSlot + ' (เข้ารหัสเก็บแล้ว — ทำงานตอน WS ต่อใหม่)');
+    },
+    autoLoginOn() { CFG.autoLoginEnabled = true; saveConfigDebounced(); log('🤖 Auto-Login: เปิด (ต้องมี user/pass ใน config)'); },
+    autoLoginOff() { CFG.autoLoginEnabled = false; saveConfigDebounced(); log('🤖 Auto-Login: ปิด'); },
+    setAutoRefresh(sec) { CFG.autoRefreshStallSec = Math.max(60, parseInt(sec, 10) || 180); saveConfigDebounced(); log('🔄 auto-refresh: ค้างเกิน ' + CFG.autoRefreshStallSec + 's → refresh'); },
+    autoRefreshOn() { CFG.autoRefreshEnabled = true; saveConfigDebounced(); log('🔄 Auto-Refresh: เปิด'); },
+    autoRefreshOff() { CFG.autoRefreshEnabled = false; saveConfigDebounced(); log('🔄 Auto-Refresh: ปิด'); },
     help() {
       console.log(`%c ASSIST — คำสั่ง `, 'background:#4caf50;color:#fff;padding:2px 6px;border-radius:3px');
       console.log(`%c Auto-Heal `, 'color:#e91e63;font-weight:bold');
@@ -5517,6 +5649,7 @@
             <div class="subtab" data-sub="rest">🪑 Rest</div>
             <div class="subtab" data-sub="sell">💰 Sell</div>
             <div class="subtab" data-sub="storage">🏦 Storage</div>
+            <div class="subtab" data-sub="auto">🔑 Auto</div>
             <div class="subtab" data-sub="misc">⚙️ อื่นๆ</div>
             <div class="subtab" data-sub="telegram">📨 Telegram</div>
           </div>
@@ -5666,6 +5799,21 @@
             <div class="btns"><button id="__assist_applykafra">ใช้ค่า storage</button><button id="__assist_t_depfull" class="on">ฝากตอนเต็ม</button><button id="__assist_t_depaftersell" class="on">ฝากหลังขาย</button></div>
           </div>
           <!-- ⚙️ อื่นๆ -->
+          <!-- 🔑 Auto-Login / Auto-Refresh -->
+          <div class="__assist_subpage" data-sub="auto">
+            <h4>🤖 Auto-Login — ล็อกอิน + เลือกตัวละครเองเมื่อเข้าเกม</h4>
+            <div class="btns"><button id="__assist_autologinbtn" class="off">Auto-Login: ?</button></div>
+            <div class="field"><label>Username</label><input type="text" id="__assist_aluser" placeholder="username" autocomplete="off"></div>
+            <div class="field"><label>Password</label><input type="password" id="__assist_alpass" placeholder="password" autocomplete="new-password"></div>
+            <div class="field"><label>Character slot (เริ่มนับ 0 — ตัวแรก = 0)</label><input type="number" id="__assist_alslot" min="0" max="9" step="1"></div>
+            <div class="btns"><button id="__assist_applyauto">💾 ใช้ค่า auto-login</button></div>
+            <div style="font-size:10px;color:#e8a13a;margin-top:6px;">⚠️ username/password จะถูกเก็บใน localStorage ของเบราว์เซอร์ (รอดจาก refresh) — ห้ามใช้ในเครื่องส่วนรวม และค่าเหล่านี้จะไม่ถูกส่งไป monitor/feedback เด็ดขาด</div>
+            <h4 style="margin-top:14px;">🔄 Auto-Refresh — ค้างนาน → refresh หน้า + login กลับเอง</h4>
+            <div class="btns"><button id="__assist_autorefreshbtn" class="off">Auto-Refresh: ?</button></div>
+            <div class="field"><label>ถือว่าค้างเมื่อไม่มี packet ต่อเนื่อง (วินาที)</label><input type="number" id="__assist_arstall" min="60" max="1800" step="10"></div>
+            <div class="btns"><button id="__assist_applyrefresh">💾 ใช้ค่า auto-refresh</button></div>
+            <div style="font-size:10px;color:#9aa0a6;margin-top:6px;">★ ปกติ server ส่ง packet มาตลอด (regen/beacon ทุกไม่กี่วิ) — เงียบเกินเกณฑ์ = เกมค้าง → refresh แล้ว auto-login เข้ามาใหม่ (ควรเปิด auto-login คู่กัน)</div>
+          </div>
           <div class="__assist_subpage" data-sub="misc">
             <h4>🌐 Remote Monitor (ส่งข้อมูลไป relay server — ดูจากมือถือ/เครื่องอื่น)</h4>
             <div class="btns">
@@ -6058,6 +6206,48 @@
     root.querySelector('#__assist_t_fleemode_change').addEventListener('click', () => { CFG.fleeMode = 'changeMap'; saveConfigDebounced(); log('🗺️ หนีผู้เล่น: เปลี่ยนแมป'); });
     root.querySelector('#__assist_t_fleemode_same').addEventListener('click', () => { CFG.fleeMode = 'sameMap'; saveConfigDebounced(); log('📍 หนีผู้เล่น: วาร์ปสุ่มในแมปเดิม'); });
     root.querySelector('#__assist_t_stepaside').addEventListener('click', () => { CFG.stepAsideOnAbandon = CFG.stepAsideOnAbandon === false ? true : false; saveConfigDebounced(); log('🚶 เดินหลีกหลัง abandon:', CFG.stepAsideOnAbandon ? 'เปิด' : 'ปิด'); });
+    // ---- auto-login / auto-refresh wires ----
+    const _alBtn = root.querySelector('#__assist_autologinbtn');
+    if (_alBtn) {
+      _alBtn.className = CFG.autoLoginEnabled ? 'on' : 'off';
+      _alBtn.textContent = 'Auto-Login: ' + (CFG.autoLoginEnabled ? 'เปิด' : 'ปิด');
+      _alBtn.addEventListener('click', () => {
+        CFG.autoLoginEnabled = !CFG.autoLoginEnabled; saveConfigDebounced();
+        _alBtn.className = CFG.autoLoginEnabled ? 'on' : 'off';
+        _alBtn.textContent = 'Auto-Login: ' + (CFG.autoLoginEnabled ? 'เปิด' : 'ปิด');
+        log('🤖 Auto-Login:', CFG.autoLoginEnabled ? 'เปิด (จะทำงานตอน WS ต่อใหม่รอบหน้า)' : 'ปิด');
+      });
+    }
+    const _arBtn = root.querySelector('#__assist_autorefreshbtn');
+    if (_arBtn) {
+      _arBtn.className = CFG.autoRefreshEnabled ? 'on' : 'off';
+      _arBtn.textContent = 'Auto-Refresh: ' + (CFG.autoRefreshEnabled ? 'เปิด' : 'ปิด');
+      _arBtn.addEventListener('click', () => {
+        CFG.autoRefreshEnabled = !CFG.autoRefreshEnabled; saveConfigDebounced();
+        _arBtn.className = CFG.autoRefreshEnabled ? 'on' : 'off';
+        _arBtn.textContent = 'Auto-Refresh: ' + (CFG.autoRefreshEnabled ? 'เปิด' : 'ปิด');
+        log('🔄 Auto-Refresh:', CFG.autoRefreshEnabled ? 'เปิด (ค้างเกิน ' + CFG.autoRefreshStallSec + 's → refresh)' : 'ปิด');
+      });
+    }
+    const _alu = root.querySelector('#__assist_aluser'), _alp = root.querySelector('#__assist_alpass'), _als = root.querySelector('#__assist_alslot');
+    if (_alu) _alu.value = CFG.autoLoginUser || '';
+    if (_alp) _alp.value = CFG.autoLoginPass || '';
+    if (_als) _als.value = CFG.autoLoginSlot || 0;
+    const _ars = root.querySelector('#__assist_arstall');
+    if (_ars) _ars.value = CFG.autoRefreshStallSec || 180;
+    root.querySelector('#__assist_applyauto')?.addEventListener('click', () => {
+      const u = _alu ? _alu.value.trim() : '', p = _alp ? _alp.value : '', s = _als ? parseInt(_als.value, 10) : 0;
+      if (u) CFG.autoLoginUser = u;
+      if (p) CFG.autoLoginPass = p;   // ช่องว่าง = ไม่เปลี่ยนรหัสเดิม
+      if (!isNaN(s) && s >= 0) CFG.autoLoginSlot = s;
+      saveConfigDebounced();
+      log('🤖 บันทึก auto-login: user=' + CFG.autoLoginUser + ' slot=' + CFG.autoLoginSlot + (CFG.autoLoginPass ? ' (มีรหัส)' : ' (ยังไม่มีรหัส!)'));
+    });
+    root.querySelector('#__assist_applyrefresh')?.addEventListener('click', () => {
+      const sec = _ars ? parseInt(_ars.value, 10) : NaN;
+      if (!isNaN(sec) && sec >= 60) { CFG.autoRefreshStallSec = Math.min(1800, sec); saveConfigDebounced(); }
+      log('🔄 บันทึก auto-refresh: ค้างเกิน ' + CFG.autoRefreshStallSec + 's → refresh');
+    });
     // ★ ห้ามเรียก syncToggle ที่นี่ — มันประกาศอยู่อีก scope (refresh) → ReferenceError!
     //   จับปุ่มเป็น element ตรง ๆ แล้ว set className เอง
     const _fblBtn = root.querySelector('#__assist_t_fightbackbl');
