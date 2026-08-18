@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.128.1
+// @version      4.129.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,17 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.128.1';
+  const VERSION = '4.129.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.129.0', d: '2026-08-18', items: [
+      '🎯 CHAR-SELECT NUDGE — แก้ค้างหน้าเลือกตัวละคร (จากทดสอบจริง)',
+      '   ข้อค้นพบ: WS เปิด = เกมกด login แล้วเสมอ → ห้ามส่ง 0x08 ซ้ำ (server เมิง)',
+      '   + เกมจำรหัสไว้ = ไม่มี IN 0x00/token ให้เห็น → packet SELECT_CHAR ใช้ไม่ได้',
+      '   แก้: ถ้าไม่มี playerId ใน 12s → กด Enter + คลิกแทนหน้า char select',
+      '   (หมุนตำแหน่ง 50%/35%/65%/42%/58% ของความกว้าง — ไล่จนตัวละครถูกเลือก)',
+      '🔄 auto-refresh เพิ่มเคส 3: WS เปิดแต่ไม่เข้าเกมเกิน stallSec → refresh ลองใหม่',
+    ]},
     { v: '4.128.1', d: '2026-08-18', items: [
       '⌨️ ลำดับใหม่ตามข้อค้นพบจริง: กด Enter ก่อน (ใช้รหัสที่เกมจำไว้)',
       '   → ผ่านเลยถ้าเกมจำรหัส (default ของเกม) ไม่ต้องพิมพ์อะไรเลย',
@@ -1193,6 +1201,7 @@
   let autoLoginToken = null;          // Uint8Array 22 bytes ([type:2][token:20]) จาก IN 0x00
   let autoLoginAttemptAt = 0;         // กันส่งซ้ำ (1 ครั้งต่อ WS connection)
   let lastGamePacketAt = Date.now();  // ★ packet ล่าสุดจาก server — ใช้ตรวจ "ค้าง" (auto-refresh)
+  let wsOpenedAt = 0;                 // ★ เวลาที่ WS เกมเปิดล่าสุด — ใช้ดูว่าค้างหน้า char select ไหน
   function sendLoginPacket(user, pass) {
     if (!activeWS || activeWS.readyState !== 1) return false;
     const uB = new TextEncoder().encode(user);
@@ -3330,6 +3339,29 @@
   // ★★ AUTO-REFRESH watchdog — เข้าเกมแล้วแต่ packet เงียบผิดปกติ (ค้าง) หรือ WS หลุดนาน
   //   → refresh หน้าเว็บ แล้ว auto-login พากลับเข้าเกมเอง (ถ้าเปิดไว้)
   //   ปกติ server ส่ง packet มาตลอด (0x26 regen ทุก ~6s / beacon / 0x07) — เงียบยาว = ค้างแน่นอน
+  // ★★★ CHAR-SELECT NUDGE: WS เปิดแล้ว (login ผ่าน) แต่ไม่มี playerId ใน 12s
+  //   = ค้างหน้าเลือกตัวละคร → กด Enter / คลิกแทน (หมุนตำแหน่งคลิก: กลาง/ซ้าย/ขวา
+  //   เพราะ slot ตัวละครวางแนวนอน — กดไล่จนกว่าจะเข้า)
+  let csNudgeTries = 0;
+  const csNudgeTimer = setInterval(() => {
+    const wsOpen = activeWS && activeWS.readyState === 1;
+    if (!CFG.autoLoginEnabled || !wsOpen || playerId != null || autoLoginPhase === 'failed') { if (playerId != null) csNudgeTries = 0; return; }
+    if (!wsOpenedAt || Date.now() - wsOpenedAt < 12000) return;   // เพิ่งเปิด WS — ยังไม่ต้องดัน
+    if (++csNudgeTries > 12) return;                              // เลิกลองหลัง ~96s (ปล่อยให้ auto-refresh จัดการ)
+    const pos = [0.5, 0.35, 0.65, 0.42, 0.58][csNudgeTries % 5];
+    try {
+      const cv = document.querySelector('canvas') || document.body;
+      const r = cv.getBoundingClientRect ? cv.getBoundingClientRect() : { left: 0, top: 0, width: innerWidth, height: innerHeight };
+      const cx = r.left + r.width * pos, cy = r.top + r.height * 0.5;
+      for (const t of ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click']) {
+        const E = (t.startsWith('pointer')) ? PointerEvent : MouseEvent;
+        cv.dispatchEvent(new E(t, { clientX: cx, clientY: cy, bubbles: true, pointerId: 1, isPrimary: true }));
+      }
+      cv.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true }));
+      cv.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true }));
+      log('🎯 [auto-login] ค้างหน้าเลือกตัวละคร → คลิก x' + Math.round(pos * 100) + '% + Enter (ครั้ง', csNudgeTries + '/12)');
+    } catch (e) {}
+  }, 8000);
   const autoRefreshWatchdog = setInterval(() => {
     if (!CFG.autoRefreshEnabled) return;
     const now = Date.now();
@@ -3344,6 +3376,12 @@
     // เคส 2: WS ปิดนานเกิน (เกม client ไม่ต่อกลับเอง) — เผื่อเวลาเกิน stall + 60s
     else if (!wsOk && playerId != null && silentSec > CFG.autoRefreshStallSec + 60) {
       logImportant('flee', '🔄 [auto-refresh] WebSocket หลุด ' + Math.round(silentSec) + 's → refresh หน้าแล้ว login ใหม่');
+      clearInterval(autoRefreshWatchdog);
+      setTimeout(() => location.reload(), 1500);
+    }
+    // เคส 3: WS เปิดแต่ไม่เข้าโลกเกมเลย (ค้างหน้า login/char select ที่ nudge ช่วยไม่ได้) → รีสตาร์ทรอบใหม่
+    else if (wsOk && playerId == null && CFG.autoLoginEnabled && wsOpenedAt && Date.now() - wsOpenedAt > CFG.autoRefreshStallSec * 1000) {
+      logImportant('flee', '🔄 [auto-refresh] ค้างหน้า login/เลือกตัวละครเกิน ' + CFG.autoRefreshStallSec + 's → refresh หน้าแล้วลองใหม่');
       clearInterval(autoRefreshWatchdog);
       setTimeout(() => location.reload(), 1500);
     }
@@ -4403,23 +4441,15 @@
     }
     activeWS = ws; log('🔌 ต่อ WebSocket แล้ว');
     try { gameServerUrl = ws.url || ''; } catch (_) {}   // ★ เก็บ URL เซิร์ฟเวอร์เกม
-    // ★★ AUTO-LOGIN: WS ต่อแล้ว — ดู 9s ก่อนว่าเกม client ล็อกอินเองไหม
-    //   (เกมเปิด WS ตอนกดปุ่ม Login เท่านั้น! ถ้า WS มาแล้ว = มีคน/session ล็อกอินอยู่)
-    //   ถ้า 9s ไม่มีอะไรค่อยส่ง 0x08 เอง (เคส client ติดหน้าจอ แต่ WS ต่ออยู่)
-    if (CFG.autoLoginEnabled && CFG.autoLoginUser && CFG.autoLoginPass
-        && (autoLoginPhase === 'idle' || autoLoginPhase === 'done')
+    // ★★ AUTO-LOGIN หลัง WS ต่อ: WS เปิด = เกมกด login แล้วเสมอ (เกมเปิด WS ตอนกด login!)
+    //   → ห้ามส่ง 0x08 ซ้ำ (server เมิง — เคยทำแล้ว phase ค้าง)
+    //   → ถ้าไม่มี playerId ใน 12s = ค้างหน้าเลือกตัวละคร → charSelectNudge จะกด Enter/คลิกแทน
+    if (CFG.autoLoginEnabled && (autoLoginPhase === 'idle' || autoLoginPhase === 'done')
         && Date.now() - autoLoginAttemptAt > 30000) {
       autoLoginAttemptAt = Date.now();
       autoLoginPhase = 'observing';
-      log('🤖 [auto-login] WS ต่อแล้ว — ดู 9s ว่าเกมล็อกอินเอง (session เดิม)...');
-      setTimeout(() => {
-        if (autoLoginPhase === 'observing' && activeWS && activeWS.readyState === 1 && playerId == null) {
-          if (sendLoginPacket(CFG.autoLoginUser, CFG.autoLoginPass)) {
-            autoLoginPhase = 'loginSent';
-            log('🤖 [auto-login] เกมไม่ขยับ → ส่ง login เองผ่าน packet...');
-          } else { autoLoginPhase = 'failed'; }
-        }
-      }, 9000);
+      wsOpenedAt = Date.now();
+      log('🤖 [auto-login] WS เปิด (เกมกด login แล้ว) — รอ token / ดันหน้าเลือกตัวละคร...');
     }
     const origSend = ws.send.bind(ws);
     ws.send = function (data) {
