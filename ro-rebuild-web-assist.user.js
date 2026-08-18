@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.114.0
+// @version      4.115.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,18 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.114.0';
+  const VERSION = '4.115.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.115.0', d: '2026-08-18', items: [
+      '🔴🔴 หนีผู้เล่นเงียบหายไปเฉย ๆ หลังวาร์ปพร้อมคนตาม (จาก log ทดสอบจริง)',
+      '   ลำดับบั๊ก: คนตามวาร์ปตามมาพร้อมกัน → dot ของเขาใน minimap โดน SELF-DETECT',
+      '   ฉกเป็น playerId ของเรา → พอ SPAWN ตัวจริงมาแก้กลับ → ระบบ stale id เก่า',
+      '   ซึ่งก็คือ id ของ "คนตาม" → เรามองไม่เห็นเขา 5 นาที → ไม่หนีอีกเลย!',
+      '   แก้ 3 ชั้น: (1) dot ที่รู้ชื่อแล้วว่าเป็นคนอื่น (SPAWN มาก่อน) ห้าม claim',
+      '   (2) stale เฉพาะ playerId เก่าที่ "ยืนยันแล้ว" (selfIdConfirmed) เท่านั้น',
+      '   (3) id จาก minimap = ยังไม่ยืนยัน จนกว่า SPAWN ชื่อตรง/SELECT_CHAR/โดนตีซ้ำ',
+    ]},
     { v: '4.114.0', d: '2026-08-18', items: [
       '🔴 กันยึ่งของคนอื่น — ฆ่ามอนพร้อมกัน ของเขาตกใกล้ ๆ บอทเคย claim หมด',
       '   รูรั่วเดิม: "เพิ่งได้ EXP ใน 2s" = claim ทุก drop ไม่สนระยะ',
@@ -652,6 +661,12 @@
   let gameServerUrl = '';              // ★ URL ของเซิร์ฟเวอร์เกม (เช่น wss://gamesea01.rayrag.com/ws)
   let playerId = null;                 // ไอดีตัวเรา
   let playerName = null;               // ★ ชื่อตัวเรา — guard กัน false ID change (mirror world.js:1235)
+  // ★★ selfIdConfirmed — playerId ปัจจุบันยืนยันแล้วหรือยัง?
+  //   true  = เห็น SPAWN ชื่อตรง / SELECT_CHAR (ชัวร์ว่าเป็นเรา)
+  //   false = เพิ่งถูก claim จาก minimap dot 0x3c (ยังไม่รู้ว่า dot นั้นใคร)
+  //   ใช้ตอนเปลี่ยน playerId: id เก่าที่ "ยังไม่ยืนยัน" ห้าม mark stale
+  //   (บั๊ก: SELF-DETECT ฉก id คนตาม → พอแก้กลับ กลับ stale id คนตาม → มองไม่เห็น 5 นาที!)
+  let selfIdConfirmed = false;
   let hpStatGraceUntil = 0;            // ★ grace period หลัง ID เปลี่ยน (ข้าม STAT HP ที่อาจผิด)
   const player = { x: null, y: null }; // ตำแหน่งตัวเรา
 
@@ -1288,7 +1303,7 @@
           sp.cur = null; sp.max = null;
           player.x = null; player.y = null;
           isDead = false; postRespawnRest = false; isResting = false;
-          playerId = eid; relayRegisterPlayer();
+          playerId = eid; selfIdConfirmed = true; relayRegisterPlayer();   // ★ SELECT_CHAR = authoritative ยืนยันเลย
         } else if (!playerName) {
           // ตัวเดิม re-login แต่ยังไม่รู้ชื่อ — ปล่อยให้ SPAWN ตั้ง
         }
@@ -1502,10 +1517,16 @@
             // ★ flag=1 = ผู้เล่นอื่นบนแมป (minimap marker) → track เป็น kind=0
             //   ★★ SELF-DETECT: เพิ่งวาร์ป + ไม่มี entity ของ playerId → entity นี้คือตัวเรา!
             //   (หลังวาร์ป entityId เปลี่ยน → playerId เก่าไม่ match → หนีตัวเองวนลูป)
-            if (now < warpGuardUntil && playerId != null && !entities.has(playerId)) {
+            //   ★★★ guard: ถ้า dot นี้เป็นผู้เล่นที่ SPAWN มาก่อนแล้ว (มีชื่อ ≠ เรา) → เป็นคนอื่น!
+            //   (บั๊กจริง: คนตามวาร์ปตามมาพร้อมกัน → dot ของเขาโดน claim เป็นเรา → วุ่นวายทั้งระบบ)
+            const knownSelf = entities.get(eid);
+            const isKnownOther = knownSelf && knownSelf.name && playerName && knownSelf.name !== playerName;
+            if (now < warpGuardUntil && playerId != null && !entities.has(playerId) && !isKnownOther) {
               const oldId = playerId;
               playerId = eid;
-              stalePlayerIds.set(oldId, now + 300000);
+              // ★ stale เฉพาะ id เก่าที่ยืนยันแล้ว — id ที่ยังไม่ยืนยันอาจเป็นของคนอื่น (กันติดคนตาม)
+              if (selfIdConfirmed) stalePlayerIds.set(oldId, now + 300000);
+              selfIdConfirmed = false;   // claim จาก dot — ยังไม่ยืนยัน รอ SPAWN ชื่อตรง
               entities.delete(oldId);   // ★★ ลบ entity เก่า (กันค้างเป็น player → หนีตัวเอง!)
               entities.set(eid, { id: eid, kind: 0, x: ex, y: ey, alive: true, _lastSeenAt: now, name: playerName || '' });
               player.x = ex; player.y = ey;
@@ -1527,10 +1548,14 @@
           if (flag === 1) {
             // ★ flag=1 = ผู้เล่นอื่นบนแมป (minimap marker) → track เป็น kind=0
             //   ★★ SELF-DETECT: เพิ่งวาร์ป + ไม่มี entity ของ playerId → entity นี้คือตัวเรา!
-            if (now < warpGuardUntil && playerId != null && !entities.has(playerId)) {
+            //   ★★★ guard: รู้ชื่อแล้วว่าเป็นคนอื่น (SPAWN มาก่อน) → ห้าม claim เป็นเรา
+            const knownSelf = entities.get(id);
+            const isKnownOther = knownSelf && knownSelf.name && playerName && knownSelf.name !== playerName;
+            if (now < warpGuardUntil && playerId != null && !entities.has(playerId) && !isKnownOther) {
               const oldId = playerId;
               playerId = id;
-              stalePlayerIds.set(oldId, now + 300000);
+              if (selfIdConfirmed) stalePlayerIds.set(oldId, now + 300000);
+              selfIdConfirmed = false;
               entities.delete(oldId);
               entities.set(id, { id, kind: 0, x, y, alive: true, _lastSeenAt: now, name: playerName || '' });
               player.x = x; player.y = y;
@@ -1692,10 +1717,13 @@
             } else {
               // ID เปลี่ยนจริง (respawn/warp) → track oldId + clear + grace period
               log('🔄 player_id เปลี่ยน:', playerId.toString(16), '→', id.toString(16));
-              stalePlayerIds.set(playerId, nowMs() + 300000);  // stale 5 นาที
+              // ★ stale เฉพาะ id เก่าที่ยืนยันแล้ว (id ที่ claim จาก minimap อาจเป็นของคนอื่น)
+              if (selfIdConfirmed) stalePlayerIds.set(playerId, nowMs() + 300000);  // stale 5 นาที
               entities.clear();
               monsterAggro.clear(); mobAttackers.clear();
               playerId = id; relayRegisterPlayer();
+              // ★ SPAWN flag=1 ที่ผ่าน guard ชื่อ = ตัวเราแน่ → ยืนยันเลย (ถ้ามีชื่อให้เทียบ)
+              selfIdConfirmed = true;
               // ★★ reset HP เฉพาะ respawn/warp (รู้ชื่อตัวเองแล้ว) — ไม่ใช้ตอนเข้าเกมครั้งแรก
               //   แยกด้วย playerName: ครั้งแรกยังไม่รู้ชื่อ → HP เริ่ม null อยู่แล้ว ไม่ต้อง reset
               //   (เดิมเช็ค flag===1 ซ้อนใน if(flag===1) = dead code — else ไม่มีวันทำงาน)
@@ -1814,14 +1842,21 @@
             log('🔄 SPAWN SELF-DETECT: playerId', playerId.toString(16), '→', id.toString(16), '(ชื่อตรง:', name + ')');
             const oldId = playerId;
             playerId = id;
-            stalePlayerIds.set(oldId, nowMs() + 300000);
+            // ★ stale เฉพาะ id เก่าที่ยืนยันแล้ว — ถ้าเก่าคือ id ที่ 0x3c ฉกมา (ยังไม่ยืนยัน)
+            //   มันอาจเป็น id ของผู้เล่นคนอื่น! ห้าม stale กันมองไม่เห็นเขา 5 นาที
+            if (selfIdConfirmed) {
+              stalePlayerIds.set(oldId, nowMs() + 300000);
+            } else {
+              log('   (id เก่ายังไม่ยืนยัน (จาก minimap) — ไม่ stale กันติดผู้เล่นคนอื่น)');
+            }
+            selfIdConfirmed = true;   // ชื่อตรงเป๊ะ = ตัวเราแน่นอน
             entities.delete(oldId);
             player.x = x; player.y = y;
             relayRegisterPlayer();
           }
           // ★ เก็บ playerName — ใช้เป็น guard กัน false ID change (mirror world.js:1235)
           if (id === playerId && name && !playerName) {
-            playerName = name; log('👤 player_name =', name);
+            playerName = name; selfIdConfirmed = true; log('👤 player_name =', name);
             // ★ re-register + re-send Telegram config ตอนรู้ชื่อครั้งแรก
             //   (SELECT_CHAR ส่ง setTelegram ก่อนรู้ชื่อ → relay ปฏิเสธ → ส่งใหม่ตอนนี้)
             if (relayWs && relayWs.readyState === 1) {
@@ -1943,7 +1978,8 @@
         if (cnt >= 3) {
           const oldId = playerId;
           playerId = victimId;
-          stalePlayerIds.set(oldId, now + 300000);
+          if (selfIdConfirmed) stalePlayerIds.set(oldId, now + 300000);
+          selfIdConfirmed = true;   // โดนตีซ้ำ 3 ครั้งใน 10s = ตัวเราแน่
           entities.delete(oldId);   // ★★ ลบ entity เก่า (กันค้างเป็น "player" → หนีตัวเอง)
           _victimIdCount.clear();
           log('🔄 AUTO-DETECT playerId:', oldId != null ? oldId.toString(16) : '?', '→', playerId.toString(16), '(โดนตีซ้ำ', cnt, 'ครั้ง)');
