@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.127.0
+// @version      4.127.1
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,15 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.127.0';
+  const VERSION = '4.127.1';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.127.1', d: '2026-08-18', items: [
+      '🖱️ Auto-login: ถ้าไม่มี WS ภายใน ~7s → คลิกกลางจอไล่หน้า splash "คลิกเริ่มเกม"',
+      '   (สูงสุด 4 ครั้งใน 60s และคลิกเฉพาะตอน WS ยังไม่ต่อ — เข้าเกมแล้วไม่แตะ)',
+      '📋 สรุปสถานะ auto-login/refresh ตอนสตาร์ท (เห็นใน log + console ทันที)',
+      '🖥️ flow auto-login พิมพ์ console ตรง ๆ ทุกขั้น (ไม่ต้องรอเปิด panel)',
+    ]},
     { v: '4.127.0', d: '2026-08-18', items: [
       '🤖 Auto-Login! WS ต่อเกม → ล็อกอินเอง → เลือกตัวละคร slot ที่ตั้งไว้ (จาก capture)',
       '   protocol: OUT [08][00000000][uLen][user][pLen][pass] → IN 0x00 (token 20B)',
@@ -1292,6 +1298,7 @@
         autoLoginToken = u.slice(5, 29);   // [type:2][token:22] — echo กลับไปกับ SELECT_CHAR
         autoLoginPhase = 'acctOk';
         log('🤖 [auto-login] login สำเร็จ → เลือกตัวละคร slot', CFG.autoLoginSlot, 'ใน 1.5s');
+        console.log('[ASSIST] 🤖 auto-login: login สำเร็จ → เลือกตัวละครใน 1.5s');
         setTimeout(() => {
           if (autoLoginPhase === 'acctOk' && activeWS && activeWS.readyState === 1) {
             if (sendSelectCharPacket(autoLoginToken, CFG.autoLoginSlot)) {
@@ -1501,6 +1508,7 @@
       if (autoLoginPhase === 'charSent') {
         autoLoginPhase = 'done';
         log('🤖 [auto-login] เข้าเกมสำเร็จ! (slot', CFG.autoLoginSlot + ') — ระบบทำงานต่ออัตโนมัติ');
+        console.log('[ASSIST] 🤖 auto-login: เข้าเกมสำเร็จ! ✅');
       }
       // ★★ SELECT_CHAR = คำตอบตรงจาก server ตอนผู้ใช้กดเลือกตัวละคร → authoritative เสมอ
       //   เดิม: อัปเดตเฉพาะตอน playerId == null → logout แล้ว login ตัวใหม่ → playerId ค้างเป็นตัวเก่า
@@ -4369,6 +4377,7 @@
       autoLoginAttemptAt = Date.now();
       const delay = 1500 + Math.random() * 2000;
       log('🤖 [auto-login] เตรียมล็อกอินอัตโนมัติในอีก ' + (delay / 1000).toFixed(1) + 's (user: ' + CFG.autoLoginUser + ')');
+      console.log('[ASSIST] 🤖 auto-login: จะส่งในอีก ' + (delay / 1000).toFixed(1) + 's');
       autoLoginPhase = 'waitingLogin';
       setTimeout(() => {
         if (autoLoginPhase === 'waitingLogin' && activeWS && activeWS.readyState === 1) {
@@ -6516,6 +6525,31 @@
     if (updBtn) updBtn.addEventListener('click', () => { if (confirm('อัปเดตเป็นเวอร์ชั่นล่าสุด?\n(หลังอัปเดตต้อง reconnect เกม ปิด-เปิดหน้า)')) ASSIST.update(); });
 
     log('🖥️ แสดง panel แล้ว (คลิกที่แถบมุมขวาบนเพื่อเปิด)');
+    // ★★ สรุปสถานะ auto-login/refresh ตอนสตาร์ท — ให้เห็นชัดว่า config โหลดครบไหม
+    const _alSum = 'Auto-Login: ' + (CFG.autoLoginEnabled ? 'เปิด (user: ' + CFG.autoLoginUser + ', slot: ' + CFG.autoLoginSlot + (CFG.autoLoginPass ? '' : ' ⚠️ยังไม่มี password!') + ')' : 'ปิด')
+      + ' | Auto-Refresh: ' + (CFG.autoRefreshEnabled ? 'เปิด (' + CFG.autoRefreshStallSec + 's)' : 'ปิด');
+    log('🤖', _alSum);
+    console.log('[ASSIST] 🤖 ' + _alSum);
+    // ★★ เกมค้างหน้า splash ("คลิกเริ่มเกม") → ไม่มี WS ภายใน 15s → คลิกกลางจอให้เอง
+    //   (คลิกเฉพาะตอน WS ยังไม่ต่อ — พอเข้าเกมแล้วจะไม่คลิกแทนแน่นอน กันส่งเดินพร่าเพร่า)
+    if (CFG.autoLoginEnabled) {
+      let _splashClicks = 0;
+      const splashTimer = setInterval(() => {
+        const wsOpen = activeWS && activeWS.readyState === 1;
+        if (wsOpen || _splashClicks >= 4 || playerId != null) { clearInterval(splashTimer); return; }
+        _splashClicks++;
+        try {
+          const cv = document.querySelector('canvas') || document.body;
+          const r = cv.getBoundingClientRect ? cv.getBoundingClientRect() : { width: innerWidth, height: innerHeight };
+          const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+          cv.dispatchEvent(new MouseEvent('mousedown', { clientX: cx, clientY: cy, bubbles: true }));
+          cv.dispatchEvent(new MouseEvent('mouseup', { clientX: cx, clientY: cy, bubbles: true }));
+          cv.dispatchEvent(new MouseEvent('click', { clientX: cx, clientY: cy, bubbles: true }));
+          log('🖱️ [auto-login] ยังไม่มี WS → คลิกกลางจอไล่หน้า splash (ครั้ง', _splashClicks + '/4)');
+        } catch (e) { clearInterval(splashTimer); }
+      }, 7000);
+      setTimeout(() => clearInterval(splashTimer), 60000);   // หมดเวลาใน 60s
+    }
   }
 
   // ★ MONITOR_HTML — HTML สำหรับ popup window (embed ในสคริปต์ → ไม่ต้องเปิดไฟล์แยก)
