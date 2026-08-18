@@ -2042,5 +2042,229 @@
       "scaleY": -0.9490417013876309,
       "offsetY": 380.75941089090975
     }
+  },
+  "yuno_fild03": {
+    "points": [
+      {
+        "tileX": 303,
+        "tileY": 307,
+        "pixelX": 295,
+        "pixelY": 87
+      },
+      {
+        "tileX": 333,
+        "tileY": 195,
+        "pixelX": 322,
+        "pixelY": 200
+      },
+      {
+        "tileX": 188,
+        "tileY": 226,
+        "pixelX": 184,
+        "pixelY": 168
+      }
+    ],
+    "transform": {
+      "scaleX": 0.9554765291607397,
+      "offsetX": 4.5624466571835,
+      "scaleY": -1.0071264826073956,
+      "offsetY": 396.062693112728
+    }
+  },
+  "moc_fild08": {
+    "points": [
+      {
+        "tileX": 354,
+        "tileY": 330,
+        "pixelX": 341,
+        "pixelY": 64
+      },
+      {
+        "tileX": 197,
+        "tileY": 316,
+        "pixelX": 191,
+        "pixelY": 77
+      },
+      {
+        "tileX": 52,
+        "tileY": 308,
+        "pixelX": 52,
+        "pixelY": 87
+      }
+    ],
+    "transform": {
+      "scaleX": 0.956932450795599,
+      "offsetX": 2.323244056751264,
+      "scaleY": -1.032258064516129,
+      "offsetY": 404.258064516129
+    }
+  },
+  "beach_dun3": {
+    "points": [
+      {
+        "tileX": 169,
+        "tileY": 38,
+        "pixelX": 216,
+        "pixelY": 331
+      },
+      {
+        "tileX": 48,
+        "tileY": 136,
+        "pixelX": 62,
+        "pixelY": 206
+      },
+      {
+        "tileX": 46,
+        "tileY": 63,
+        "pixelX": 61,
+        "pixelY": 300
+      }
+    ],
+    "transform": {
+      "scaleX": 1.2662390004702089,
+      "offsetX": 1.9930476254450202,
+      "scaleY": -1.2782491322792133,
+      "offsetY": 379.9816814500578
+    }
+  },
+  "yuno_fild06": {
+    "points": [
+      {
+        "tileX": 284,
+        "tileY": 154,
+        "pixelX": 274,
+        "pixelY": 233
+      },
+      {
+        "tileX": 244,
+        "tileY": 229,
+        "pixelX": 235,
+        "pixelY": 161
+      },
+      {
+        "tileX": 328,
+        "tileY": 336,
+        "pixelX": 316,
+        "pixelY": 60
+      }
+    ],
+    "transform": {
+      "scaleX": 0.9641238670694864,
+      "offsetX": -0.0966767371601236,
+      "scaleY": -0.9500976134507351,
+      "offsetY": 379.04006135702616
+    }
+  },
+  "gef_fild06": {
+    "points": [
+      {
+        "tileX": 253,
+        "tileY": 293,
+        "pixelX": 243,
+        "pixelY": 103
+      },
+      {
+        "tileX": 303,
+        "tileY": 259,
+        "pixelX": 289,
+        "pixelY": 133
+      },
+      {
+        "tileX": 210,
+        "tileY": 181,
+        "pixelX": 203,
+        "pixelY": 207
+      }
+    ],
+    "transform": {
+      "scaleX": 0.9246037851977227,
+      "offsetX": 8.917833512848157,
+      "scaleY": -0.9320663162151234,
+      "offsetY": 375.4015365952285
+    }
+  },
+  "treasure02": {
+    "points": [
+      {
+        "tileX": 100,
+        "tileY": 66,
+        "pixelX": 190,
+        "pixelY": 257
+      },
+      {
+        "tileX": 163,
+        "tileY": 37,
+        "pixelX": 312,
+        "pixelY": 314
+      },
+      {
+        "tileX": 93,
+        "tileY": 46,
+        "pixelX": 181,
+        "pixelY": 296
+      }
+    ],
+    "transform": {
+      "scaleX": 1.8971742543171115,
+      "offsetX": 2.5353218210361015,
+      "scaleY": -1.9629349470499244,
+      "offsetY": 386.49243570347954
+    }
+  },
+  "gef_fild05": {
+    "points": [
+      {
+        "tileX": 64,
+        "tileY": 24,
+        "pixelX": 66,
+        "pixelY": 357
+      },
+      {
+        "tileX": 124,
+        "tileY": 183,
+        "pixelX": 124,
+        "pixelY": 197
+      },
+      {
+        "tileX": 86,
+        "tileY": 142,
+        "pixelX": 84,
+        "pixelY": 236
+      }
+    ],
+    "transform": {
+      "scaleX": 0.9761215629522432,
+      "offsetX": 2.180897250361795,
+      "scaleY": -1.0105415056498557,
+      "offsetY": 380.89299515726657
+    }
+  },
+  "moc_fild16": {
+    "points": [
+      {
+        "tileX": 54,
+        "tileY": 215,
+        "pixelX": 52,
+        "pixelY": 178
+      },
+      {
+        "tileX": 80,
+        "tileY": 349,
+        "pixelX": 73,
+        "pixelY": 46
+      },
+      {
+        "tileX": 353,
+        "tileY": 291,
+        "pixelX": 337,
+        "pixelY": 102
+      }
+    ],
+    "transform": {
+      "scaleX": 0.958853261728005,
+      "offsetX": -1.6538461538461509,
+      "scaleY": -0.9858281665190434,
+      "offsetY": 389.62769412459403
+    }
   }
 }
