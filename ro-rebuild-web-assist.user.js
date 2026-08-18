@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.120.0
+// @version      4.121.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,18 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.120.0';
+  const VERSION = '4.121.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.121.0', d: '2026-08-18', items: [
+      '📍ใหม่: minimap beacon ของเราเอง (id ตรง playerId) → อัปเดตตำแหน่งทุก 4 ช่องที่เดิน',
+      '   (จาก capture: server ส่ง 0x3c marker ของเราทุก 4 ช่อง — flag=01 เหมือนคนอื่น แยกด้วย id เท่านั้น)',
+      '📍ใหม่: /where oracle (0x37) — ส่งคำถาม → server ตอบ "You are at X,Y on map Z."',
+      '   → แปลงเป็นพิกัดแม่นยำอัปเดตทันที + ถามอัตโนมัติทุก 5s เมื่อตำแหน่งหาย (หลังวาร์ป)',
+      '   ใช้มือ: ASSIST.where()',
+      '📋 สรุปวิจัย protocol จาก capture นี้: 0x07 IN = ตำแหน่งตอนเริ่มเดิน + f32 ละเอียด,',
+      '   0x3c marker = beacon ทุก 4 ช่อง, 0x37 = /where, ไม่มี flag บอก "เป็นเรา" ใน minimap',
+    ]},
     { v: '4.120.0', d: '2026-08-18', items: [
       '🔴🔴 ถอด SELF-DETECT จาก minimap ออกทั้งหมด — id เราไม่เปลี่ยนตอนวาร์ป!',
       '   หลักฐานจาก log: หลังวาร์ป dot id เดิมของเรายังโผล่ใน minimap ของแมปใหม่',
@@ -988,6 +997,7 @@
   //   (จาก packet capture: request 0x52 เหมือนกันเป๊ะ แต่ของคนอื่น = ไม่มี 0x52 ตอบกลับ มีแต่ข้อความ)
   //   → เลิกลองทันที + blacklist ชั่วคราว กัน tryClaim ซ้ำวนลูป
   let lastPickupDropId = null;         // dropId ที่เพิ่งส่ง 0x52 ล่าสุด (map เข้ากับ 0x20 ที่ตามมา)
+  let lastWhereReqAt = 0;              // ★ throttle ส่ง /where (0x37) เมื่อตำแหน่งหาย
   const dropBlacklist = new Map();     // dropId -> expireAt (60s — ของคนอื่น ไม่ต้องลองซ้ำ)
   let lastLootActivityAt = 0;          // ★ เวลาเก็บของสำเร็จล่าสุด — ใช้ดีเลย์ก่อนนั่งพัก (กันดูเป็นบอท)
   // ★ recent kill positions — จดพิกัดมอนที่เราฆ่า เพื่อเช็ค item drop ใกล้หรือไม่
@@ -1043,6 +1053,15 @@
     b[1] = dropId & 0xff; b[2] = (dropId >> 8) & 0xff;
     b[3] = (dropId >> 16) & 0xff; b[4] = (dropId >>> 24) & 0xff;
     activeWS.send(b);
+    return true;
+  }
+
+  // ★★ /where (0x37): ถามตำแหน่งแม่นยำจาก server — ตอบกลับเป็นแชทระบบ
+  //   "You are at 126,77 on map izlude." (พิสูจน์จาก capture — OUT 37 00 00 00 → IN 0x2c จาก sender=ffffffff)
+  //   ใช้เป็น oracle เมื่อตำแหน่งเราหาย (หลังวาร์ป/ติดค้าง) และเป็นเครื่องมือ verify พิกัด
+  function sendWhere() {
+    if (!activeWS || activeWS.readyState !== 1) return false;
+    activeWS.send(new Uint8Array([0x37, 0x00, 0x00, 0x00]));
     return true;
   }
 
@@ -1502,6 +1521,22 @@
         if (p < u.length) chatType = u[p];
         const typeNames = { 0: 'ใกล้', 1: 'ตะโกน', 2: 'กระซิบ' };
         const typeName = typeNames[chatType] || ('type' + chatType);
+        // ★★ /where response (sender=ffffffff = server) — ตำแหน่งแม่นยำจาก server
+        //   "You are at 126,77 on map izlude." → อัปเดต player.x/y ทันที (oracle พิสูจน์แล้วจาก capture)
+        if (sender === 0xffffffff) {
+          const wm = message.match(/^You are at (-?\d+),\s*(-?\d+) on map (\S+?)\.?$/);
+          if (wm) {
+            const wx = parseInt(wm[1], 10), wy = parseInt(wm[2], 10);
+            if (wx >= -500 && wx <= 1000 && wy >= -500 && wy <= 1000) {
+              player.x = wx; player.y = wy;
+              if (playerId != null) {
+                const pe = entities.get(playerId);
+                if (pe) { pe.x = wx; pe.y = wy; pe._lastSeenAt = nowMs(); }
+              }
+              log('📍 /where → (' + wx + ',' + wy + ') แมป ' + wm[3] + (wm[3] !== currentMap ? ' (ต่างจากปัจจุบัน ' + currentMap + ')' : ''));
+            }
+          }
+        }
         // ★ เก็บลง chat history buffer (สำหรับ monitor)
         chatBuf.push({ t: Date.now(), type: typeName, chatType, sender: name || '?', message });
         while (chatBuf.length > CHAT_BUF_MAX) chatBuf.shift();
@@ -1573,6 +1608,9 @@
             let m = entities.get(eid);
             if (m) { m.x = ex; m.y = ey; m._lastSeenAt = now; }
             else { entities.set(eid, { id: eid, kind: 0, x: ex, y: ey, alive: true, _lastSeenAt: now, name: '' }); }
+            // ★ marker ของเราเอง (id ตรง playerId) → อัปเดตตำแหน่งเรา
+            //   (จาก capture: server ส่ง beacon ทุก 4 ช่องที่เดิน — เติมช่องว่างระหว่าง 0x07 response)
+            if (playerId != null && eid === playerId) { player.x = ex; player.y = ey; }
           }
         }
       } else if (sub === 1 && u.length >= 12) {
@@ -1587,6 +1625,8 @@
             let m = entities.get(id);
             if (m) { m.x = x; m.y = y; m._lastSeenAt = now; }
             else { entities.set(id, { id, kind: 0, x, y, alive: true, _lastSeenAt: now, name: '' }); }
+            // ★ marker ของเราเอง → อัปเดตตำแหน่งเรา (beacon ทุก 4 ช่อง — เหมือน multi path)
+            if (playerId != null && id === playerId) { player.x = x; player.y = y; }
           } else {
             // ★ flag=3 = Mini Boss, flag=4 = Boss
             const isRealBoss = (flag === 4);
@@ -3173,6 +3213,16 @@
       const me = entities.get(playerId);
       if (me && me.x != null) { player.x = me.x; player.y = me.y; }
     }
+    // ★★ ตำแหน่งยังหายอยู่ (หลังวาร์ป/เคสพิเศษ) → ถาม server ตรง ๆ ด้วย /where ทุก 5s
+    //   (oracle พิสูจน์แล้ว: ส่ง 0x37 → server ตอบ "You are at X,Y on map Z." → 0x2c handler จะ apply)
+    if (player.x == null && playerId != null && activeWS && activeWS.readyState === 1) {
+      if (now - (lastWhereReqAt || 0) > 5000) {
+        if (sendWhere()) {
+          lastWhereReqAt = now;
+          log('📍 ตำแหน่งยังไม่รู้ → ถาม /where (จะได้พิกัดแม่นยำจาก server)');
+        }
+      }
+    }
     // ★★★ AUTO-RESPAWN — priority สูงสุด: ถ้าตาย → respawn กลับจุด save (mirror bot.js:1404-1406)
     //   ★★ MAX 5 ครั้ง — กัน death loop (ส่ง respawn รัวๆ แต่ไม่ฟื้น)
     if (isDead) {
@@ -4153,6 +4203,8 @@
         loot: { ...CFG.filter, queue: [...queue.values()].map(it => ({ item: nameOf(it.itemId), ...it })) },
       };
     },
+    // ★ ถามตำแหน่งแม่นยำจาก server (/where) — คำตอบมาเป็นแชทระบบ แล้ว 0x2c handler apply ให้เอง
+    where() { if (sendWhere()) { log('📍 ส่ง /where แล้ว — รอคำตอบจาก server'); } else { log('⚠️ WebSocket ยังไม่พร้อม'); } },
     help() {
       console.log(`%c ASSIST — คำสั่ง `, 'background:#4caf50;color:#fff;padding:2px 6px;border-radius:3px');
       console.log(`%c Auto-Heal `, 'color:#e91e63;font-weight:bold');
