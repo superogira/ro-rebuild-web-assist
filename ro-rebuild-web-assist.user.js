@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.118.0
+// @version      4.118.1
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,13 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.118.0';
+  const VERSION = '4.118.1';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.118.1', d: '2026-08-18', items: [
+      '🐛 แก้ ReferenceError: syncToggle is not defined ตอนกด toggle ตีกลับมอน blacklist',
+      '   (เรียก helper ที่ประกาศอยู่คนละ scope — แก้เป็น set className เองใน handler)',
+    ]},
     { v: '4.118.0', d: '2026-08-18', items: [
       '🛡️ ตั้งได้ว่าจะตีกลับ "มอนใน blacklist ที่ตีเรา" ไหม (จากรายงานผู้ใช้)',
       '   เดิม: defensive retarget ไม่สน blacklist — มอนตีเรา = ตีกลับเสมอ',
@@ -5888,7 +5892,15 @@
     root.querySelector('#__assist_t_fleemode_change').addEventListener('click', () => { CFG.fleeMode = 'changeMap'; saveConfigDebounced(); log('🗺️ หนีผู้เล่น: เปลี่ยนแมป'); });
     root.querySelector('#__assist_t_fleemode_same').addEventListener('click', () => { CFG.fleeMode = 'sameMap'; saveConfigDebounced(); log('📍 หนีผู้เล่น: วาร์ปสุ่มในแมปเดิม'); });
     root.querySelector('#__assist_t_stepaside').addEventListener('click', () => { CFG.stepAsideOnAbandon = CFG.stepAsideOnAbandon === false ? true : false; saveConfigDebounced(); log('🚶 เดินหลีกหลัง abandon:', CFG.stepAsideOnAbandon ? 'เปิด' : 'ปิด'); });
-    root.querySelector('#__assist_t_fightbackbl').addEventListener('click', () => { CFG.fightBackBlacklisted = !CFG.fightBackBlacklisted; saveConfigDebounced(); syncToggle('#__assist_t_fightbackbl', CFG.fightBackBlacklisted); log('🛡️ ตีกลับมอน blacklist ที่ตีเรา:', CFG.fightBackBlacklisted ? 'เปิด (ตีกลับ)' : 'ปิด (เคารพ blacklist เด็ดขาด)'); });
+    // ★ ห้ามเรียก syncToggle ที่นี่ — มันประกาศอยู่อีก scope (refresh) → ReferenceError!
+    //   จับปุ่มเป็น element ตรง ๆ แล้ว set className เอง
+    const _fblBtn = root.querySelector('#__assist_t_fightbackbl');
+    if (_fblBtn) _fblBtn.addEventListener('click', () => {
+      CFG.fightBackBlacklisted = !CFG.fightBackBlacklisted;
+      saveConfigDebounced();
+      _fblBtn.className = CFG.fightBackBlacklisted ? 'on' : 'off';
+      log('🛡️ ตีกลับมอน blacklist ที่ตีเรา:', CFG.fightBackBlacklisted ? 'เปิด (ตีกลับ)' : 'ปิด (เคารพ blacklist เด็ดขาด)');
+    });
     // ★ populate flee inputs ครั้งเดียวตอนเริ่ม (ไม่ sync ตลอด — กันเด้ง)
     const _fm = root.querySelector('#__assist_fleemaps');
     const _fr = root.querySelector('#__assist_fleeradius');
