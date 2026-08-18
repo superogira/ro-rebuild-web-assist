@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.128.0
+// @version      4.128.1
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,15 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.128.0';
+  const VERSION = '4.128.1';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.128.1', d: '2026-08-18', items: [
+      '⌨️ ลำดับใหม่ตามข้อค้นพบจริง: กด Enter ก่อน (ใช้รหัสที่เกมจำไว้)',
+      '   → ผ่านเลยถ้าเกมจำรหัส (default ของเกม) ไม่ต้องพิมพ์อะไรเลย',
+      '   → ถ้า 5s ไม่มี WS ค่อยลองพิมพ์ user/pass เอง (เคสเบราว์เซอร์ใหม่)',
+      '   ทดสอบยืนยัน: พิมพ์ตัวอักษร synthetic ไม่เข้า InputField Unity แต่ Enter ทำงาน',
+    ]},
     { v: '4.128.0', d: '2026-08-18', items: [
       '⌨️★★ KEYBOARD auto-login: พิมพ์ user/pass ลงฟอร์มเกมเองผ่าน synthetic keyboard!',
       '   ข้อค้นพบ: เกมเปิด WS ตอนกดปุ่ม Login เท่านั้น (ไม่ใช่ตอนโหลดเสร็จ)',
@@ -6606,11 +6612,10 @@
       }, 8000);
       setTimeout(() => clearInterval(splashTimer), 310000);   // หมดเวลาใน ~5 นาที
     }
-    // ★★★ KEYBOARD auto-login: พิมพ์ user/pass ลงฟอร์มของเกมเอง!
-    //   ข้อค้นพบสำคัญ: เกมเปิด WS ตอนกดปุ่ม Login เท่านั้น (ไม่ใช่ตอนโหลดเสร็จ)
-    //   → ต้องกรอกฟอร์มให้เกม → เกมกด login เอง → เปิด WS เอง → ระบบไหลต่อ
-    //   Unity WebGL รับ DOM keyboard events (เหมือน pointer ที่พิสูจน์แล้ว)
-    //   สมมติ: หน้า login ฟอร์ม username ถูก focus อัตโนมัติ → พิมพ์ user → Tab → พิมพ์ pass → Enter
+    // ★★★ KEYBOARD auto-login — 2 โหมด (จากการทดสอบจริง):
+    //   ★ เกมมีระบบจำ user/pass เอง! → แค่ "กด Enter" ที่หน้า login ก็เข้า (โหมดหลัก)
+    //   ★ fallback: พิมพ์ user → Tab → pass → Enter เอง (เคสเบราว์เซอร์ใหม่ที่เกมยังไม่จำ)
+    //   (จากทดสอบ: synthetic keydown ตัวอักษรไม่เข้า InputField ของ Unity แต่ Enter ทำงาน!)
     if (CFG.autoLoginEnabled && CFG.autoLoginUser && CFG.autoLoginPass) {
       const kbSleep = (ms) => new Promise(r => setTimeout(r, ms));
       const kbKey = async (target, key, code) => {
@@ -6627,18 +6632,24 @@
         const wsOpen = activeWS && activeWS.readyState === 1;
         if (wsOpen || playerId != null || autoLoginPhase === 'failed' || kbTries >= 8) { clearInterval(kbTimer); return; }
         kbTries++;
-        log('⌨️ [auto-login] ลองพิมพ์ user/pass ลงฟอร์มเกม (ครั้ง', kbTries + '/8)');
         try {
           const cv = document.querySelector('canvas') || document.body;
+          // ★ ขั้น 1: กด Enter — ใช้รหัสที่เกมจำไว้ (เร็วและได้ผลที่สุดจากทดสอบจริง)
+          log('⌨️ [auto-login] กด Enter ที่หน้า login (ใช้รหัสที่เกมจำไว้) ครั้ง', kbTries + '/8');
+          await kbKey(cv, 'Enter', 'Enter');
+          await kbSleep(5000);   // รอ 5s — ถ้าสำเร็จ WS จะเปิด
+          const wsOpen2 = activeWS && activeWS.readyState === 1;
+          if (wsOpen2 || playerId != null) { clearInterval(kbTimer); return; }
+          // ★ ขั้น 2 (fallback): เกมไม่จำรหัส → ลองพิมพ์เอง user → Tab → pass → Enter
+          log('⌨️ [auto-login] Enter ไม่พอ → ลองพิมพ์ user/pass เอง (เคสเกมยังไม่จำรหัส)');
           await kbTypeStr(cv, CFG.autoLoginUser);
-          await kbKey(cv, 'Tab', 'Tab');          // ข้ามไปช่อง password
+          await kbKey(cv, 'Tab', 'Tab');
           await kbTypeStr(cv, CFG.autoLoginPass);
           await kbSleep(250);
-          await kbKey(cv, 'Enter', 'Enter');      // กด login!
+          await kbKey(cv, 'Enter', 'Enter');
         } catch (e) {}
         // หลัง Enter ถ้าสำเร็จ WS จะเปิดภายใน 2-3s → รอบตรวจถัดไปจะเห็นและหยุดเอง
-      }, 22000);
-      setTimeout(() => { /* เริ่มครั้งแรกผ่าน interval เอง */ }, 0);
+      }, 20000);
     }
   }
 
