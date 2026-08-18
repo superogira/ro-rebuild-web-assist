@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.119.0
+// @version      4.120.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,20 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.119.0';
+  const VERSION = '4.120.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.120.0', d: '2026-08-18', items: [
+      '🔴🔴 ถอด SELF-DETECT จาก minimap ออกทั้งหมด — id เราไม่เปลี่ยนตอนวาร์ป!',
+      '   หลักฐานจาก log: หลังวาร์ป dot id เดิมของเรายังโผล่ใน minimap ของแมปใหม่',
+      '   = server ถือ id เดิมตลอด session → SELF-DETECT ที่ฉก dot ไม่มีชื่อ = ฉก id คนอื่น',
+      '   → STAT ของเราไม่ match → HP ค้าง (log จริง: นั่ง-ลุกวน 40s ๆ HP 38% ไม่ขยับเลย)',
+      '   แหล่ง playerId ที่เหลือ (พิสูจน์ตัวได้ทุกตัว): SELECT_CHAR / SPAWN ชื่อตรงเป๊ะ /',
+      '   AUTO-DETECT แบบใหม่ (id ยังไม่ยืนยัน + โดน "มอน" ตีซ้ำเท่านั้น)',
+      '   ตำแหน่งหลังวาร์ป: จาก SPAWN self / 0x07 MOVE / sync จาก entity ตัวเองตามเดิม',
+      '🛡️ กันนั่ง-ลุกวนรัวตอน HP ค้าง: ลุกแล้วต้องรอ 2s ก่อนนั่งใหม่',
+      '📝 log ลุกยืนบอกเหตุผลจริง: ฟื้นครบ / หมดเวลาแต่ HP ไม่ขยับ (แนะให้ตรวจ player_id)',
+    ]},
     { v: '4.119.0', d: '2026-08-18', items: [
       '🔴🔴 ตัวใหม่ชื่อไทยเกิดกลางเมือง → HP เป็น ? และ HP กลายเป็น 100000/100000 ของ Target Dummy',
       '   สาเหตุ 1: AUTO-DETECT "โดนตีซ้ำ 3 ครั้ง = เรา" ฉก id ของ Target Dummy',
@@ -833,6 +844,7 @@
   // ---------- AUTO-REST state ----------
   let isResting = false;          // กำลังนั่งพักอยู่
   let restUntil = 0;              // timestamp ที่จะลุก (กันค้าง — restMaxSec)
+  let lastRestStandAt = 0;        // ★ เวลาลุกจากการนั่งล่าสุด — กันนั่ง-ลุกวนรัวตอน HP ค้าง (tracking พัง)
   const heal = {
     exhaustedUntil: new Map(),    // itemId -> timestamp ที่จะลองใช้ใหม่ได้
     lastUseAt: 0,                 // เวลาที่ใช้ item ครั้งล่าสุด
@@ -1553,26 +1565,11 @@
             if (m) { m.x = ex; m.y = ey; m._lastSeenAt = now; m._isMiniBoss = true; }
             else { entities.set(eid, { id: eid, kind: 1, x: ex, y: ey, alive: true, _lastSeenAt: now, _isMiniBoss: true, name: 'Mini Boss' }); }
           } else if (eflag === 1) {
-            // ★ flag=1 = ผู้เล่นอื่นบนแมป (minimap marker) → track เป็น kind=0
-            //   ★★ SELF-DETECT: เพิ่งวาร์ป + ไม่มี entity ของ playerId → entity นี้คือตัวเรา!
-            //   (หลังวาร์ป entityId เปลี่ยน → playerId เก่าไม่ match → หนีตัวเองวนลูป)
-            //   ★★★ guard: ถ้า dot นี้เป็นผู้เล่นที่ SPAWN มาก่อนแล้ว (มีชื่อ ≠ เรา) → เป็นคนอื่น!
-            //   (บั๊กจริง: คนตามวาร์ปตามมาพร้อมกัน → dot ของเขาโดน claim เป็นเรา → วุ่นวายทั้งระบบ)
-            const knownSelf = entities.get(eid);
-            const isKnownOther = knownSelf && knownSelf.name && playerName && knownSelf.name !== playerName;
-            if (now < warpGuardUntil && playerId != null && !entities.has(playerId) && !isKnownOther) {
-              const oldId = playerId;
-              playerId = eid;
-              // ★ stale เฉพาะ id เก่าที่ยืนยันแล้ว — id ที่ยังไม่ยืนยันอาจเป็นของคนอื่น (กันติดคนตาม)
-              if (selfIdConfirmed) stalePlayerIds.set(oldId, now + 300000);
-              selfIdConfirmed = false;   // claim จาก dot — ยังไม่ยืนยัน รอ SPAWN ชื่อตรง
-              entities.delete(oldId);   // ★★ ลบ entity เก่า (กันค้างเป็น player → หนีตัวเอง!)
-              entities.set(eid, { id: eid, kind: 0, x: ex, y: ey, alive: true, _lastSeenAt: now, name: playerName || '' });
-              player.x = ex; player.y = ey;
-              log('🔄 SELF-DETECT (post-warp 0x3c): playerId', oldId.toString(16), '→', playerId.toString(16));
-              relayRegisterPlayer();
-              continue;
-            }
+            // ★ flag=1 = ผู้เล่นบนแมป (minimap marker) → track เป็น kind=0
+            //   ★★ ห้าม SELF-DETECT จาก minimap! (ถอดออก v4.120)
+            //   หลักฐานจาก log จริง: id ของเรา "ไม่เปลี่ยน" ตอนวาร์ป (dot id เดิมยังโผล่ในแมปใหม่)
+            //   การฉก dot ที่ไม่มีชื่อ = ฉก id คนอื่นมาเป็นเรา → HP ค้าง (STAT id จริงไม่ match)
+            //   ตำแหน่งเราหลังวาร์ปมาจาก: SPAWN self / 0x07 MOVE / combatLoop sync จาก entity ตัวเอง
             let m = entities.get(eid);
             if (m) { m.x = ex; m.y = ey; m._lastSeenAt = now; }
             else { entities.set(eid, { id: eid, kind: 0, x: ex, y: ey, alive: true, _lastSeenAt: now, name: '' }); }
@@ -1585,23 +1582,8 @@
         const flag = u[11];
         if (id && x >= -500 && x <= 1000 && y >= -500 && y <= 1000 && (flag === 1 || flag === 3 || flag === 4)) {
           if (flag === 1) {
-            // ★ flag=1 = ผู้เล่นอื่นบนแมป (minimap marker) → track เป็น kind=0
-            //   ★★ SELF-DETECT: เพิ่งวาร์ป + ไม่มี entity ของ playerId → entity นี้คือตัวเรา!
-            //   ★★★ guard: รู้ชื่อแล้วว่าเป็นคนอื่น (SPAWN มาก่อน) → ห้าม claim เป็นเรา
-            const knownSelf = entities.get(id);
-            const isKnownOther = knownSelf && knownSelf.name && playerName && knownSelf.name !== playerName;
-            if (now < warpGuardUntil && playerId != null && !entities.has(playerId) && !isKnownOther) {
-              const oldId = playerId;
-              playerId = id;
-              if (selfIdConfirmed) stalePlayerIds.set(oldId, now + 300000);
-              selfIdConfirmed = false;
-              entities.delete(oldId);
-              entities.set(id, { id, kind: 0, x, y, alive: true, _lastSeenAt: now, name: playerName || '' });
-              player.x = x; player.y = y;
-              log('🔄 SELF-DETECT (sub=1 post-warp): playerId', oldId.toString(16), '→', playerId.toString(16));
-              relayRegisterPlayer();
-              return;
-            }
+            // ★ flag=1 = ผู้เล่นบนแมป (minimap marker) → track เป็น kind=0
+            //   ★★ ห้าม SELF-DETECT จาก minimap — id เราไม่เปลี่ยนตอนวาร์ป (ดู comment ด้านบน)
             let m = entities.get(id);
             if (m) { m.x = x; m.y = y; m._lastSeenAt = now; }
             else { entities.set(id, { id, kind: 0, x, y, alive: true, _lastSeenAt: now, name: '' }); }
@@ -3273,7 +3255,8 @@
       //   + พักหลังเก็บของเสร็จอย่างน้อย restDelayMs — เก็บเสร็จแล้วนั่งทันที = ดูเป็นบอท
       if (!isResting && pct < CFG.restHpPercent && mobCount === 0
           && queue.size === 0 && warpQueue.size === 0
-          && now - lastLootActivityAt >= CFG.restDelayMs) {
+          && now - lastLootActivityAt >= CFG.restDelayMs
+          && now - lastRestStandAt >= 2000) {
         // เริ่มนั่งพัก
         if (sendSit()) {
           isResting = true;
@@ -3302,8 +3285,14 @@
         }
         // ฟื้นถึง restUntilPercent หรือหมดเวลา → ลุก
         else if (pct >= CFG.restUntilPercent || now >= restUntil) {
-          if (sendStand()) { log('🪑 ลุกยืน: HP', pct.toFixed(0) + '% (≥ ' + CFG.restUntilPercent + '%)'); }
+          const byFull = pct >= CFG.restUntilPercent;
+          if (sendStand()) {
+            log('🪑 ลุกยืน: HP ' + pct.toFixed(0) + '%' + (byFull
+              ? ' (ฟื้นครบ ≥ ' + CFG.restUntilPercent + '%)'
+              : ' (หมดเวลา ' + CFG.restMaxSec + 's แต่ HP ไม่ขยับ — น่าจะ tracking ค้าง ตรวจ player_id)'));
+          }
           isResting = false;
+          lastRestStandAt = now;
           combatCooldownUntil = now + CFG.postCombatDelayMs;   // พักเล็กน้อยก่อนเริ่ม
         }
         else { return; }   // ยังนั่งอยู่ → หยุดทุกอย่าง
