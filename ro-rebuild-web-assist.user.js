@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.117.0
+// @version      4.118.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,16 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.117.0';
+  const VERSION = '4.118.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.118.0', d: '2026-08-18', items: [
+      '🛡️ ตั้งได้ว่าจะตีกลับ "มอนใน blacklist ที่ตีเรา" ไหม (จากรายงานผู้ใช้)',
+      '   เดิม: defensive retarget ไม่สน blacklist — มอนตีเรา = ตีกลับเสมอ',
+      '   (ผู้ที่ blacklist มอนแรงไว้แล้วโดนตี บอทกลับหันไปสู้ = ขัดความตั้งใจ)',
+      '   ใหม่: toggle ใน tab Combat "🛡️ ตีกลับมอน blacklist ที่ตีเรา"',
+      '   ปิด = เคารพ blacklist เด็ดขาด แม้โดนตีก็ไม่ตีกลับ (ควรใช้คู่กับ fleeMonsters)',
+    ]},
     { v: '4.117.0', d: '2026-08-18', items: [
       '🧊 ดีเลย์ก่อนนั่งพักหลังเก็บของเสร็จ (default 1000ms) — กันดูเป็นบอท',
       '   เดิม: เก็บของชิ้นสุดท้ายเสร็จ → นั่งทันทีใน tick ถัดไป = ไวผิดธรรมชาติ',
@@ -313,7 +320,7 @@
     'skillEnabled', 'skills', 'disabledSkillIds',
     'lootEnabled', 'lootDelayAfterDropMs', 'lootUseKillPos', 'pickRadiusKill', 'lootRespectOthers', 'filter', 'sendThrottleMs',
     'warpLootEnabled',
-    'combatEnabled', 'targetWhitelist', 'targetBlacklist', 'attackRange', 'rangedAttackRange',
+    'combatEnabled', 'targetWhitelist', 'targetBlacklist', 'fightBackBlacklisted', 'attackRange', 'rangedAttackRange',
     'maxAcquireDistance', 'searchRadii', 'maxChaseDistance', 'antiKS', 'avoidOtherPlayers', 'targetLowestHpFirst',
     'fleeOnMobCount', 'fleeOnAggroCount', 'fleeOnProximityCount', 'fleeOnProximityRadius', 'fleeMonsters', 'fleeMonsterRadius', 'maxEngageSec', 'maxEngageSecSlow', 'slowMonsterSubIds',
     'wanderEnabled', 'warpFindEnabled', 'warpToMonster', 'stuckWarpOnAbandon', 'stepAsideOnAbandon', 'warpToBoss', 'warpToMiniBoss', 'bossAlertRadius', 'noMonsterWarpSec',
@@ -605,6 +612,7 @@
     combatEnabled: false,
     targetWhitelist: [],          // [] = ตีมอน kind=1 ทุกตัว; ['Poring', 4000] = เฉพาะ (รองรับชื่อ + sprite id)
     targetBlacklist: [],          // ไม่ตีมอนเหล่านี้ (ชื่อหรือ sprite id)
+    fightBackBlacklisted: true,   // ★ โดนมอนใน blacklist ตี → ตีกลับไหม? (false = เคารพ blacklist เด็ดขาด แม้โดนตี)
     attackRange: 2,               // ระยะโจมตี (ช่อง) — ใกล้กว่านี้สั่งตี, ไกลกว่าเดินไป
     rangedAttackRange: 8,         // 0 = ใช้ attackRange; >0 = นักธนูตีไกลได้ N ช่อง
     maxAcquireDistance: 30,       // ★ เลือกเป้า + ส่ง ATTACK ได้ในระยะนี้ (cap สูงสุด)
@@ -3370,6 +3378,8 @@
         if (!am || !am.alive || am.x == null) continue;
         // ★★ ไม่เช็ค isTargetable สำหรับ threats — มอนที่ตีเราต้องตอบโต้เสมอ
         // (mirror บอทหลัก bot.js:600-607 — แค่ alive + kind ไม่สน cooldown/distance/avoidPlayers)
+        // ★ ยกเว้น: มอนใน blacklist + ผู้ใช้ปิด fightBackBlacklisted → ไม่ตีกลับ (เคารพ blacklist เด็ดขาด)
+        if (!CFG.fightBackBlacklisted && matchList(am, CFG.targetBlacklist)) continue;
         if (am.kind !== 1) continue;   // ★★ ต้องเป็น monster (kind=1) เท่านั้น — ห้ามตี player (kind=0)!
         const d = Math.hypot(am.x - player.x, am.y - player.y);
         if (d < attackerDist) { attackerDist = d; attacker = am; }
@@ -5360,6 +5370,7 @@
             <div class="btns"><button id="__assist_combatbtn" class="off">Combat: ?</button></div>
             <div class="field"><label>มอนที่จะตี — whitelist (ชื่อหรือ sprite id, คั่นจุลภาค) — ว่าง = ตีทุกมอน</label><input type="text" id="__assist_whitelist" placeholder="เช่น Poring,Lunatic หรือ 4000,1010"></div>
             <div class="field"><label>มอนที่จะไม่ตี — blacklist</label><input type="text" id="__assist_blacklist" placeholder="เช่น MVP,Boss"></div>
+            <div class="btns"><button id="__assist_t_fightbackbl" class="on">🛡️ ตีกลับมอน blacklist ที่ตีเรา</button></div>
             <div class="btns"><button id="__assist_applywhitelist">ตั้ง whitelist</button><button id="__assist_applyblacklist">ตั้ง blacklist</button></div>
             <div class="field"><label>ระยะโจมตี (ช่อง) — นักธนูตั้ง >2 เพื่อตีไกล</label><input type="number" id="__assist_attackrange" min="0" max="15"></div>
             <div class="field"><label>รัศมีค้นหามอน (ช่อง) — เลือกมอนในระยะนี้เท่านั้น (เล็ก=ไม่เดินไกล)</label><input type="number" id="__assist_maxacq" min="1" max="50" placeholder="30"></div>
@@ -5877,6 +5888,7 @@
     root.querySelector('#__assist_t_fleemode_change').addEventListener('click', () => { CFG.fleeMode = 'changeMap'; saveConfigDebounced(); log('🗺️ หนีผู้เล่น: เปลี่ยนแมป'); });
     root.querySelector('#__assist_t_fleemode_same').addEventListener('click', () => { CFG.fleeMode = 'sameMap'; saveConfigDebounced(); log('📍 หนีผู้เล่น: วาร์ปสุ่มในแมปเดิม'); });
     root.querySelector('#__assist_t_stepaside').addEventListener('click', () => { CFG.stepAsideOnAbandon = CFG.stepAsideOnAbandon === false ? true : false; saveConfigDebounced(); log('🚶 เดินหลีกหลัง abandon:', CFG.stepAsideOnAbandon ? 'เปิด' : 'ปิด'); });
+    root.querySelector('#__assist_t_fightbackbl').addEventListener('click', () => { CFG.fightBackBlacklisted = !CFG.fightBackBlacklisted; saveConfigDebounced(); syncToggle('#__assist_t_fightbackbl', CFG.fightBackBlacklisted); log('🛡️ ตีกลับมอน blacklist ที่ตีเรา:', CFG.fightBackBlacklisted ? 'เปิด (ตีกลับ)' : 'ปิด (เคารพ blacklist เด็ดขาด)'); });
     // ★ populate flee inputs ครั้งเดียวตอนเริ่ม (ไม่ sync ตลอด — กันเด้ง)
     const _fm = root.querySelector('#__assist_fleemaps');
     const _fr = root.querySelector('#__assist_fleeradius');
@@ -7191,6 +7203,7 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
     syncToggle('#__assist_t_fleemode_change', CFG.fleeMode !== 'sameMap');
     syncToggle('#__assist_t_fleemode_same', CFG.fleeMode === 'sameMap');
     syncToggle('#__assist_t_stepaside', CFG.stepAsideOnAbandon !== false);
+    syncToggle('#__assist_t_fightbackbl', CFG.fightBackBlacklisted !== false);
     // ★ ไม่ sync fleemaps/fleeradius — กันเขียนทับค่าที่กำลังแก้ (Unity แย่ง focus → isEditing คืน false)
     syncInput('#__assist_fleemonsters', (CFG.fleeMonsters || []).join(','));
     syncInput('#__assist_fleemonsterradius', CFG.fleeMonsterRadius);
