@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.112.0
+// @version      4.113.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,17 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.112.0';
+  const VERSION = '4.113.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.113.0', d: '2026-08-18', items: [
+      '🔴 ของ drop จากมอนที่คนอื่นตี — บอทยิงเก็บซ้ำเปล่า ๆ 5 ครั้ง',
+      '   จาก capture: request 0x52 เหมือนกันเป๊ะทั้งของเรา/ของคนอื่น แต่ของคนอื่น',
+      '   server ตอบ 0x20 "You are unable to pick up this item yet." (loot ownership)',
+      '   ไม่มี 0x52 ตอบกลับเลย → บอทไม่รู้ว่า fail → ลองใหม่ทุก 1s จนครบ maxAttempts',
+      '   แก้: เจอ 0x20 "unable to pick up" → ปล่อยของนั้นทันที + blacklist 60s',
+      '   กัน tryClaim ใหม่ (เดินผ่านของคนอื่น → อย่าไปสนใจมัน)',
+    ]},
     { v: '4.112.0', d: '2026-08-17', items: [
       '🔴🔴 หนีตัวเองข้ามแมปวนลูป — "หนีผู้เล่น! 1 คน @(332,340)" รัว 9 ครั้งใน 2 วิ',
       '   เหตุ 1: MAP_NAME เก็บ entity ตัวเองไว้ตอนเปลี่ยนแมป → ตำแหน่งแมปเก่าติดมา',
@@ -902,6 +910,11 @@
   let lastCombatAt = 0, lastExpAt = 0, lastSendAt = 0;
   const recentDrops = new Map();       // dropId -> {dropId,x,y,itemId,t}
   const queue = new Map();             // dropId -> {dropId,itemId,x,y,attempts,lastAttemptAt,addedAt}
+  // ★★ loot ownership — ของ drop จากมอนที่คนอื่นตี: server ตอบ 0x20 "unable to pick up yet"
+  //   (จาก packet capture: request 0x52 เหมือนกันเป๊ะ แต่ของคนอื่น = ไม่มี 0x52 ตอบกลับ มีแต่ข้อความ)
+  //   → เลิกลองทันที + blacklist ชั่วคราว กัน tryClaim ซ้ำวนลูป
+  let lastPickupDropId = null;         // dropId ที่เพิ่งส่ง 0x52 ล่าสุด (map เข้ากับ 0x20 ที่ตามมา)
+  const dropBlacklist = new Map();     // dropId -> expireAt (60s — ของคนอื่น ไม่ต้องลองซ้ำ)
   // ★ recent kill positions — จดพิกัดมอนที่เราฆ่า เพื่อเช็ค item drop ใกล้หรือไม่
   //   สำคัญสำหรับนักธนู: ยิงมอนตายไกล → ของตกที่พิกัดมอน ไม่ใช่ที่ตัวเรา
   const recentKillPos = [];            // [{x, y, t}] — ล่าสุด 20 ตำแหน่ง, TTL 15 วินาที
@@ -997,6 +1010,12 @@
 
   function tryClaim(d) {
     if (queue.has(d.dropId)) return;
+    // ★★ ของคนอื่น (เคยโดน "unable to pick up yet") → ข้าม + lazy cleanup ที่หมดอายุ
+    const blUntil = dropBlacklist.get(d.dropId);
+    if (blUntil != null) {
+      if (Date.now() < blUntil) return;
+      dropBlacklist.delete(d.dropId);
+    }
     const now = Date.now();
     if (now - lastCombatAt > CFG.combatWindowMs) return;
     // ★ เช็คว่า item อยู่ใกล้เราหรือใกล้พิกัดมอนที่เราฆ่า
@@ -1141,6 +1160,7 @@
           stats.sessionGold += price;
         }
         log('✅ เก็บได้', nameOf(itemId), 'drop', dropId);
+        if (lastPickupDropId === dropId) lastPickupDropId = null;   // ★ สำเร็จแล้ว — เลิก map รอ 0x20
         // ★ Card detection — เก็บการ์ดได้ → log สำคัญ
         const itemName = itemDisplayName(itemId);
         if (itemName.endsWith(' Card') || (itemId >= 4001 && itemId <= 4520)) {
@@ -1346,6 +1366,18 @@
         if (msg.includes('too full') || msg.includes('inventory is full') || msg.includes('cannot carry') || msg.includes('กระเป๋าเต็ม')) {
           if (!inventoryFull) log('🎒 ของเต็ม! (inventory full)');
           inventoryFull = true;
+        }
+        // ★★ loot ownership — "You are unable to pick up this item yet."
+        //   = ของ drop จากมอนที่คนอื่นตี (server ล็อคให้เจ้าของ) — request 0x52 ถูกปฏิเสธเงียบ ๆ
+        //   → เลิกลองทันที + blacklist 60s กันวนลูป (capture: บอทเคยยิง 0x52 ซ้ำ 5 ครั้งเปล่า ๆ)
+        if (msg.includes('unable to pick up') && lastPickupDropId != null) {
+          const dropId = lastPickupDropId;
+          const it = queue.get(dropId);
+          queue.delete(dropId);
+          dropBlacklist.set(dropId, Date.now() + 60000);
+          stats.pickupFails++;
+          log('🔒 ของของคนอื่น (server ล็อค "unable to pick up yet") — ปล่อย', it ? nameOf(it.itemId) : 'item', 'drop', dropId, '(blacklist 60s)');
+          lastPickupDropId = null;
         }
         if (msg.includes('could not complete sale') || msg.includes('do not match')) {
           // sell failed signal
@@ -2106,6 +2138,7 @@
     const it = eligible[0];
     if (sendPickup(it.dropId)) {
       it.lastAttemptAt = now; it.attempts++; lastSendAt = now;
+      lastPickupDropId = it.dropId;   // ★ จำไว้เผื่อ server ตอบ 0x20 "unable to pick up yet"
       log('📨 ลองเก็บ', nameOf(it.itemId), 'drop', it.dropId, '(ครั้ง', it.attempts + '/' + CFG.maxAttempts + ')');
     }
   }, CFG.lootTickMs);
