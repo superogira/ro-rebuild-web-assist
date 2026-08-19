@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.139.0
+// @version      4.139.1
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,14 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.139.0';
+  const VERSION = '4.139.1';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.139.1', d: '2026-08-19', items: [
+      '⚖️ decode น้ำหนักจาก 0x38 (ยืนยันด้วยค่าจริงจากผู้ใช้: max 3130, Orange 10/ชิ้น, Red Herb 3/ชิ้น)',
+      '   หน่วยใน packet = ×10: curW 160=16 · maxW 31300=3130 ✓',
+      '   แสดงในบรรทัดสถานะ Debug (น้ำหนัก 16/3130) + ส่ง monitor (weight/weightMax)',
+    ]},
     { v: '4.139.0', d: '2026-08-19', items: [
       '🎒 Inventory เริ่มต้นถูกส่งมาใน 0x38 ตัวที่สอง (หลังเลือกตัวละคร) — เพิ่ง decode!',
       '   (จากการเทียบ capture 3 ครั้ง: ว่าง / Orange 502×1 / +Red Herb 507×2)',
@@ -1232,6 +1237,10 @@
   // ---------- WARP-TO-LOOT state ----------
   let currentMap = null;               // ชื่อแมปปัจจุบัน (จาก opcode 0x12) — จำเป็นสำหรับ warp
   let playerZeny = null;              // ★ เงินปัจจุบัน (จาก 0x38 MAP_DATA offset 9 — ส่งตอนเข้าแมป/วาร์ป)
+  // ★★ น้ำหนัก (จาก 0x38 #2 — ยืนยันด้วย ground truth: sssddd max 3130, Orange 10, Red Herb 3)
+  //   โครง: [maxWeight×10 :u32][f32?][curWeight×10 :u16] ก่อน inventory signature
+  let playerWeight = null;
+  let playerMaxWeight = null;
   let lastFarmWarpBackAt = 0;          // ★ throttle retry วาร์ปกลับแมปฟาร์ม (กันติดแมปผิด)
   let bossAlertedIds = new Set();       // ★ entity IDs ที่ alert boss ไปแล้ว (กันสแปม)
   let lastBossWarpAt = 0;              // ★ throttle วาร์ปไปหา boss
@@ -1894,6 +1903,12 @@
         sigIdx = i; break;
       }
       if (sigIdx >= 0) {
+        // ★★ น้ำหนัก: maxW×10 @ sig-17 (u32) · curW×10 @ sig-9 (u16) — หน่วย ×10 ทั้งคู่
+        //   ยืนยันจริง: sssddd max=3130 (44 7a 00 00=31300) · Orange×1 → 100=10 · +Red Herb×2 → 160=16
+        if (sigIdx >= 17) {
+          const _mw = u32(u, sigIdx - 17) / 10, _cw = u16(u, sigIdx - 9) / 10;
+          if (_mw > 0 && _mw < 100000 && _cw >= 0 && _cw <= _mw) { playerMaxWeight = _mw; playerWeight = _cw; }
+        }
         let p = sigIdx + INV_SIG.length + 5;   // ข้าม prelude 5 bytes
         let n = 0;
         while (p + 6 <= u.length) {
@@ -3792,6 +3807,7 @@
       dbg('ⓘ สถานะ: HP ' + (hp.cur != null ? hp.cur + '/' + hp.max + ' (' + (pct != null ? pct.toFixed(0) : '?') + '%)' : '?')
         + ' SP ' + (sp.cur != null ? sp.cur + '/' + sp.max : '?')
         + (isResting ? ' [นั่งพัก]' : '')
+        + (playerWeight != null ? ' น้ำหนัก ' + playerWeight + '/' + playerMaxWeight : '')
         + ' | ' + (currentMap || '?') + (player.x != null ? ' @(' + Math.round(player.x) + ',' + Math.round(player.y) + ')' : ' (ไม่รู้ตำแหน่ง)')
         + ' | เป้า: ' + tgtName
         + ' | โดนตี:' + mobCount + ' ผู้เล่น:' + countNearbyPlayers(CFG.fleePlayerRadius)
@@ -7612,7 +7628,7 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
     const skCds = ASSIST.getSkillCooldowns ? ASSIST.getSkillCooldowns() : [];
     const payload = {
       t: now, version: VERSION,
-      hp: hp.cur, hpMax: hp.max, hpPct: hpPct(),
+      hp: hp.cur, hpMax: hp.max, hpPct: hpPct(), weight: playerWeight, weightMax: playerMaxWeight,
       sp: sp.cur, spMax: sp.max,
       player: { x: player.x, y: player.y, name: playerName, id: playerId },
       map: currentMap, farmMap: CFG.farmMap, zeny: playerZeny, gameServer: gameServerUrl,
