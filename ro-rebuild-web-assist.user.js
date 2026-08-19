@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.139.1
+// @version      4.139.2
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,13 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.139.1';
+  const VERSION = '4.139.2';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.139.2', d: '2026-08-19', items: [
+      '🐛 แก้ offset น้ำหนัก (off-by-one): maxW@sig-16 · curW@sig-8 — ตรวจกับไฟล์จริง 3 ไฟล์
+      0/3130 · 10/3130 · 16/3130 ✓ ตรงหมด (เดิมอ่านเพี้ยนเพราะนับระยะผิด 1 byte)',
+    ]},
     { v: '4.139.1', d: '2026-08-19', items: [
       '⚖️ decode น้ำหนักจาก 0x38 (ยืนยันด้วยค่าจริงจากผู้ใช้: max 3130, Orange 10/ชิ้น, Red Herb 3/ชิ้น)',
       '   หน่วยใน packet = ×10: curW 160=16 · maxW 31300=3130 ✓',
@@ -1905,8 +1909,8 @@
       if (sigIdx >= 0) {
         // ★★ น้ำหนัก: maxW×10 @ sig-17 (u32) · curW×10 @ sig-9 (u16) — หน่วย ×10 ทั้งคู่
         //   ยืนยันจริง: sssddd max=3130 (44 7a 00 00=31300) · Orange×1 → 100=10 · +Red Herb×2 → 160=16
-        if (sigIdx >= 17) {
-          const _mw = u32(u, sigIdx - 17) / 10, _cw = u16(u, sigIdx - 9) / 10;
+        if (sigIdx >= 16) {
+          const _mw = u32(u, sigIdx - 16) / 10, _cw = u16(u, sigIdx - 8) / 10;   // ★ maxW@sig-16 · curW@sig-8 (ดีบั๊กจากไฟล์จริง: 44 7a @129, a0 @137, sig @145)
           if (_mw > 0 && _mw < 100000 && _cw >= 0 && _cw <= _mw) { playerMaxWeight = _mw; playerWeight = _cw; }
         }
         let p = sigIdx + INV_SIG.length + 5;   // ข้าม prelude 5 bytes
