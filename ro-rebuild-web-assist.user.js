@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.135.0
+// @version      4.136.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,18 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.135.0';
+  const VERSION = '4.136.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.136.0', d: '2026-08-19', items: [
+      '🔴 มอนอยู่รอบตัวแต่บอทบอก "ไม่เจอมอน" แล้ววาร์ปหนี — สาเหตุหลัก: abandonCooldown',
+      '   abandon มอนรอบตัวครบทุกตัว (pending server เงียบ) → ทุกตัวโดน cooldown 15s',
+      '   → หาอะไรไม่เจอเลย ทั้งที่มอนเต็มจอ → วาร์ปหนีไปเอง',
+      '   แก้: ก่อนวาร์ป เช็คว่ามีมอนในระยะที่บล็อกแค่เพราะ cooldown → ปลดตัวใกล้สุด',
+      '   แทนการวาร์ป (log 🔓 ให้เห็นชัด)',
+      '🔍 Debug เพิ่ม: บรรทัดวิเคราะห์ตอนวาร์ป — มอนในระยะกี่ตัว/โดน antiKS/ghost 0x07',
+      '🔍 Debug เพิ่ม: SPAWN parse fail (entity หายจาก radar — อีกสาเหตุของหามอนไม่เจอ)',
+    ]},
     { v: '4.135.0', d: '2026-08-19', items: [
       '🔴🔴 กันยึ่งของคนอื่นขั้นเด็ดขาด — blacklist ล่วงหน้าก่อนยิงเก็บเลย',
       '   (จากความรู้จริงของผู้ใช้: item drop ที่ตำแหน่งมอน ±1 ช่อง)',
@@ -2127,6 +2136,14 @@
           }
         }
         const name = dec(nameEnd);
+          // ★★ SPAWN parse fail — entity หายจากการตรวจจับของเรา (มอนอยู่ตรงหน้าแต่หาไม่เจอ!)
+          if (kind < 0 || kind > 2) {
+            if (Date.now() - lastSpawnFailDbgAt > 3000) {
+              lastSpawnFailDbgAt = Date.now();
+              const hexF = Array.from(u.slice(0, 40)).map(b => b.toString(16).padStart(2, '0')).join(' ');
+              dbg('⚠️ SPAWN parse fail (id=' + id.toString(16) + ' len=' + u.length + ') — entity นี้จะหายจาก radar! hex: ' + hexF);
+            }
+          }
           if (kind >= 0 && kind <= 2) {
           // ★★ x/y/sHp/sHpMax parse แล้วด้านบน (parseFields ลองหลาย nameEnd — ทนชื่อไทย)
           const existing = entities.get(id) || {};
@@ -3446,6 +3463,7 @@
   let lastStatusDbgAt = 0;             // ★ throttle บรรทัดสถานะใน Debug log (ทุก 10s)
   let last3cDebugAt = 0;
   let lastDamageDebugAt = 0;
+  let lastSpawnFailDbgAt = 0;         // ★ throttle dbg SPAWN parse fail
   let respawnAttemptCount = 0;   // ★ กัน death loop — max 5 ครั้ง
   let _victimIdCount = null;   // ★ auto-detect playerId — นับ victim ID ที่โดนตีซ้ำ
   let _victimIdCountAt = 0;
@@ -4061,6 +4079,35 @@
       if (CFG.warpFindEnabled && noMonSec >= effectiveWarpSec && now - lastWarpFindAt > 3000 && player.x != null) {
         lastWarpFindAt = now;
         if (currentMap) {
+          // ★★★ ก่อนวาร์ปหนี — เช็คว่า "ไม่เจอมอน" เพราะโดนบล็อกชั่วคราวหรือเปล่า
+          //   เคสจริง: abandon มอนรอบตัวครบทุกตัว (pending server เงียบ) → ทุกตัวโดน
+          //   abandonCooldown 15s → "ไม่เจอมอน" ทั้งที่มอนเต็มจอ → วาร์ปหนีไปเอง!
+          //   แก้: มีมอนในระยะที่บล็อกแค่เพราะ cooldown → ปลดตัวใกล้สุดแทนการวาร์ป
+          let _blockedAb = null, _blockedAbDist = Infinity;
+          for (const e of entities.values()) {
+            if (e.kind !== 1 || !e.alive || e.x == null) continue;
+            const ab = abandonCooldown.get(e.id);
+            if (!ab || now >= ab) continue;
+            const d2 = Math.hypot(e.x - player.x, e.y - player.y);
+            if (d2 <= CFG.maxAcquireDistance && d2 < _blockedAbDist) { _blockedAbDist = d2; _blockedAb = e; }
+          }
+          if (_blockedAb) {
+            abandonCooldown.delete(_blockedAb.id);
+            noMonsterSince = now;
+            log('🔓 มอนอยู่ใกล้ (' + (_blockedAb.name || _blockedAb.id.toString(16)) + ' @' + _blockedAbDist.toFixed(0) + ' ช่อง) แต่โดน abandon-cooldown บล็อก → ปลดแทนการวาร์ปหนี');
+            return;
+          }
+          // ★ Diagnostic ไป Debug log: ทำไมไม่เจอ — มอนในระยะกี่ตัว / โดน antiKS / ghost จาก 0x07
+          let _inRange = 0, _ks = 0, _ghost = 0;
+          for (const e of entities.values()) {
+            if (!e.alive || e.x == null) continue;
+            if (Math.hypot(e.x - player.x, e.y - player.y) > CFG.maxAcquireDistance) continue;
+            if (e.kind === 1) {
+              _inRange++;
+              if (CFG.antiKS && !e._claimedByMe && e._lastEngagedByOtherAt && now - e._lastEngagedByOtherAt < (CFG.antiKSCooldownMs || 10000)) _ks++;
+            } else if (e.kind === 0 && e._src === 'move') _ghost++;
+          }
+          dbg('🔍 ไม่เจอมอน ' + noMonSec.toFixed(0) + 's → วาร์ป — มอนในระยะ: ' + _inRange + ' (โดน antiKS: ' + _ks + ') | ghost 0x07 ใกล้ ๆ: ' + _ghost);
           log('🌀 ไม่เจอมอน', noMonSec.toFixed(0) + 's → วาร์ปสุ่ม');
           if (sendRandomWarp()) noMonsterSince = now;   // สำเร็จ → reset (เริ่มนับใหม่ในแมปใหม่)
           // fail → ไม่ reset noMonsterSince แต่ lastWarpFindAt คุม cooldown แล้ว ไม่ spam
