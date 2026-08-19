@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.136.0
+// @version      4.137.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,19 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.136.0';
+  const VERSION = '4.137.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.137.0', d: '2026-08-19', items: [
+      '🔴🔴 พบ "โรงงานผี" จาก capture จริง — ต้นเหตุแท้ของมอนอยู่รอบตัวแต่หาไม่เจอ!',
+      '   server ส่ง 1b (despawn?) + 36 reason=5 เป็นประจำทุก ~5s กับมอนที่ยังเดินอยู่',
+      '   (client ยัง render!) — เดิมเราลบ entity ทันที → MOVE ถัดไปสร้าง ghost kind=0',
+      '   → มอนหายจาก targeting เป็นระยะ',
+      '   แก้: 1b ไม่ลบทันที — mark pending รอ 2s ถ้าไม่มี MOVE/36(5)/emote มายืนยัน',
+      '   (sweeper ลบจริงเมื่อพ้นเวลา — despawn จริงยังทำงาน)',
+      '📋 ใหม่จาก capture: 0x0f action≠3 = emote ของมอน (ใช้ยืนยัน entity มีชีวิต)',
+      '   0x36 reason=5 = state change คู่กับ 1b (ไม่ใช่ loot event)',
+    ]},
     { v: '4.136.0', d: '2026-08-19', items: [
       '🔴 มอนอยู่รอบตัวแต่บอทบอก "ไม่เจอมอน" แล้ววาร์ปหนี — สาเหตุหลัก: abandonCooldown',
       '   abandon มอนรอบตัวครบทุกตัว (pending server เงียบ) → ทุกตัวโดน cooldown 15s',
@@ -1483,7 +1493,7 @@
         else { entities.set(playerId, { id, kind: 0, x, y, alive: true, _lastSeenAt: nowMs() }); }
       } else {
         const e = entities.get(id);
-        if (e) { e.x = x; e.y = y; e._lastSeenAt = nowMs(); }
+        if (e) { e.x = x; e.y = y; e._lastSeenAt = nowMs(); e._despawnPendingAt = 0; }   // ★ ขยับ = ยังอยู่ (ยกเลิก pending despawn)
         // ★★ entity ใหม่จาก MOVE_UPDATE ที่ไม่เคย SPAWN — ไม่รู้ว่าเป็นอะไร!
         //   ★ อาจเป็น "มอน" ที่เดินเข้ามาจากนอกจอ/มอนมากินของ (SPAWN ยังไม่มาถึง)
         //   → tag _src='move' และห้ามนับเป็นผู้เล่นใน flee (เคยแอบดิสเป็น player → หนีผี)
@@ -1692,6 +1702,11 @@
     else if (op === 0x36 && u.length >= 9) {
       const eid = u32(u, 1);
       const reason = u32(u, 5);
+      // ★★ reason=5: คู่กับ 1b เสมอ (จาก capture) = มอนยังอยู่ แค่เปลี่ยน state — ยืนยัน entity
+      if (reason === 5) {
+        const e5 = entities.get(eid);
+        if (e5) { e5._despawnPendingAt = 0; e5._lastSeenAt = nowMs(); }
+      }
       if (reason === 2) {
         // ของถูกเก็บไป → ลบจาก queue/recentDrops/warpQueue
         if (queue.has(eid)) {
@@ -2482,6 +2497,11 @@
     }
     // 0x0f ENTITY_ACTION: action=3 = มอนตายจริง (authoritative)
     //   ★ นับ kills ที่นี่ ไม่ใช่ใน 0x22 EXP (mirror world.js:964 — sessionKills++ ที่นี่)
+    else if (op === 0x0f && u.length >= 6 && u[5] !== 3) {
+      // ★ 0x0f action≠3 = emote/ท่าทางของ entity (จาก capture: มอนแสดงอารมณ์) — ยืนยันว่ายังอยู่
+      const eo = entities.get(u32(u, 1));
+      if (eo) { eo._despawnPendingAt = 0; eo._lastSeenAt = nowMs(); }
+    }
     else if (op === 0x0f && u.length >= 6 && u[5] === 3) {
       const id = u32(u, 1);
       const e = entities.get(id);
@@ -2524,9 +2544,12 @@
         } else if (recentAttack) {
           dbg('🛡️ false despawn guard: target', e.name || id.toString(16), 'ส่ง attack', (now - target.firstAttackAt) + 'ms ที่แล้ว → ไม่ลบ');
         } else {
-          entities.delete(id);
-          if (e._isMiniBoss || e._isBoss) { bossAlertedIds.delete(id); log((e._isBoss ? '👑 Boss' : '👹 Mini Boss') + ' ตาย — จะ alert ใหม่เมื่อเกิดใหม่'); }
-          if (target && target.id === id) { abandonTarget('despawn', false); target = null; }
+          // ★★★ ไม่ลบทันที! — mark pending แล้วรอ 2s (sweeper ลบให้ถ้าไม่มีอะไรมายืนยัน)
+          //   การค้นพบจาก capture จริง: server ส่ง 1b + 36(reason=5) เป็นประจำทุก ~5s
+          //   กับมอนที่ยังเดินอยู่ (client ยัง render!) — ลบทันที = สร้าง ghost kind=0
+          //   จาก MOVE ถัดไป → มอนหายจาก targeting ("มอนอยู่รอบตัวแต่หาไม่เจอ")
+          //   ตัวยืนยันว่ายังอยู่: 0x07 MOVE / 0x36 reason=5 / 0x0f emote — ตัวไหนมาก่อน 2s คือยังอยู่
+          e._despawnPendingAt = Date.now();
         }
       }
     }
@@ -3493,6 +3516,18 @@
       log('🎯 [auto-login] ค้างหน้าเลือกตัวละคร → คลิก x' + Math.round(pos * 100) + '% + Enter (ครั้ง', csNudgeTries + '/12)');
     } catch (e) {}
   }, 8000);
+  // ★★ despawn sweeper — ลบ entity ที่ 1b mark ไว้จริงเมื่อพ้น 2s ไร้การยืนยัน
+  const despawnSweeper = setInterval(() => {
+    const nowS = Date.now();
+    for (const [id, e] of entities) {
+      if (!e._despawnPendingAt) continue;
+      if (nowS - e._despawnPendingAt > 2000) {
+        entities.delete(id);
+        if (e._isMiniBoss || e._isBoss) { bossAlertedIds.delete(id); log((e._isBoss ? '👑 Boss' : '👹 Mini Boss') + ' ตาย — จะ alert ใหม่เมื่อเกิดใหม่'); }
+        if (target && target.id === id) { abandonTarget('despawn', false); target = null; }
+      }
+    }
+  }, 1000);
   const autoRefreshWatchdog = setInterval(() => {
     if (!CFG.autoRefreshEnabled) return;
     const now = Date.now();
