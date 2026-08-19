@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.133.0
+// @version      4.134.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,14 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.133.0';
+  const VERSION = '4.134.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.134.0', d: '2026-08-19', items: [
+      '🌀 Warp Dance: เพิ่มช่องตั้ง throttle ระหว่างวาร์ป (200-5000ms, default 800)',
+      '   + ช่องจังหวะตีต่อรอบ (attackReIssueMs 500-10000ms, default 2000)',
+      '   คำอธิบาย: ตี → วาร์ปทันที → รอถึงจังหวะที่ตั้ง → ตีใหม่ → วาร์ปใหม่ วนแบบนี้',
+    ]},
     { v: '4.133.0', d: '2026-08-19', items: [
       '🌀ใหม่! WARP DANCE — ตี 1 ครั้งแล้ววาร์ปไปช่องรอบตัวมอนทันที (ไอเดียจากผู้ใช้)',
       '   มอนงง/หาเราไม่เจอ → เราเป็นฝ่ายตีอยู่ฝ่ายเดียวแทบไม่โดนตี',
@@ -486,7 +491,7 @@
     'skillEnabled', 'skills', 'disabledSkillIds',
     'lootEnabled', 'lootDelayAfterDropMs', 'lootUseKillPos', 'pickRadiusKill', 'lootRespectOthers', 'filter', 'sendThrottleMs',
     'warpLootEnabled',
-    'combatEnabled', 'targetWhitelist', 'targetBlacklist', 'fightBackBlacklisted', 'warpDanceEnabled', 'warpDanceMode', 'warpDanceDistance', 'autoLoginEnabled', 'autoLoginUser', 'autoLoginPass', 'autoLoginSlot', 'autoRefreshEnabled', 'autoRefreshStallSec', 'attackRange', 'rangedAttackRange',
+    'combatEnabled', 'targetWhitelist', 'targetBlacklist', 'fightBackBlacklisted', 'warpDanceEnabled', 'warpDanceMode', 'warpDanceDistance', 'warpDanceThrottleMs', 'autoLoginEnabled', 'autoLoginUser', 'autoLoginPass', 'autoLoginSlot', 'autoRefreshEnabled', 'autoRefreshStallSec', 'attackRange', 'rangedAttackRange',
     'maxAcquireDistance', 'searchRadii', 'maxChaseDistance', 'antiKS', 'avoidOtherPlayers', 'targetLowestHpFirst',
     'fleeOnMobCount', 'fleeOnAggroCount', 'fleeOnProximityCount', 'fleeOnProximityRadius', 'fleeMonsters', 'fleeMonsterRadius', 'maxEngageSec', 'maxEngageSecSlow', 'slowMonsterSubIds',
     'wanderEnabled', 'warpFindEnabled', 'warpToMonster', 'stuckWarpOnAbandon', 'stepAsideOnAbandon', 'warpToBoss', 'warpToMiniBoss', 'bossAlertRadius', 'noMonsterWarpSec',
@@ -783,6 +788,7 @@
     warpDanceEnabled: false,
     warpDanceMode: 'cycle',       // 'cycle' = เรียงวน 8 ทิศ / 'random' = สุ่มทิศ
     warpDanceDistance: 5,         // ระยะห่างจากมอนหลังวาร์ป (1-10 — ควร ≤ ระยะโจมตี)
+    warpDanceThrottleMs: 800,     // ★ ระยะห่างขั้นต่ำระหว่างวาร์ป (ms — กันยิงถี่เกินที่ server รับไหว)
     // ★★ Auto-Login / Auto-Refresh (เก็บใน localStorage ทั้งหมด — รอดจาก refresh)
     //   ⚠️ password เก็บแบบ plain text ใน localStorage ของเบราว์เซอร์ (เฉพาะ origin นี้)
     //      ห้ามใช้ในเครื่องส่วนรวม! และระบบจะไม่ส่งค่าเหล่านี้ไป monitor/feedback เด็ดขาด
@@ -3930,7 +3936,7 @@
               // ★★★ WARP DANCE — ตี 1 ครั้งแล้ววาร์ปไปช่องรอบตัวมอนทันที
               //   มอนจะงง/หาเราไม่เจอ → เราเป็นฝ่ายตีอยู่ฝ่ายเดียว (เทคนิคจากผู้ใช้)
               //   ทิศ: cycle = เรียงวน 8 ทิศ / random = สุ่ม · ระยะ 1-10 ช่องจากตัวมอน
-              if (CFG.warpDanceEnabled && currentMap && now - warpDanceLastAt > 800) {
+              if (CFG.warpDanceEnabled && currentMap && now - warpDanceLastAt >= Math.max(200, CFG.warpDanceThrottleMs || 800)) {
                 const wd = Math.max(1, Math.min(10, CFG.warpDanceDistance || 5));
                 let di;
                 if (CFG.warpDanceMode === 'random') di = Math.floor(Math.random() * 8);
@@ -5923,6 +5929,8 @@
             <div class="btns"><button id="__assist_t_warpdance" class="off">🌀 Warp Dance: ?</button></div>
             <div class="field"><label>โหมดวาร์ป — cycle = เรียงวน 8 ทิศ / random = สุ่มทิศ</label><select id="__assist_wdmode" style="width:100%;background:#23262e;color:#e8e8e8;border:1px solid #3a3f4b;border-radius:6px;padding:6px;font-family:inherit"><option value="cycle">cycle — เรียงวน 8 ทิศ</option><option value="random">random — สุ่มทิศ</option></select></div>
             <div class="field"><label>ระยะห่างจากมอนหลังวาร์ป (ช่อง 1-10 — ควร ≤ ระยะโจมตีของคุณ)</label><input type="number" id="__assist_wddist" min="1" max="10" step="1"></div>
+            <div class="field"><label>Throttle ระหว่างวาร์ป (ms 200-5000) — ขั้นต่ำที่ต้องเว้นก่อนวาร์ปถัดไป</label><input type="number" id="__assist_wdthrottle" min="200" max="5000" step="100"></div>
+            <div class="field"><label>จังหวะตี+วาร์ปต่อรอบ (ms) — คือ attackReIssueMs: ตีครั้งใหม่เมื่อพ้นเวลานี้นับจากตีครั้งก่อน</label><input type="number" id="__assist_wdreissue" min="500" max="10000" step="100"></div>
             <div class="btns"><button id="__assist_applywd">💾 ใช้ค่า warp dance</button></div>
             <div style="font-size:10px;color:#9aa0a6;margin-top:6px;">★ เหมาะกับนักเวท/นักธนู — ตีแล้ววาร์ปหลบทันที มอนจะงงหาเราไม่เจอ → เราตีฝ่ายเดียว · ระยะที่ตั้งเกินระยะโจมตีจะทำให้ตีไม่โดน (เดินกลับเข้าไปเอง)</div>
             <div class="btns"><button id="__assist_applywhitelist">ตั้ง whitelist</button><button id="__assist_applyblacklist">ตั้ง blacklist</button></div>
@@ -6534,12 +6542,19 @@
     const _wdMode = root.querySelector('#__assist_wdmode'), _wdDist = root.querySelector('#__assist_wddist');
     if (_wdMode) _wdMode.value = CFG.warpDanceMode || 'cycle';
     if (_wdDist) _wdDist.value = CFG.warpDanceDistance || 5;
+    const _wdThr = root.querySelector('#__assist_wdthrottle'), _wdRe = root.querySelector('#__assist_wdreissue');
+    if (_wdThr) _wdThr.value = CFG.warpDanceThrottleMs || 800;
+    if (_wdRe) _wdRe.value = CFG.attackReIssueMs || 2000;
     root.querySelector('#__assist_applywd')?.addEventListener('click', () => {
       if (_wdMode) CFG.warpDanceMode = _wdMode.value === 'random' ? 'random' : 'cycle';
       const d = _wdDist ? parseInt(_wdDist.value, 10) : NaN;
       if (!isNaN(d) && d >= 1) CFG.warpDanceDistance = Math.min(10, d);
+      const t = _wdThr ? parseInt(_wdThr.value, 10) : NaN;
+      if (!isNaN(t) && t >= 200) CFG.warpDanceThrottleMs = Math.min(5000, t);
+      const r = _wdRe ? parseInt(_wdRe.value, 10) : NaN;
+      if (!isNaN(r) && r >= 500) CFG.attackReIssueMs = Math.min(10000, r);
       saveConfigDebounced();
-      log('🌀 warp dance: โหมด', CFG.warpDanceMode, 'ระยะ', CFG.warpDanceDistance, 'ช่อง');
+      log('🌀 warp dance: โหมด', CFG.warpDanceMode, 'ระยะ', CFG.warpDanceDistance, 'ช่อง, throttle', CFG.warpDanceThrottleMs + 'ms, ตีทุก', CFG.attackReIssueMs + 'ms');
     });
     // ★ populate flee inputs ครั้งเดียวตอนเริ่ม (ไม่ sync ตลอด — กันเด้ง)
     const _fm = root.querySelector('#__assist_fleemaps');
