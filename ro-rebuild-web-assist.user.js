@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.144.0
+// @version      4.144.1
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,14 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.144.0';
+  const VERSION = '4.144.1';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.144.1', d: '2026-08-19', items: [
+      '🔴 แก้ Equip tab แสดงของปนจาก tab อื่น — filter เดิมผ่านหมด (true)',
+      '   ใหม่: รวม equipmentInv เข้า inventory (สแตกจำนวนซ้ำ) แล้วกรองตามหมวดจริงทุก tab',
+      '   ทดสอบ: Item [502,504,505] · Equip [1201,1502,1461] · Etc [713,715,716,717] ✓ ตรง',
+    ]},
     { v: '4.144.0', d: '2026-08-19', items: [
       '⚔️ Equip tab แสดงของแล้ว! — ถอดโครงสร้างก้อน Equipment จาก capture จริง 10/10',
       '   โครง (stride 44B): [inst:4=0x13880+i][id×4:4][a:2][b:2][UUID:16][slot:4][?:4][pad:4]',
@@ -7634,11 +7639,16 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
 
     function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
     function render(tab) {
-      const src2 = tab === 'equip'
-        ? [...inventory.entries()].concat([...equipmentInv.entries()])   // ★ Equip tab: รวมก้อน equipment ด้วย
-        : [...inventory.entries()];
-      const items = src2
-        .filter(([id, c]) => c > 0 && (tab === 'equip' ? true : itemDB.cats[String(id)] === tab))
+      // ★ รวม equipmentInv เข้า inventory ก่อน (อาวุธ/ชุดจากก้อน 0x13880)
+      //   แล้วค่อยกรองตามหมวดจริง — เดิม equip ผ่านหมด (บั๊ก: ของ tab อื่นปนเข้ามา)
+      const merged = [...inventory.entries()];
+      for (const [eqId, eqC] of equipmentInv.entries()) {
+        const k = String(eqId);
+        const inInv = merged.find(([mid]) => String(mid) === k);
+        if (inInv) inInv[1] += eqC; else merged.push([eqId, eqC]);
+      }
+      const items = merged
+        .filter(([id, c]) => c > 0 && itemDB.cats[String(id)] === tab)
         .map(([id, c]) => ({ id, c }));
       if (tab === 'equip') items.sort((a, b) => {
         const ra = equipSlotRank(itemDB.slots[String(a.id)] || ''), rb = equipSlotRank(itemDB.slots[String(b.id)] || '');
