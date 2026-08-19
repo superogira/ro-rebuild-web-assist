@@ -119,6 +119,12 @@
   const VERSION = '4.140.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.142.0', d: '2026-08-19', items: [
+      '🎒 generalize parser inventory + น้ำหนัก — ผ่านทุกกรณีจริง 4/4',
+      '   anchor [01|02][maxW×10][f32][curW×10] (prefix ต่างตามตัวละคร) + validation-scan',
+      '   กันข้อผิดพลาด: เพดาน id≤12000 · phantom equipment guard · clean terminator',
+      '   ทดสอบ: ว่าง[] · 502×1 · 502+507×2 · testmage 55 ชนิด/1397 ชิ้น 3147.8/3820 ✓',
+    ]},
     { v: '4.140.0', d: '2026-08-19', items: [
       '🔴🔴 HOTFIX — แก้ syntax error ที่ทำให้ script รันไม่ได้เลย (mini-bar หาย!)',
       '   เหตุ: changelog 4.139.2 มี newline หลุดเข้าไปใน string บรรทัด 123',
@@ -1907,32 +1913,38 @@
       if (zeny != null && zeny !== playerZeny) {
         playerZeny = zeny;
       }
-      // ★★★ parse inventory เริ่มต้น — หา signature ก่อน (คงที่ทุก capture)
-      const INV_SIG = [0x05, 0x00, 0x02, 0x00, 0x0e, 0x04, 0x00, 0x02, 0x00, 0x00];
-      let sigIdx = -1;
-      outer: for (let i = 60; i <= u.length - 25; i++) {
-        for (let j = 0; j < INV_SIG.length; j++) { if (u[i + j] !== INV_SIG[j]) continue outer; }
-        sigIdx = i; break;
-      }
-      if (sigIdx >= 0) {
-        // ★★ น้ำหนัก: maxW×10 @ sig-17 (u32) · curW×10 @ sig-9 (u16) — หน่วย ×10 ทั้งคู่
-        //   ยืนยันจริง: sssddd max=3130 (44 7a 00 00=31300) · Orange×1 → 100=10 · +Red Herb×2 → 160=16
-        if (sigIdx >= 16) {
-          const _mw = u32(u, sigIdx - 16) / 10, _cw = u16(u, sigIdx - 8) / 10;   // ★ maxW@sig-16 · curW@sig-8 (ดีบั๊กจากไฟล์จริง: 44 7a @129, a0 @137, sig @145)
-          if (_mw > 0 && _mw < 100000 && _cw >= 0 && _cw <= _mw) { playerMaxWeight = _mw; playerWeight = _cw; }
+      // ★★★ parse inventory เริ่มต้น + น้ำหนัก (generalize — ทดสอบผ่าน capture จริง 4 ไฟล์)
+      //   anchor: [01|02 00 00 00][maxW×10 :u32][f32 0.9x][curW×10 :u16] (prefix ต่างกันตามตัวละคร)
+      //   รายการ: [id×4 :u32][count×4 :u16] — จุดเริ่ม validation-scan + จบสะอาด (idEnc=0)
+      //   กันข้อผิดพลาด: เพดาน id ≤ 12000 (ของจริงสูงสุด 7033) + ตัด phantom (id<100 แต่ count>500)
+      //   ยืนยัน: ว่าง [] · 502×1 · 502×1+507×2 · testmage 55 ชนิด 1397 ชิ้น 3147.8/3820 ✓ 4/4
+      for (let i = 10; i < u.length - 16; i++) {
+        if ((u[i] !== 0x01 && u[i] !== 0x02) || u[i+1] || u[i+2] || u[i+3]) continue;
+        const _mw = u32(u, i + 4);
+        if (_mw % 10 !== 0 || _mw < 1000 || _mw > 999990) continue;
+        if (u[i + 11] !== 0x3f) continue;
+        const _cw = u16(u, i + 12);
+        if (_cw > _mw) continue;   // น้ำหนักมีทศนิยม (3147.8 → 31478) ไม่เช็ค %10
+        playerMaxWeight = _mw / 10; playerWeight = _cw / 10;
+        const tryParse = (s) => {
+          let p = s; const items = [];
+          while (p + 6 <= u.length) {
+            const idE = u32(u, p); if (idE === 0) return items;
+            if (idE % 4) return null;
+            const cE = u16(u, p + 4); const id = idE >>> 2, c = cE >>> 2;
+            if (id <= 0 || id > 12000 || c <= 0 || c > 30000 || cE % 4) return null;
+            if (id < 100 && c > 500) return items;   // phantom จากก้อน equipment ต่อท้าย
+            items.push([id, c]); p += 6;
+          }
+          return null;
+        };
+        let items = null;
+        for (let s = i + 14; s < i + 60; s++) { const r = tryParse(s); if (r && r.length >= 1) { items = r; break; } }
+        if (items && items.length > 0) {
+          for (const [iid, c] of items) inventory.set(iid, c);
+          dbg('🎒 inventory เริ่มต้น: ' + items.length + ' รายการ (' + items.reduce((s2, x) => s2 + x[1], 0) + ' ชิ้น) — ' + items.slice(0, 8).map(([id, c]) => nameOf(id) + '×' + c).join(', ') + (items.length > 8 ? ' ฯลฯ' : ''));
         }
-        let p = sigIdx + INV_SIG.length + 5;   // ข้าม prelude 5 bytes
-        let n = 0;
-        while (p + 6 <= u.length) {
-          const idEnc = u32(u, p);
-          if (idEnc === 0 || idEnc % 4 !== 0) break;   // จบรายการ
-          const cntEnc = u16(u, p + 4);
-          const itemId = idEnc >>> 2, count = cntEnc >>> 2;
-          if (itemId <= 0 || itemId >= 50000 || count <= 0 || count > 30000) break;
-          inventory.set(itemId, count);
-          n++; p += 6;
-        }
-        if (n > 0) dbg('🎒 inventory เริ่มต้น: ' + n + ' รายการ — ' + [...inventory.entries()].slice(0, 8).map(([id, c]) => nameOf(id) + '×' + c).join(', ') + ([...inventory.entries()].length > 8 ? ' ฯลฯ' : ''));
+        break;   // เจอ anchor น้ำหนักแล้ว — ไม่ต้องไล่ต่อ
       }
     }
     // ★ 0x3c MINIMAP_MARKER: 2 โหมด
