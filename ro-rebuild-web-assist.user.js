@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.134.0
+// @version      4.135.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,19 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.134.0';
+  const VERSION = '4.135.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.135.0', d: '2026-08-19', items: [
+      '🔴🔴 กันยึ่งของคนอื่นขั้นเด็ดขาด — blacklist ล่วงหน้าก่อนยิงเก็บเลย',
+      '   (จากความรู้จริงของผู้ใช้: item drop ที่ตำแหน่งมอน ±1 ช่อง)',
+      '   ใหม่: จดจุดตายของมอนทุกตัว (รวมที่คนอื่นฆ่า) ตอน 0x0f',
+      '   → drop ใกล้จุดตายมอนที่เราไม่ได้ตี = ของคนอื่นแน่ → blacklist 60s ทันที',
+      '   ไม่ต้องรอ server ปฏิเสธ และไม่วาร์ปไปเก็บ (แก้รายงานผู้ใช้: บอทพยายาม',
+      '   ไปเก็บของคนอื่นจนวาร์ปไปหา — เกิดจาก warp-to-loot หลัง fail 4 ครั้ง)',
+      '   ยกเว้นตีทับกัน: จุดตายเขาใกล้จุดฆ่าเรา ≤3 ช่อง หรือใกล้ตัวเรา ≤4 ช่อง → ลองได้',
+      '🔧 รัศมีพิกัดฆ่า (pickRadiusKill) 5 → 2 ช่อง ตามกลไก drop จริง',
+    ]},
     { v: '4.134.0', d: '2026-08-19', items: [
       '🌀 Warp Dance: เพิ่มช่องตั้ง throttle ระหว่างวาร์ป (200-5000ms, default 800)',
       '   + ช่องจังหวะตีต่อรอบ (attackReIssueMs 500-10000ms, default 2000)',
@@ -760,7 +770,7 @@
     combatWindowMs: 2500,         // ของตกต้องมาภายในเวลานี้หลังเราตี/ฆ่า
     lootDelayAfterDropMs: 600,      // ★ รอ N ms หลังของตก แล้วค่อยเริ่มเก็บ (0 = เก็บทันที, กันดูเป็นบอท)
     lootUseKillPos: true,         // ★ เช็ค item ใกล้พิกัดมอนที่เราฆ่า (นักธนูฆ่าไกล → ของตกไกล)
-    pickRadiusKill: 5,            // ★ ระยะ (ช่อง) จากพิกัดมอนที่ตาย ที่จะถือว่าของเป็นของเรา
+    pickRadiusKill: 2,            // ★ ระยะ (ช่อง) จากพิกัดมอนที่ตาย ที่จะถือว่าของเป็นของเรา (item drop ที่ตำแหน่งมอน ±1 ช่อง)
     attemptIntervalMs: 1200,      // ห่างระหว่างการลองเก็บชิ้นเดิม (1.2 วิ — รอ server เดินไปเก็บ)
     sendThrottleMs: 400,          // ห่างระหว่างคำสั่งเก็บทุกชิ้น (กันสแปม)
     maxAttempts: 4,               // เก็บไม่ได้ 6 ครั้ง → ปล่อย (นักธนูฆ่าไกล ตัวเดินไปเก็บนานขึ้น)
@@ -1177,6 +1187,11 @@
   const recentKillPos = [];            // [{x, y, t}] — ล่าสุด 20 ตำแหน่ง, TTL 15 วินาที
   const KILL_POS_TTL_MS = 15000;
   const KILL_POS_MAX = 20;
+  // ★★ recentDeathPos — จุดตายของมอน "ทุกตัว" (รวมที่คนอื่นฆ่า) — TTL สั้น ๆ ตอนของ drop
+  //   ใช้แยกของเรา/ของคนอื่น: drop ตกที่จุดตายมอน (±1 ช่อง) ถ้ามอนนั้นเราไม่ได้ตี = ของคนอื่นแน่
+  const recentDeathPos = [];           // [{x, y, t, mine}]
+  const DEATH_POS_TTL_MS = 4000;
+  const DEATH_POS_MAX = 30;
 
   // ---------- WARP-TO-LOOT state ----------
   let currentMap = null;               // ชื่อแมปปัจจุบัน (จาก opcode 0x12) — จำเป็นสำหรับ warp
@@ -1308,6 +1323,7 @@
 
   function tryClaim(d) {
     if (queue.has(d.dropId)) return;
+    const dDropX = d.x, dDropY = d.y;   // ★ พิกัด drop (ใช้ใน foreign-drop check)
     // ★★ ของคนอื่น (เคยโดน "unable to pick up yet") → ข้าม + lazy cleanup ที่หมดอายุ
     const blUntil = dropBlacklist.get(d.dropId);
     if (blUntil != null) {
@@ -1331,6 +1347,33 @@
     // ★★ เก็บได้เลยถ้า: ของใกล้พิกัดมอนที่เราฆ่า (ชัวร์ — ฆ่าเอง) OR ตกที่ตัวเรา (r≤pickRadius)
     //   (ทั้งสองกรณีไม่ต้องดูใครใกล้กว่า — ของเราแน่ ๆ กันกรณีคน AFK ยืนใกล้จุดฆ่ามอนของเรา)
     if (!nearKillPos && !nearPlayer) {
+      // ★★★ FOREIGN DROP — ของตกใกล้จุดตายของมอนที่เราไม่ได้ตี = ของคนอื่นแน่นอน
+      //   (item drop ที่ตำแหน่งมอน ±1 ช่อง — ถ้ามอนนั้นไม่ใช่ที่เราตี เราไม่มีทางมีสิทธิ์)
+      //   → ข้าม + blacklist ล่วงหน้า 60s (ไม่ต้องรอ server ปฏิเสธ / ไม่วาร์ปไปเก็บ!)
+      //   ยกเว้น "ตีทับกัน": จุดตายนั้นใกล้จุดฆ่าของเรา ≤3 ช่อง หรือใกล้ตัวเรา ≤4 ช่อง
+      //   → ก้ำกึ่ง ปล่อยไปลองเก็บชั้นถัดไป (server lock เป็นเกราะชั้นสุดท้าย)
+      if (recentDeathPos.length) {
+        const now2 = Date.now();
+        while (recentDeathPos.length > 0 && now2 - recentDeathPos[0].t > DEATH_POS_TTL_MS) recentDeathPos.shift();
+        for (const d of recentDeathPos) {
+          if (d.mine) continue;   // มอนที่เราตีตาย → จัดการที่ nearKillPos แล้ว
+          if (Math.hypot(d.x - dDropX, d.y - dDropY) <= 2) {
+            // ตีทับกันไหม? — จุดตายเขาใกล้จุดฆ่าเรา หรือใกล้ตัวเรา
+            let overlap = false;
+            if (player.x != null && Math.hypot(d.x - player.x, d.y - player.y) <= 4) overlap = true;
+            if (!overlap) {
+              for (const k of recentKillPos) {
+                if (Math.hypot(k.x - d.x, k.y - d.y) <= 3) { overlap = true; break; }
+              }
+            }
+            if (!overlap) {
+              dropBlacklist.set(d.dropId, now2 + 60000);
+              dbg('🚫 ของตกที่จุดตายมอนที่เราไม่ได้ตี @(' + d.x + ',' + d.y + ') → ของคนอื่น — blacklist 60s');
+              return;
+            }
+          }
+        }
+      }
       // ★★ fallback: เพิ่งได้ EXP + ของใกล้เราในรัศมีกว้างขึ้น (เผื่อของ scatter จากมอนเรา)
       //   เดิม: เพิ่งได้ EXP แล้ว claim ทุก drop ไม่สนระยะ → ฆ่ามอนพร้อมคนอื่น = ยึ่งของเขา!
       const nearExpWide = (now - lastExpAt) < 2000 && player.x != null && dist(player, d) <= CFG.pickRadius + 3;
@@ -2434,6 +2477,12 @@
       // ★ นับ kill — ถ้าเป็นมอน (kind=1) และเรามี target หรือ mobAttacker ตัวนี้
       if (e && e.kind === 1) {
         stats.kills++;
+        // ★★ จดจุดตายทุกตัว (รวมของคนอื่น) — ใช้แยกความเป็นเจ้าของ drop
+        const mine = !!(e._lastEngagedByMeAt && nowMs() - e._lastEngagedByMeAt < 10000);
+        if (e.x != null) {
+          recentDeathPos.push({ x: e.x, y: e.y, t: Date.now(), mine });
+          while (recentDeathPos.length > DEATH_POS_MAX) recentDeathPos.shift();
+        }
       }
       if (target && target.id === id) {
         abandonTarget('ฆ่าได้', false); target = null;
