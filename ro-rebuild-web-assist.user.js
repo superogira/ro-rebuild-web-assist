@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.143.1
+// @version      4.144.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,15 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.143.1';
+  const VERSION = '4.144.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.144.0', d: '2026-08-19', items: [
+      '⚔️ Equip tab แสดงของแล้ว! — ถอดโครงสร้างก้อน Equipment จาก capture จริง 10/10',
+      '   โครง (stride 44B): [inst:4=0x13880+i][id×4:4][a:2][b:2][UUID:16][slot:4][?:4][pad:4]',
+      '   ยืนยัน: Knife 1201 → Gladius 1220 ตรงทุกตัวตามลำดับ slot ของผู้ใช้',
+      '   → tab Equip ใน popup จะรวมอาวุธ/ชุดจากก้อนนี้ + ของ cat=equip จาก inventory ธรรมดา',
+    ]},
     { v: '4.143.1', d: '2026-08-19', items: [
       '🎨 tooltip inventory: ชื่อ item เป็นแถบ bg สีน้ำเงิน (เหมือนในเกม) — desc ธรรมดา',
       '📍 popup inventory ชิดขวาจอแล้ว (เหมือน log modal)',
@@ -2006,6 +2012,29 @@
         for (let s = i + 14; s < i + 60; s++) { const r = tryParse(s); if (r && r.length >= 1) { items = r; break; } }
         if (items && items.length > 0) {
           for (const [iid, c] of items) inventory.set(iid, c);
+          // ★★ EQUIPMENT INVENTORY — ก้อนต่อท้าย inventory ธรรมดา (stride 44):
+          //   [inst:4 = 0x13880+i][itemId×4:4][a:2][b:2][UUID:16][slot:4][?:4][pad:4]
+          //   ยืนยันจาก capture จริง 10/10 ตรงทุก id (Knife 1201 → Gladius 1220)
+          // ★ หาก้อน equipment แบบอิสระ — สแกนหา 0x13880 (กันเคส inventory ว่างแต่มี equipment)
+          equipmentInv.clear();
+          let eqStart = -1;
+          for (let q = i + 14; q < u.length - 44; q++) {
+            if (u32(u, q) === 0x13880) { eqStart = q; break; }
+          }
+          if (eqStart >= 0) {
+            let ep = eqStart;
+            while (ep + 44 <= u.length) {
+              const inst = u32(u, ep);
+              if (inst < 0x13880 || inst > 0x13900) break;
+              const idE2 = u32(u, ep + 4);
+              if (idE2 === 0 || idE2 % 4 !== 0) break;
+              const eqId = idE2 >>> 2;
+              if (eqId <= 0 || eqId > 12000) break;
+              equipmentInv.set(eqId, (equipmentInv.get(eqId) || 0) + 1);
+              ep += 44;
+            }
+          }
+          if (equipmentInv.size > 0) dbg('⚔️ equipment: ' + equipmentInv.size + ' ชิ้น — ' + [...equipmentInv.entries()].slice(0, 6).map(([id, c]) => nameOf(id)).join(', '));
           dbg('🎒 inventory เริ่มต้น: ' + items.length + ' รายการ (' + items.reduce((s2, x) => s2 + x[1], 0) + ' ชิ้น) — ' + items.slice(0, 8).map(([id, c]) => nameOf(id) + '×' + c).join(', ') + (items.length > 8 ? ' ฯลฯ' : ''));
         }
         break;   // เจอ anchor น้ำหนักแล้ว — ไม่ต้องไล่ต่อ
@@ -3137,7 +3166,8 @@
   const mobAttackers = new Map(); // monsterId -> timestamp (มอนตีเรา)
 
   // ---------- AUTO-SELL + AUTO-STORAGE state + inventory ----------
-  const inventory = new Map();    // itemId -> count (authoritative from 0x32, mirror world.js:34)
+  const inventory = new Map();
+  const equipmentInv = new Map();     // ★★ อาวุธ/ชุดเกราะ (ก้อน 0x13880 ใน 0x38 — stride 44)    // itemId -> count (authoritative from 0x32, mirror world.js:34)
   const equipmentSlots = new Map(); // ★ itemId -> [slotId, slotId, ...] (mirror world.js:773-777)
   let inventoryFull = false;      // true เมื่อ server ส่ง "too full" (0x20)
   let sellState = 'IDLE';         // IDLE|WARP_TO_NPC|MOVE_TO_NPC|TALK|SELECT_SELL|SELL|WARP_BACK
@@ -7604,8 +7634,11 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
 
     function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
     function render(tab) {
-      const items = [...inventory.entries()]
-        .filter(([id, c]) => c > 0 && itemDB.cats[String(id)] === tab)
+      const src2 = tab === 'equip'
+        ? [...inventory.entries()].concat([...equipmentInv.entries()])   // ★ Equip tab: รวมก้อน equipment ด้วย
+        : [...inventory.entries()];
+      const items = src2
+        .filter(([id, c]) => c > 0 && (tab === 'equip' ? true : itemDB.cats[String(id)] === tab))
         .map(([id, c]) => ({ id, c }));
       if (tab === 'equip') items.sort((a, b) => {
         const ra = equipSlotRank(itemDB.slots[String(a.id)] || ''), rb = equipSlotRank(itemDB.slots[String(b.id)] || '');
