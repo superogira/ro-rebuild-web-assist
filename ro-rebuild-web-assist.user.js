@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.145.0
+// @version      4.145.1
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,13 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.145.0';
+  const VERSION = '4.145.1';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.145.1', d: '2026-08-19', items: [
+      '🏷️ label สถานะมุมซ้ายบนการ์ด item (พื้นดำ ตัวขาว): ขาย / ฝาก',
+      '   แสดงเฉพาะตอนตั้งค่าขายหรือฝาก · อัปเดตทันทีเมื่อคลิกวน toggle',
+    ]},
     { v: '4.145.0', d: '2026-08-19', items: [
       '📍 popup inventory ชิดขวาจอ (เหมือน log modal)',
       '⚔️ Equip แยกเป็นชิ้นตามลำดับ slot ที่ server ส่ง — เหมือนหน้าต่างในเกม ไม่รวม stack',
@@ -7670,6 +7674,7 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
         const actionBorder = action === 'sell' ? '#e67e22' : (action === 'deposit' ? '#27ae60' : '#3a3f4b');
 return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" data-desc="${esc(desc || '(ไม่มีคำอธิบาย)')}" style="position:relative;aspect-ratio:1;background:${actionBg};border:1px solid ${actionBorder};border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:visible" title="คลิก: เก็บ→ขาย→ฝาก">
           <img src="${itemIconUrl(x.id)}" style="max-width:80%;max-height:80%;image-rendering:pixelated" onerror="this.style.display='none'">
+          ${action !== 'keep' ? `<span class="__inv_action" style="position:absolute;top:0;left:0;font-size:8px;background:#000;color:#fff;padding:0 3px;border-radius:3px 0 3px 0;font-weight:bold">${action === 'sell' ? 'ขาย' : 'ฝาก'}</span>` : ''}
           <span style="position:absolute;bottom:0;right:2px;font-size:9px;color:#fff;text-shadow:0 0 2px #000,0 0 2px #000;font-weight:bold">${x.c > 999 ? Math.floor(x.c / 1000) + 'k' : x.c}</span>
         </div>`;
       }).join('') || '<div style="grid-column:1/-1;color:#666;font-size:11px;padding:20px;text-align:center">(ว่างเปล่า)</div>';
@@ -7705,6 +7710,18 @@ return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" d
       const bg = newAction === 'sell' ? 'rgba(230,126,34,.35)' : (newAction === 'deposit' ? 'rgba(39,174,96,.35)' : '#23262e');
       const bd = newAction === 'sell' ? '#e67e22' : (newAction === 'deposit' ? '#27ae60' : '#3a3f4b');
       slot.style.background = bg; slot.style.borderColor = bd;
+      // ★ label มุมซ้ายบน — อัปเดต/สร้าง/ลบ ตาม action ใหม่
+      let label = slot.querySelector('.__inv_action');
+      if (newAction === 'keep') { if (label) label.remove(); }
+      else {
+        if (!label) {
+          label = document.createElement('span');
+          label.className = '__inv_action';
+          label.style.cssText = 'position:absolute;top:0;left:0;font-size:8px;background:#000;color:#fff;padding:0 3px;border-radius:3px 0 3px 0;font-weight:bold';
+          slot.appendChild(label);
+        }
+        label.textContent = newAction === 'sell' ? 'ขาย' : 'ฝาก';
+      }
       if (tipEl) tipEl.style.display = 'none';
     });
 
