@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.147.0
+// @version      4.147.1
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,16 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.147.0';
+  const VERSION = '4.147.1';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.147.1', d: '2026-08-19', items: [
+      '🐛 แก้ desc ไม่แสดงสำหรับ Equip/Card/Arrow — regex เดิมไม่รองรับ //id 2101',
+      '   ไฟล์ desc ใช้ 2 format: //501 (usable) และ //id 2101 (equip/weapon/card/ammo)',
+      '   + strip <desc>...</desc> tags ที่ equip/weapons ใช้',
+      '   ทดสอบ: 6/6 ไฟล์ครบ 2879 descs (288+554+503+40+440+750)',
+      '   cache v4 — โหลดใหม่ออัตโนมัติ refresh ครั้งถัดไป',
+    ]},
     { v: '4.147.0', d: '2026-08-19', items: [
       '🔀 กู้คู่การวาร์ปสุ่มรับๆตอนฝากของคาฟรา (รายงานผู้ใช้)',
       '   เหตุ: stuck abandon → วาร์ปสุ่ม และ ไม่เจอมอน 3s → วาร์ปสุ่ม',
@@ -691,7 +698,7 @@
   // ============================================================
   const DB_BASE = GITHUB_RAW.replace('/ro-rebuild-web-assist.user.js', '/db/Item/');
   const ITEMS_ICON_URL = GITHUB_RAW.replace('/ro-rebuild-web-assist.user.js', '/items/small/');
-  const ITEMDB_CACHE_KEY = 'roAssistItemDB_v3';   // v3 = +weights   // ★ v2 = จาก db/Item ของ RagnarokRebuildTcp
+  const ITEMDB_CACHE_KEY = 'roAssistItemDB_v4';   // v4 = fix desc regex (equip/weapon/card/ammo)   // v3 = +weights   // ★ v2 = จาก db/Item ของ RagnarokRebuildTcp
   // ★★ itemDB v2 — 6 CSV ของ RagnarokRebuildTcp (2584 รายการ แทน items.csv เดิม 1016)
   //   cats: usable / equip (มี slot จาก Position) / etc (Ammo+Cards+Regular)
   //   + desc จาก ItemDescriptions/*.txt (format ::Code //Id + Unity <color> tags)
@@ -717,9 +724,11 @@
       if (!part.trim()) continue;
       const nl = part.indexOf('\n');
       if (nl < 0) continue;
-      const m = part.slice(0, nl).trim().match(/^(\S+)\s*\/\/\s*(\d+)/);
+      // ★ รองรับ 2 format: ::Code //501 (usable/regular) และ ::Code //id 2101 - Shield (equip/weapon/card/ammo)
+      const m = part.slice(0, nl).trim().match(/^(\S+)\s*\/\/(?:\s*id\s*)?(\d+)/);
       if (!m) continue;
       const body = part.slice(nl + 1).trim()
+        .replace(/<desc>/gi, '').replace(/<\/desc>/gi, '')
         .replace(/<color=[^>]*>/gi, '').replace(/<\/color>/gi, '')
         .replace(/<[^>]+>/g, '');
       if (body) map[m[2]] = body;
@@ -732,7 +741,7 @@
       const cached = localStorage.getItem(ITEMDB_CACHE_KEY);
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (parsed.v === 3 && parsed.names) {
+        if (parsed.v === 4 && parsed.names) {
           itemDB.names = parsed.names; itemDB.prices = parsed.prices || {};
           itemDB.cats = parsed.cats || {}; itemDB.slots = parsed.slots || {}; itemDB.descs = parsed.descs || {}; itemDB.weights = parsed.weights || {}; itemDB.weights = parsed.weights || {};
           itemDB.loaded = true;
@@ -782,7 +791,7 @@
         Object.assign(itemDB.descs, parseDescs(text));
       }
       itemDB.loaded = true;
-      try { localStorage.setItem(ITEMDB_CACHE_KEY, JSON.stringify({ v: 3, names: itemDB.names, prices: itemDB.prices, cats: itemDB.cats, slots: itemDB.slots, descs: itemDB.descs, weights: itemDB.weights })); } catch (e) {}
+      try { localStorage.setItem(ITEMDB_CACHE_KEY, JSON.stringify({ v: 4, names: itemDB.names, prices: itemDB.prices, cats: itemDB.cats, slots: itemDB.slots, descs: itemDB.descs, weights: itemDB.weights })); } catch (e) {}
       log('🗃️ โหลด item DB v2 สำเร็จ: ' + n + ' รายการ + ' + Object.keys(itemDB.descs).length + ' descriptions');
     } catch (e) {
       log('⚠️ โหลด item DB v2 ล้มเหลว (' + e.message + ') — ใช้ชื่อเริ่มต้น');
