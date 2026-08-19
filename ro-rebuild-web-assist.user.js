@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.137.0
+// @version      4.138.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,19 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.137.0';
+  const VERSION = '4.138.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.138.0', d: '2026-08-19', items: [
+      '🔴 แก้ batch 0x3c — ค้นพบจาก capture วาร์ป: byte หลัง opcode คือ จำนวนระเบียน',
+      '   (ไม่ใช่ sub) + flag ต่อระเบียน: 1=ผู้เล่น / 3=MiniBoss / 4=Boss / 5=Warp portal',
+      '   เดิมสร้างทุกระเบียนเป็น kind=1 — warp portal กลายเป็น มอน ไร้ชื่น',
+      '   (รอดเพราะ portal ไกล >12 ช่อง แต่ wander ไปใกล้จะตีเปล่า)',
+      '   แก้: flag=5 → warp (kind=2) / flag=1 → ลงทะเบียน beacon player',
+      '   / flag=3,4 → mark MiniBoss/Boss',
+      '📋 ยืนยันจาก capture: หลังวาร์ป server ส่ง SPAWN มอน 8 ตัว + beacon ตัวเรา',
+      '   ทันที + คู่ 1b+36(5) ยังส่งมาเรื่อย ๆ (รองรับแล้ว v4.137)',
+    ]},
     { v: '4.137.0', d: '2026-08-19', items: [
       '🔴🔴 พบ "โรงงานผี" จาก capture จริง — ต้นเหตุแท้ของมอนอยู่รอบตัวแต่หาไม่เจอ!',
       '   server ส่ง 1b (despawn?) + 36 reason=5 เป็นประจำทุก ~5s กับมอนที่ยังเดินอยู่',
@@ -2249,6 +2259,10 @@
     }
     // 0x07 MOVE_UPDATE: อัปเดตตำแหน่ง entity — merge แล้วใน handler 0x07 ด้านบน (player + entity)
     // 0x3c ENTITY_LIST: batch ตำแหน่ง [3c][count:2][eid:4][x:2][y:2][flag:1]...
+    //   ★★ ค้นพบจาก capture วาร์ป: byte @1-2 คือ "จำนวนระเบียน" (ไม่ใช่ sub!)
+    //   flag ต่อระเบียน: 1=ผู้เล่นบน radar / 3=MiniBoss / 4=Boss / 5=Warp portal
+    //   (เดิมสร้างทุกอย่างเป็น kind=1 — warp portal กลายเป็น "มอน" ไร้ชื่อ!
+    //    รอดมาได้เพราะ portal ไกล >12 ช่อง แต่ถ้า wander ไปใกล้จะตีเปล่า)
     else if (op === 0x3c && u.length >= 3) {
       const count = u16(u, 1);
       const now = nowMs();
@@ -2256,12 +2270,25 @@
       for (let i = 0; i < count && p + 9 <= u.length; i++) {
         const id = u32(u, p);
         const x = i16(u, p + 4), y = i16(u, p + 6);
+        const flag = u[p + 8];   // ★ 1=player 3=miniboss 4=boss 5=warp
         // sanity check พิกัด (กัน garbage)
         if (x >= -500 && x <= 1000 && y >= -500 && y <= 1000) {
-          if (id !== playerId && !isStaleId(id, now) && !isBeaconPlayer(id, now)) {
+          if (flag === 5) {
+            // ★ warp portal — ไม่ใช่มอน! track เป็น kind=2 ไว้ดูบน monitor
+            entities.set(id, { id, kind: 2, x, y, alive: true, _lastSeenAt: now, _isWarp: true, name: 'Warp' });
+          } else if (flag === 1) {
+            // ★ ผู้เล่นบน radar — ลงทะเบียน beacon (กันถูกมองเป็นมอน)
+            beaconPlayerIds.set(id, now);
+            if (id === playerId) { player.x = x; player.y = y; }
+            else if (!isStaleId(id, now)) {
+              const e = entities.get(id);
+              if (e) { e.x = x; e.y = y; e._lastSeenAt = now; }
+              else { entities.set(id, { id, kind: 0, x, y, alive: true, _lastSeenAt: now, name: '', _src: 'beacon' }); }
+            }
+          } else if (id !== playerId && !isStaleId(id, now) && !isBeaconPlayer(id, now)) {
             const e = entities.get(id);
-            if (e) { e.x = x; e.y = y; e._lastSeenAt = now; }
-            else { entities.set(id, { id, kind: 1, x, y, alive: true, _lastSeenAt: now }); }
+            if (e) { e.x = x; e.y = y; e._lastSeenAt = now; if (flag === 3) e._isMiniBoss = true; if (flag === 4) e._isBoss = true; }
+            else { entities.set(id, { id, kind: 1, x, y, alive: true, _lastSeenAt: now, ...(flag === 3 ? { _isMiniBoss: true } : flag === 4 ? { _isBoss: true } : {}) }); }
           } else if (id === playerId) { player.x = x; player.y = y; }   // ★ player ด้วย
         }
         p += 9;
