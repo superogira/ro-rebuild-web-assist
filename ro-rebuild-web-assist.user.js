@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.129.1
+// @version      4.130.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,17 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.129.1';
+  const VERSION = '4.130.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.130.0', d: '2026-08-19', items: [
+      '🔮🔮 รายการสกิลครบ 110 ตัว! จาก Skills.toml ของ RagnarokRebuildTcp (โค้ด server จริง)',
+      '   ID = ลำดับในไฟล์ (None=0) — ยืนยัน 100%: preset เดิม 13 ตัวที่ capture จริงตรงทั้งหมด',
+      '   (Bash=3 Magnum=6 TwoHandQuicken=30 DoubleStrafe=24 Steal=61 SonicBlow=126 ฯลฯ)',
+      '   แต่ละสกิลมี: ชื่อ · เป้าหมาย (โจมตี/AoEพื้น/ตัวเอง/บัพ) · SP ต่อเลเวลครบทุกเลเวล',
+      '   · ปรับเลเวลได้/ไม่ได้ · เลเวลสูงสุด — จัดกลุ่มตามอาชีพ 13 กลุ่ม',
+      '   ⚠️ สกิลที่ยังไม่ได้ capture ใช้ค่า default (ระยะ 9 ช่อง cooldown 2s) — ปรับได้หลังเพิ่ม',
+    ]},
     { v: '4.129.1', d: '2026-08-18', items: [
       '⚠️ ช่อง username/password ใน sub-tab Auto → disabled + hint',
       '   (การพิมพ์รหัสเองยังใช้ไม่ได้ — Unity ไม่รับ synthetic text จะแก้ภายหลัง)',
@@ -5158,6 +5166,109 @@
     // ---- Thief/Assassin/Rogue (จาก packet capture) ----
     { name: 'Steal', skillId: 61, level: 10, targeted: true, maxUsesPerTarget: 1, maxDistance: 2, spMin: 15, cooldownMs: 30000, job: 'Thief/Assassin/Rogue', desc: 'ขโมยของจากมอน (ใช้ที่เลเวลสูงสุด)' },
     { name: 'Sonic Blow', skillId: 126, level: 10, targeted: true, maxUsesPerTarget: 1, maxDistance: 2, spMin: 40, cooldownMs: 120000, job: 'Assassin/SinX', desc: 'ฟัน 8 ครั้งรวด (ดาเมจหนัก)' },
+    // ============================================================
+    // ★★ สกิลทั้งหมดจาก Skills.toml ของ RagnarokRebuildTcp (server ตัวจริงของเกมนี้)
+    //   ID = ลำดับในไฟล์ (None=0) — ยืนยันแน่นอน: preset 13 ตัวที่ capture จริงตรง 100%
+    //   ข้อมูล: ชื่อ/เป้าหมาย/MaxLevel/SP ต่อเลเวล/ปรับเลเวลได้ มาจาก server โดยตรง
+    //   ⚠️ สกิลที่ไม่ได้ capture ยืนยัน = ค่า default (cooldown/ระยะ) — ปรับตามจำเป็น
+    // ============================================================
+    { name: "First Aid", skillId: 2, level: 1, selfCast: true, intervalMin: 4, spMin: 4, cooldownMs: 2000, job: "Novice", desc: "ตัวเอง · SP 4 · ยังไม่ทดสอบ" },
+    { name: "Fire Bolt", skillId: 11, level: 10, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 30, cooldownMs: 2000, job: "Mage", desc: "โจมตี · SP 12/14/16/18/20/22/24/26/28/30 · ปรับเลเวลได้ · ยังไม่ทดสอบ" },
+    { name: "Cold Bolt", skillId: 12, level: 10, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 30, cooldownMs: 2000, job: "Mage", desc: "โจมตี · SP 12/14/16/18/20/22/24/26/28/30 · ปรับเลเวลได้ · ยังไม่ทดสอบ" },
+    { name: "Fireball", skillId: 13, level: 10, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 25, cooldownMs: 2000, job: "Mage", desc: "โจมตี · SP 25/25/25/25/25/25/25/25/25/25 · ปรับเลเวลได้ · ยังไม่ทดสอบ" },
+    { name: "Fire Wall", skillId: 14, level: 10, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 40, cooldownMs: 2000, job: "Mage", desc: "AoEพื้น · SP 40/40/40/40/40/40/40/40/40/40 · ปรับเลเวลได้ · ยังไม่ทดสอบ" },
+    { name: "Frost Diver", skillId: 15, level: 10, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 25, cooldownMs: 2000, job: "Mage", desc: "โจมตี · SP 25/24/23/22/21/20/19/18/17/16 · ปรับเลเวลได้ · ยังไม่ทดสอบ" },
+    { name: "Lightning Bolt", skillId: 16, level: 10, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 30, cooldownMs: 2000, job: "Mage", desc: "โจมตี · SP 12/14/16/18/20/22/24/26/28/30 · ปรับเลเวลได้ · ยังไม่ทดสอบ" },
+    { name: "Napalm Beat", skillId: 17, level: 10, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 18, cooldownMs: 2000, job: "Mage", desc: "โจมตี · SP 9/9/9/12/12/12/15/15/15/18 · ยังไม่ทดสอบ" },
+    { name: "Soul Strike", skillId: 18, level: 10, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 42, cooldownMs: 2000, job: "Mage", desc: "โจมตี · SP 18/14/24/20/30/26/36/32/42/38 · ปรับเลเวลได้ · ยังไม่ทดสอบ" },
+    { name: "Thunderstorm", skillId: 19, level: 10, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 74, cooldownMs: 2000, job: "Mage", desc: "AoEพื้น · SP 29/34/39/44/49/54/59/64/69/74 · ปรับเลเวลได้ · ยังไม่ทดสอบ" },
+    { name: "Safety Wall", skillId: 20, level: 10, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 40, cooldownMs: 2000, job: "Mage", desc: "AoEพื้น · SP 30/30/30/35/35/35/40/40/40/40 · ปรับเลเวลได้ · ยังไม่ทดสอบ" },
+    { name: "Stone Curse", skillId: 21, level: 10, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 25, cooldownMs: 2000, job: "Mage", desc: "โจมตี · SP 25/24/23/22/21/20/19/18/17/16 · ยังไม่ทดสอบ" },
+    { name: "Sight", skillId: 22, level: 1, selfCast: true, intervalMin: 4, spMin: 10, cooldownMs: 2000, job: "Mage", desc: "ตัวเอง · SP 10 · ยังไม่ทดสอบ" },
+    { name: "Energy Coat", skillId: 23, level: 1, selfCast: true, intervalMin: 4, spMin: 30, cooldownMs: 2000, job: "Mage", desc: "ตัวเอง · SP 30 · ยังไม่ทดสอบ" },
+    { name: "Counter Attack", skillId: 31, level: 5, selfCast: true, intervalMin: 4, spMin: 3, cooldownMs: 2000, job: "Knight", desc: "ตัวเอง · SP 3 · ยังไม่ทดสอบ" },
+    { name: "Pierce", skillId: 36, level: 10, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 7, cooldownMs: 2000, job: "Knight", desc: "โจมตี · SP 7 · ยังไม่ทดสอบ" },
+    { name: "Spear Stab", skillId: 37, level: 10, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 9, cooldownMs: 2000, job: "Knight", desc: "โจมตี · SP 9 · ยังไม่ทดสอบ" },
+    { name: "Brandish Spear", skillId: 38, level: 10, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 12, cooldownMs: 2000, job: "Knight", desc: "โจมตี · SP 12/12/12/12/12/12/12/12/12/12 · ยังไม่ทดสอบ" },
+    { name: "Spear Boomerang", skillId: 39, level: 5, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 10, cooldownMs: 2000, job: "Knight", desc: "โจมตี · SP 10 · ยังไม่ทดสอบ" },
+    { name: "Heal", skillId: 41, level: 10, selfCast: true, intervalMin: 4, spMin: 40, cooldownMs: 2000, job: "Acolyte", desc: "บัพตัวเอง · SP 13/16/19/22/25/28/31/34/37/40 · ปรับเลเวลได้ · ยังไม่ทดสอบ" },
+    { name: "Increase Agility", skillId: 42, level: 10, selfCast: true, intervalMin: 4, spMin: 45, cooldownMs: 2000, job: "Acolyte", desc: "บัพตัวเอง · SP 18/21/24/27/30/33/36/39/42/45 · ปรับเลเวลได้ · ยังไม่ทดสอบ" },
+    { name: "Decrease Agility", skillId: 43, level: 10, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 33, cooldownMs: 2000, job: "Acolyte", desc: "โจมตี · SP 15/17/19/21/23/25/27/29/31/33 · ยังไม่ทดสอบ" },
+    { name: "Blessing", skillId: 44, level: 10, selfCast: true, intervalMin: 4, spMin: 64, cooldownMs: 2000, job: "Acolyte", desc: "บัพตัวเอง · SP 28/32/36/40/44/48/52/56/60/64 · ปรับเลเวลได้ · ยังไม่ทดสอบ" },
+    { name: "Angelus", skillId: 47, level: 10, selfCast: true, intervalMin: 4, spMin: 50, cooldownMs: 2000, job: "Acolyte", desc: "ตัวเอง · SP 23/26/29/32/35/38/41/44/47/50 · ยังไม่ทดสอบ" },
+    { name: "Signum Crusis", skillId: 48, level: 10, selfCast: true, intervalMin: 4, spMin: 35, cooldownMs: 2000, job: "Acolyte", desc: "ตัวเอง · SP 35/35/35/35/35/35/35/35/35/35 · ยังไม่ทดสอบ" },
+    { name: "Cure", skillId: 49, level: 1, selfCast: true, intervalMin: 4, spMin: 15, cooldownMs: 2000, job: "Acolyte", desc: "บัพตัวเอง · SP 15 · ยังไม่ทดสอบ" },
+    { name: "Aqua Benedicta", skillId: 50, level: 1, selfCast: true, intervalMin: 4, spMin: 10, cooldownMs: 2000, job: "Acolyte", desc: "ตัวเอง · SP 10 · ยังไม่ทดสอบ" },
+    { name: "Pneuma", skillId: 51, level: 1, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 10, cooldownMs: 2000, job: "Acolyte", desc: "AoEพื้น · SP 10 · ยังไม่ทดสอบ" },
+    { name: "Ruwach", skillId: 52, level: 1, selfCast: true, intervalMin: 4, spMin: 10, cooldownMs: 2000, job: "Acolyte", desc: "ตัวเอง · SP 10 · ยังไม่ทดสอบ" },
+    { name: "Teleport", skillId: 53, level: 1, selfCast: true, intervalMin: 4, spMin: 30, cooldownMs: 2000, job: "Acolyte", desc: "ตัวเอง · SP 30 · ยังไม่ทดสอบ" },
+    { name: "Return", skillId: 54, level: 1, selfCast: true, intervalMin: 4, spMin: 10, cooldownMs: 2000, job: "Acolyte", desc: "ตัวเอง · SP 10 · ยังไม่ทดสอบ" },
+    { name: "Warp Portal", skillId: 55, level: 4, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 35, cooldownMs: 2000, job: "Acolyte", desc: "AoEพื้น · SP 35/32/29/26 · ยังไม่ทดสอบ" },
+    { name: "Holy Light", skillId: 56, level: 1, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 15, cooldownMs: 2000, job: "Acolyte", desc: "โจมตี · SP 15 · ยังไม่ทดสอบ" },
+    { name: "Envenom", skillId: 58, level: 10, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 12, cooldownMs: 2000, job: "Thief", desc: "โจมตี · SP 12/12/12/12/12/12/12/12/12/12 · ยังไม่ทดสอบ" },
+    { name: "Detoxify", skillId: 59, level: 1, selfCast: true, intervalMin: 4, spMin: 10, cooldownMs: 2000, job: "Thief", desc: "บัพตัวเอง · SP 10 · ยังไม่ทดสอบ" },
+    { name: "Back Slide", skillId: 60, level: 1, selfCast: true, intervalMin: 4, spMin: 5, cooldownMs: 2000, job: "Thief", desc: "ตัวเอง · SP 5 · ยังไม่ทดสอบ" },
+    { name: "Sand Attack", skillId: 62, level: 1, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 9, cooldownMs: 2000, job: "Thief", desc: "โจมตี · SP 9 · ยังไม่ทดสอบ" },
+    { name: "Stone Fling", skillId: 63, level: 1, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 2, cooldownMs: 2000, job: "Thief", desc: "โจมตี · SP 2 · ยังไม่ทดสอบ" },
+    { name: "Find Stone", skillId: 64, level: 1, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 2, cooldownMs: 2000, job: "Thief", desc: "โจมตี · SP 2 · ยังไม่ทดสอบ" },
+    { name: "Hiding", skillId: 65, level: 10, selfCast: true, intervalMin: 4, spMin: 10, cooldownMs: 2000, job: "Thief", desc: "ตัวเอง · SP 10/10/10/10/10/10/10/10/10/10 · ยังไม่ทดสอบ" },
+    { name: "Vending", skillId: 70, level: 10, selfCast: true, intervalMin: 4, spMin: 0, cooldownMs: 2000, job: "Merchant", desc: "ตัวเอง · SP 0/0/0/0/0/0/0/0/0/0 · ยังไม่ทดสอบ" },
+    { name: "Mammonite", skillId: 72, level: 10, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 5, cooldownMs: 2000, job: "Merchant", desc: "โจมตี · SP 5/5/5/5/5/5/5/5/5/5 · ปรับเลเวลได้ · ยังไม่ทดสอบ" },
+    { name: "Crazy Uproar", skillId: 74, level: 1, selfCast: true, intervalMin: 4, spMin: 8, cooldownMs: 2000, job: "Merchant", desc: "ตัวเอง · SP 8 · ยังไม่ทดสอบ" },
+    { name: "Cart Revolution", skillId: 75, level: 1, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 12, cooldownMs: 2000, job: "Merchant", desc: "โจมตี · SP 12 · ยังไม่ทดสอบ" },
+    { name: "Aspersio", skillId: 76, level: 5, selfCast: true, intervalMin: 4, spMin: 20, cooldownMs: 2000, job: "Priest", desc: "บัพตัวเอง · SP 12/14/16/18/20 · ยังไม่ทดสอบ" },
+    { name: "Benedictio Sanctissimi Sacramenti", skillId: 77, level: 5, selfCast: true, intervalMin: 4, spMin: 20, cooldownMs: 2000, job: "Priest", desc: "บัพตัวเอง · SP 20/20/20/20/20 · ยังไม่ทดสอบ" },
+    { name: "Sanctuary", skillId: 78, level: 10, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 42, cooldownMs: 2000, job: "Priest", desc: "AoEพื้น · SP 15/18/21/24/27/30/33/36/39/42 · ปรับเลเวลได้ · ยังไม่ทดสอบ" },
+    { name: "Gloria", skillId: 79, level: 5, selfCast: true, intervalMin: 4, spMin: 20, cooldownMs: 2000, job: "Priest", desc: "ตัวเอง · SP 20/20/20/20/20 · ยังไม่ทดสอบ" },
+    { name: "Magnificat", skillId: 80, level: 5, selfCast: true, intervalMin: 4, spMin: 40, cooldownMs: 2000, job: "Priest", desc: "ตัวเอง · SP 40/40/40/40/40 · ยังไม่ทดสอบ" },
+    { name: "Impositio Manus", skillId: 81, level: 5, selfCast: true, intervalMin: 4, spMin: 24, cooldownMs: 2000, job: "Priest", desc: "บัพตัวเอง · SP 13/16/19/21/24 · ยังไม่ทดสอบ" },
+    { name: "Kyrie Eleison", skillId: 82, level: 10, selfCast: true, intervalMin: 4, spMin: 35, cooldownMs: 2000, job: "Priest", desc: "บัพตัวเอง · SP 20/20/20/25/25/25/30/30/30/35 · ยังไม่ทดสอบ" },
+    { name: "Lex Aeterna", skillId: 83, level: 1, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 10, cooldownMs: 2000, job: "Priest", desc: "โจมตี · SP 10 · ยังไม่ทดสอบ" },
+    { name: "Lex Divina", skillId: 84, level: 5, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 20, cooldownMs: 2000, job: "Priest", desc: "โจมตี · SP 20/20/20/20/20/18/16/14/12/10 · ยังไม่ทดสอบ" },
+    { name: "Magnus Exorcismus", skillId: 85, level: 10, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 58, cooldownMs: 2000, job: "Priest", desc: "AoEพื้น · SP 40/42/44/46/48/50/52/54/56/58 · ยังไม่ทดสอบ" },
+    { name: "Resurrection", skillId: 86, level: 4, selfCast: true, intervalMin: 4, spMin: 60, cooldownMs: 2000, job: "Priest", desc: "บัพตัวเอง · SP 60/60/60/60 · ยังไม่ทดสอบ" },
+    { name: "Status Recovery", skillId: 87, level: 1, selfCast: true, intervalMin: 4, spMin: 5, cooldownMs: 2000, job: "Priest", desc: "บัพตัวเอง · SP 5 · ยังไม่ทดสอบ" },
+    { name: "Suffragium", skillId: 88, level: 3, selfCast: true, intervalMin: 4, spMin: 8, cooldownMs: 2000, job: "Priest", desc: "บัพตัวเอง · SP 8 · ยังไม่ทดสอบ" },
+    { name: "Turn Undead", skillId: 89, level: 10, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 20, cooldownMs: 2000, job: "Priest", desc: "โจมตี · SP 20/20/20/20/20/20/20/20/20/20 · ยังไม่ทดสอบ" },
+    { name: "Earth Spike", skillId: 91, level: 5, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 20, cooldownMs: 2000, job: "Wizard", desc: "โจมตี · SP 12/14/16/18/20 · ปรับเลเวลได้ · ยังไม่ทดสอบ" },
+    { name: "Heaven's Drive", skillId: 92, level: 5, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 44, cooldownMs: 2000, job: "Wizard", desc: "AoEพื้น · SP 28/32/36/40/44 · ปรับเลเวลได้ · ยังไม่ทดสอบ" },
+    { name: "Fire Pillar", skillId: 93, level: 10, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 75, cooldownMs: 2000, job: "Wizard", desc: "AoEพื้น · SP 75/75/75/75/75/75/75/75/75/75 · ยังไม่ทดสอบ" },
+    { name: "Frost Nova", skillId: 94, level: 10, selfCast: true, intervalMin: 4, spMin: 45, cooldownMs: 2000, job: "Wizard", desc: "ตัวเอง · SP 45/43/41/39/37/35/33/31/29/27 · ยังไม่ทดสอบ" },
+    { name: "Ice Wall", skillId: 95, level: 10, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 20, cooldownMs: 2000, job: "Wizard", desc: "AoEพื้น · SP 20/20/20/20/20/20/20/20/20/20 · ยังไม่ทดสอบ" },
+    { name: "Jupitel Thunder", skillId: 96, level: 10, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 47, cooldownMs: 2000, job: "Wizard", desc: "โจมตี · SP 20/23/26/29/36/35/38/41/44/47 · ปรับเลเวลได้ · ยังไม่ทดสอบ" },
+    { name: "Lord of Vermilion", skillId: 97, level: 10, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 96, cooldownMs: 2000, job: "Wizard", desc: "AoEพื้น · SP 60/64/68/72/76/80/84/88/92/96 · ยังไม่ทดสอบ" },
+    { name: "Meteor Storm", skillId: 98, level: 10, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 64, cooldownMs: 2000, job: "Wizard", desc: "AoEพื้น · SP 20/24/30/34/40/44/50/54/60/64 · ยังไม่ทดสอบ" },
+    { name: "Quagmire", skillId: 99, level: 5, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 25, cooldownMs: 2000, job: "Wizard", desc: "AoEพื้น · SP 5/10/15/20/25 · ยังไม่ทดสอบ" },
+    { name: "Sense", skillId: 100, level: 1, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 10, cooldownMs: 2000, job: "Wizard", desc: "โจมตี · SP 10 · ยังไม่ทดสอบ" },
+    { name: "Sightrasher", skillId: 101, level: 10, selfCast: true, intervalMin: 4, spMin: 53, cooldownMs: 2000, job: "Wizard", desc: "ตัวเอง · SP 35/37/39/41/43/45/47/49/51/53 · ยังไม่ทดสอบ" },
+    { name: "Storm Gust", skillId: 102, level: 10, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 78, cooldownMs: 2000, job: "Wizard", desc: "AoEพื้น · SP 78/78/78/78/78/78/78/78/78/78 · ปรับเลเวลได้ · ยังไม่ทดสอบ" },
+    { name: "Water Ball", skillId: 103, level: 5, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 25, cooldownMs: 2000, job: "Wizard", desc: "โจมตี · SP 15/20/20/25/25/25/25/25/25/25 · ยังไม่ทดสอบ" },
+    { name: "Detect", skillId: 106, level: 1, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 8, cooldownMs: 2000, job: "Hunter", desc: "AoEพื้น · SP 8 · ยังไม่ทดสอบ" },
+    { name: "Blitz Beat", skillId: 107, level: 5, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 22, cooldownMs: 2000, job: "Hunter", desc: "โจมตี · SP 10/13/16/19/22 · ยังไม่ทดสอบ" },
+    { name: "Land Mine", skillId: 109, level: 5, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 20, cooldownMs: 2000, job: "Hunter", desc: "AoEพื้น · SP 20/20/20/20/20 · ยังไม่ทดสอบ" },
+    { name: "Remove Trap", skillId: 110, level: 1, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 5, cooldownMs: 2000, job: "Hunter", desc: "AoEพื้น · SP 5 · ยังไม่ทดสอบ" },
+    { name: "Spring Trap", skillId: 111, level: 1, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 10, cooldownMs: 2000, job: "Hunter", desc: "AoEพื้น · SP 10 · ยังไม่ทดสอบ" },
+    { name: "Skid Trap", skillId: 112, level: 5, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 10, cooldownMs: 2000, job: "Hunter", desc: "AoEพื้น · SP 10/10/10/10/10 · ยังไม่ทดสอบ" },
+    { name: "Ankle Snare", skillId: 113, level: 5, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 12, cooldownMs: 2000, job: "Hunter", desc: "AoEพื้น · SP 12/12/12/12/12 · ยังไม่ทดสอบ" },
+    { name: "Flasher", skillId: 114, level: 5, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 12, cooldownMs: 2000, job: "Hunter", desc: "AoEพื้น · SP 12/12/12/12/12 · ยังไม่ทดสอบ" },
+    { name: "Freezing Trap", skillId: 115, level: 5, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 10, cooldownMs: 2000, job: "Hunter", desc: "AoEพื้น · SP 10/10/10/10/10 · ยังไม่ทดสอบ" },
+    { name: "Sandman", skillId: 116, level: 5, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 12, cooldownMs: 2000, job: "Hunter", desc: "AoEพื้น · SP 12/12/12/12/12 · ยังไม่ทดสอบ" },
+    { name: "Blast Mine", skillId: 117, level: 5, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 10, cooldownMs: 2000, job: "Hunter", desc: "AoEพื้น · SP 10/10/10/10/10 · ยังไม่ทดสอบ" },
+    { name: "Claymore Trap", skillId: 118, level: 5, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 15, cooldownMs: 2000, job: "Hunter", desc: "AoEพื้น · SP 15/15/15/15/15 · ยังไม่ทดสอบ" },
+    { name: "Shockwave Trap", skillId: 119, level: 5, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 45, cooldownMs: 2000, job: "Hunter", desc: "AoEพื้น · SP 45/45/45/45/45 · ยังไม่ทดสอบ" },
+    { name: "Talkie Box", skillId: 120, level: 1, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 1, cooldownMs: 2000, job: "Hunter", desc: "AoEพื้น · SP 1 · ยังไม่ทดสอบ" },
+    { name: "Phantasmic Arrow", skillId: 121, level: 1, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 10, cooldownMs: 2000, job: "Hunter", desc: "โจมตี · SP 10 · ยังไม่ทดสอบ" },
+    { name: "Grimtooth", skillId: 125, level: 5, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 3, cooldownMs: 2000, job: "Assassin", desc: "โจมตี · SP 3/3/3/3/3 · ยังไม่ทดสอบ" },
+    { name: "Cloaking", skillId: 127, level: 10, selfCast: true, intervalMin: 4, spMin: 15, cooldownMs: 2000, job: "Assassin", desc: "ตัวเอง · SP 15/15/15/15/15/15/15/15/15/15 · ยังไม่ทดสอบ" },
+    { name: "Enchant Poison", skillId: 128, level: 10, selfCast: true, intervalMin: 4, spMin: 20, cooldownMs: 2000, job: "Assassin", desc: "บัพตัวเอง · SP 20/20/20/20/20/20/20/20/20/20 · ยังไม่ทดสอบ" },
+    { name: "Poison React", skillId: 129, level: 10, selfCast: true, intervalMin: 4, spMin: 60, cooldownMs: 2000, job: "Assassin", desc: "ตัวเอง · SP 25/30/35/40/45/50/55/60/45/45 · ยังไม่ทดสอบ" },
+    { name: "Venom Dust", skillId: 130, level: 10, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 20, cooldownMs: 2000, job: "Assassin", desc: "AoEพื้น · SP 20/20/20/20/20/20/20/20/20/20 · ยังไม่ทดสอบ" },
+    { name: "Venom Splasher", skillId: 131, level: 10, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 30, cooldownMs: 2000, job: "Assassin", desc: "โจมตี · SP 12/14/16/18/20/22/24/26/28/30 · ยังไม่ทดสอบ" },
+    { name: "Adrenaline Rush", skillId: 135, level: 10, selfCast: true, intervalMin: 4, spMin: 47, cooldownMs: 2000, job: "Blacksmith", desc: "ตัวเอง · SP 20/23/26/29/32/35/38/41/44/47 · ยังไม่ทดสอบ" },
+    { name: "Hammer Fall", skillId: 136, level: 5, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 10, cooldownMs: 2000, job: "Blacksmith", desc: "AoEพื้น · SP 10/10/10/10/10 · ยังไม่ทดสอบ" },
+    { name: "Weapon Perfection", skillId: 139, level: 5, selfCast: true, intervalMin: 4, spMin: 18, cooldownMs: 2000, job: "Blacksmith", desc: "ตัวเอง · SP 18/16/14/12/10 · ยังไม่ทดสอบ" },
+    { name: "Power Thrust", skillId: 141, level: 5, selfCast: true, intervalMin: 4, spMin: 18, cooldownMs: 2000, job: "Blacksmith", desc: "ตัวเอง · SP 18/16/14/12/10 · ยังไม่ทดสอบ" },
+    { name: "Maximize Power", skillId: 142, level: 5, selfCast: true, intervalMin: 4, spMin: 10, cooldownMs: 2000, job: "Blacksmith", desc: "ตัวเอง · SP 10/10/10/10/10 · ยังไม่ทดสอบ" },
   ];
   function skillPresetGroups() {
     const groups = {};
