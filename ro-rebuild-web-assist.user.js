@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.130.0
+// @version      4.131.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,14 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.130.0';
+  const VERSION = '4.131.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.131.0', d: '2026-08-19', items: [
+      '🎛️ mini-bar: เพิ่ม pill 🤖 Auto (toggle auto-login — เขียว=เปิด/แดง=ปิด)',
+      '   (มีผลตอน refresh ครั้งถัดไป — ระบบ login ทำงานตอนหน้าเว็บโหลด)',
+      '🎨 เรียงปุ่มใหม่ท้ายแถบ: 📋 Log → 💬 แชท → 🐞 แจ้งปัญหา → 📜 Update Log (ท้ายสุด)',
+    ]},
     { v: '4.130.0', d: '2026-08-19', items: [
       '🔮🔮 รายการสกิลครบ 110 ตัว! จาก Skills.toml ของ RagnarokRebuildTcp (โค้ด server จริง)',
       '   ID = ลำดับในไฟล์ (None=0) — ยืนยัน 100%: preset เดิม 13 ตัวที่ capture จริงตรงทั้งหมด',
@@ -5778,13 +5783,14 @@
         <span class="pill off" data-sell>💰</span>
         <span class="pill off" data-storage>🏦</span>
         <span class="pill off" data-flee>🏃</span>
+        <span class="pill off" data-auto>🤖</span>
         <span class="pill" data-teleport style="background:#4a2c6a;color:#d1b3ff">🌀</span>
         <span class="pill" data-monitor style="background:#1a237e;color:#90caf9">🖥️</span>
         <span class="pill" data-remote style="background:#1a3a1a;color:#81c784;display:none">🌐</span>
+        <span class="pill" data-logview style="background:#1a2a3a;color:#82b1ff" title="ดู Log">📋</span>
         <span class="pill" data-chatroom style="background:#1a3a4a;color:#4fc3f7;position:relative" title="ห้องแชท">💬<span id="__assist_chatbadge" style="position:absolute;top:-4px;right:-4px;background:#e74c3c;color:#fff;font-size:8px;border-radius:50%;width:14px;height:14px;display:none;align-items:center;justify-content:center;font-weight:bold"></span></span>
         <span class="pill" data-feedback style="background:#4a2a2a;color:#ff8a80" title="แจ้งปัญหา/ข้อเสนอแนะ">🐞</span>
         <span class="pill" data-changelog style="background:#3a2a1a;color:#ffd54f" title="Update Log">📜</span>
-        <span class="pill" data-logview style="background:#1a2a3a;color:#82b1ff" title="ดู Log">📋</span>
         <span class="expand">⚙</span>
       </div>
       <div id="__assist_popup">
@@ -6279,6 +6285,10 @@
         if (pill.hasAttribute('data-sell')) CFG.sellEnabled ? ASSIST.sellOff() : ASSIST.sellOn();
         if (pill.hasAttribute('data-storage')) CFG.storageEnabled ? ASSIST.storageOff() : ASSIST.storageOn();
         if (pill.hasAttribute('data-flee')) { CFG.fleeFromPlayers = !CFG.fleeFromPlayers; saveConfigDebounced(); log('🏃 หนีผู้เล่น:', CFG.fleeFromPlayers ? 'เปิด' : 'ปิด'); }
+        if (pill.hasAttribute('data-auto')) {
+          CFG.autoLoginEnabled ? ASSIST.autoLoginOff() : ASSIST.autoLoginOn();
+          log('🤖 (มีผลตอน refresh หน้าครั้งถัดไป)');
+        }
         if (pill.hasAttribute('data-teleport')) {
           if (sendRandomWarp()) log('🌀 วาร์ปสุ่ม (กดจาก mini-bar)');
         }
@@ -7704,6 +7714,7 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
       else if (p.hasAttribute('data-sell')) { on = CFG.sellEnabled; label = '💰 Sell'; }
       else if (p.hasAttribute('data-storage')) { on = CFG.storageEnabled; label = '🏦 Kafra'; }
       else if (p.hasAttribute('data-flee')) { on = CFG.fleeFromPlayers; label = '🏃 Flee'; }
+      else if (p.hasAttribute('data-auto')) { on = CFG.autoLoginEnabled; label = '🤖 Auto'; }
       else return;
       p.className = 'pill ' + (on ? 'on' : 'off');
       p.textContent = label;
