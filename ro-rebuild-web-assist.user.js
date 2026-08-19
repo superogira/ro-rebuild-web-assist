@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.146.0
+// @version      4.147.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,16 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.146.0';
+  const VERSION = '4.147.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.147.0', d: '2026-08-19', items: [
+      '🔀 กู้คู่การวาร์ปสุ่มรับๆตอนฝากของคาฟรา (รายงานผู้ใช้)',
+      '   เหตุ: stuck abandon → วาร์ปสุ่ม และ ไม่เจอมอน 3s → วาร์ปสุ่ม',
+      '   ไม่เช็คว่ากำลังขาย/ฝากของอยู่หรือไม่',
+      '   การ์ที่เพิ่งพายังไม่ทัน → ฝากไม่ทัน วาร์ปหนีไม่จบ',
+      '   แก้: ทั้ง 2 จุดเพิ่ม guard sellState/storageState === IDLE',
+    ]},
     { v: '4.146.0', d: '2026-08-19', items: [
       '⚖️ น้ำหนักอัปเดต real-time (delta-based) — ยืนยันจาก capture 2 ไฟล์',
       '   ไม่มี packet น้ำหนักตอนเก็บของ → คำนวณจาก Weight ใน item DB',
@@ -4166,8 +4173,9 @@
           abandonTarget('pending ' + target.pendingAttacks + ' (server เงียบ)', true, 10000); target = null;
         }
       }
-      // stuck warp escalation
-      if (!target && CFG.stuckWarpOnAbandon > 0 && stuckAbandonCount >= CFG.stuckWarpOnAbandon) {
+      // stuck warp escalation — ★★ ห้ามตอนที่กำลังขาย/ฝากของ (การ์อยู่เมือง Kafra ไม่มีมอน!)
+      const _stuckInRoutine = sellState !== 'IDLE' || storageState !== 'IDLE';
+      if (!target && !_stuckInRoutine && CFG.stuckWarpOnAbandon > 0 && stuckAbandonCount >= CFG.stuckWarpOnAbandon) {
         log('🌀 stuck abandon', stuckAbandonCount, 'ครั้ง → วาร์ปสุ่ม');
         sendRandomWarp(); stuckAbandonCount = 0; stuckAbandonHistory = [];
       }
@@ -4345,7 +4353,8 @@
       const effectiveWarpSec = Math.max(CFG.noMonsterWarpSec, 3);
       // warp-find — มี cooldown กัน spam (วาร์ป fail ก็ต้องรอ ไม่ยิงทุก tick)
       // ★★ ห้ามวาร์ปถ้า player.x == null (ตำแหน่งค้าง/ไม่รู้ตำแหน่ง → วาร์ปไปก็ไม่รู้ว่าได้ผลไหม)
-      if (CFG.warpFindEnabled && noMonSec >= effectiveWarpSec && now - lastWarpFindAt > 3000 && player.x != null) {
+      if (CFG.warpFindEnabled && noMonSec >= effectiveWarpSec && now - lastWarpFindAt > 3000 && player.x != null
+          && sellState === 'IDLE' && storageState === 'IDLE') {   // ★★ ห้ามวาร์ปตอนกำลังขาย/ฝากของ
         lastWarpFindAt = now;
         if (currentMap) {
           // ★★★ ก่อนวาร์ปหนี — เช็คว่า "ไม่เจอมอน" เพราะโดนบล็อกชั่วคราวหรือเปล่า
