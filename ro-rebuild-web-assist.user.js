@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.144.1
+// @version      4.145.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,15 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.144.1';
+  const VERSION = '4.145.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.145.0', d: '2026-08-19', items: [
+      '📍 popup inventory ชิดขวาจอ (เหมือน log modal)',
+      '⚔️ Equip แยกเป็นชิ้นตามลำดับ slot ที่ server ส่ง — เหมือนหน้าต่างในเกม ไม่รวม stack',
+      '🖱️ คลิกช่อง item = วน toggle เก็บ(เทา)→ขาย(ส้ม)→ฝาก(เขียว)',
+      '   สีพื้นหลังเปลี่ยนทันที · ใช้ config เดียวกับ filter ขาย/ฝากในหน้าสถิติ',
+    ]},
     { v: '4.144.1', d: '2026-08-19', items: [
       '🔴 แก้ Equip tab แสดงของปนจาก tab อื่น — filter เดิมผ่านหมด (true)',
       '   ใหม่: รวม equipmentInv เข้า inventory (สแตกจำนวนซ้ำ) แล้วกรองตามหมวดจริงทุก tab',
@@ -2021,7 +2027,7 @@
           //   [inst:4 = 0x13880+i][itemId×4:4][a:2][b:2][UUID:16][slot:4][?:4][pad:4]
           //   ยืนยันจาก capture จริง 10/10 ตรงทุก id (Knife 1201 → Gladius 1220)
           // ★ หาก้อน equipment แบบอิสระ — สแกนหา 0x13880 (กันเคส inventory ว่างแต่มี equipment)
-          equipmentInv.clear();
+          equipmentList.length = 0;
           let eqStart = -1;
           for (let q = i + 14; q < u.length - 44; q++) {
             if (u32(u, q) === 0x13880) { eqStart = q; break; }
@@ -2035,11 +2041,11 @@
               if (idE2 === 0 || idE2 % 4 !== 0) break;
               const eqId = idE2 >>> 2;
               if (eqId <= 0 || eqId > 12000) break;
-              equipmentInv.set(eqId, (equipmentInv.get(eqId) || 0) + 1);
+              equipmentList.push(eqId);
               ep += 44;
             }
           }
-          if (equipmentInv.size > 0) dbg('⚔️ equipment: ' + equipmentInv.size + ' ชิ้น — ' + [...equipmentInv.entries()].slice(0, 6).map(([id, c]) => nameOf(id)).join(', '));
+          if (equipmentList.length > 0) dbg('⚔️ equipment: ' + equipmentList.length + ' ชิ้น — ' + equipmentList.slice(0, 6).map(id => nameOf(id)).join(', '));
           dbg('🎒 inventory เริ่มต้น: ' + items.length + ' รายการ (' + items.reduce((s2, x) => s2 + x[1], 0) + ' ชิ้น) — ' + items.slice(0, 8).map(([id, c]) => nameOf(id) + '×' + c).join(', ') + (items.length > 8 ? ' ฯลฯ' : ''));
         }
         break;   // เจอ anchor น้ำหนักแล้ว — ไม่ต้องไล่ต่อ
@@ -3172,7 +3178,8 @@
 
   // ---------- AUTO-SELL + AUTO-STORAGE state + inventory ----------
   const inventory = new Map();
-  const equipmentInv = new Map();     // ★★ อาวุธ/ชุดเกราะ (ก้อน 0x13880 ใน 0x38 — stride 44)    // itemId -> count (authoritative from 0x32, mirror world.js:34)
+  // ★★ equipmentList — อาวุธ/ชุดแยกเป็นชิ้นตามลำดับใน packet (ก้อน 0x13880 = ลำดับ slot เกม)
+  const equipmentList = [];    // itemId -> count (authoritative from 0x32, mirror world.js:34)
   const equipmentSlots = new Map(); // ★ itemId -> [slotId, slotId, ...] (mirror world.js:773-777)
   let inventoryFull = false;      // true เมื่อ server ส่ง "too full" (0x20)
   let sellState = 'IDLE';         // IDLE|WARP_TO_NPC|MOVE_TO_NPC|TALK|SELECT_SELL|SELL|WARP_BACK
@@ -7614,7 +7621,7 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
     if (old) { old.remove(); return; }
     const overlay = document.createElement('div');
     overlay.id = '__assist_inv_modal';
-    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:999999;display:flex;align-items:center;justify-content:center';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:999999;display:flex;align-items:center;justify-content:flex-end;padding-right:10px';
     overlay.innerHTML = `
       <div style="background:#1a1a2e;color:#e8e8e8;border-radius:12px;padding:14px;width:660px;max-width:92vw;max-height:82vh;display:flex;flex-direction:column;font-family:sans-serif;box-shadow:0 8px 32px rgba(0,0,0,.5)">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
@@ -7631,7 +7638,7 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
           </div>
           <div id="__assist_inv_grid" style="flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(10,1fr);gap:4px;align-content:start;padding-right:4px"></div>
         </div>
-        <div id="__assist_inv_hint" style="font-size:9px;color:#666;margin-top:6px">★ เรียงตาม id (Equip เรียงตาม slot เกม) · hover ดูรายละเอียด</div>
+        <div id="__assist_inv_hint" style="font-size:9px;color:#666;margin-top:6px">★ Equip เรียงตามลำดับ slot เกม · คลิกช่อง: เก็บ→ขาย→ฝาก · hover ดูรายละเอียด</div>
       </div>`;
     document.body.appendChild(overlay);
     const grid = overlay.querySelector('#__assist_inv_grid');
@@ -7639,22 +7646,17 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
 
     function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
     function render(tab) {
-      // ★ รวม equipmentInv เข้า inventory ก่อน (อาวุธ/ชุดจากก้อน 0x13880)
-      //   แล้วค่อยกรองตามหมวดจริง — เดิม equip ผ่านหมด (บั๊ก: ของ tab อื่นปนเข้ามา)
-      const merged = [...inventory.entries()];
-      for (const [eqId, eqC] of equipmentInv.entries()) {
-        const k = String(eqId);
-        const inInv = merged.find(([mid]) => String(mid) === k);
-        if (inInv) inInv[1] += eqC; else merged.push([eqId, eqC]);
+      // ★ Equip: แยกชิ้นตามลำดับ packet (= ลำดับ slot เกม) · อื่น ๆ จาก inventory ตามหมวด
+      let items;
+      if (tab === 'equip') {
+        items = equipmentList.map(id => ({ id, c: 1 }));
+      } else {
+        items = [...inventory.entries()]
+          .filter(([id, c]) => c > 0 && itemDB.cats[String(id)] === tab)
+          .map(([id, c]) => ({ id, c }));
       }
-      const items = merged
-        .filter(([id, c]) => c > 0 && itemDB.cats[String(id)] === tab)
-        .map(([id, c]) => ({ id, c }));
-      if (tab === 'equip') items.sort((a, b) => {
-        const ra = equipSlotRank(itemDB.slots[String(a.id)] || ''), rb = equipSlotRank(itemDB.slots[String(b.id)] || '');
-        return ra !== rb ? ra - rb : a.id - b.id;
-      });
-      else items.sort((a, b) => a.id - b.id);
+      // ★ Equip คงลำดับจาก packet (= ลำดับ slot เกม) · อื่น ๆ เรียง id
+      if (tab !== 'equip') items.sort((a, b) => a.id - b.id);
       const total = items.reduce((s, x) => s + x.c, 0);
       cntEl.textContent = items.length + ' ชนิด · ' + total.toLocaleString() + ' ชิ้น' + (playerWeight != null ? ' · ' + Math.round(playerWeight) + '/' + playerMaxWeight : '');
       grid.innerHTML = items.map(x => {
@@ -7663,7 +7665,10 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
         const slot = itemDB.slots[k];
         const desc = itemDB.descs[k] || '';
         const nameBar = name + (slot ? ' [' + slot + ']' : '') + (x.id >= 4001 && x.id <= 4520 ? ' [Card]' : '');
-        return `<div class="invslot" data-name="${esc(nameBar)}" data-desc="${esc(desc || '(ไม่มีคำอธิบาย)')}" style="position:relative;aspect-ratio:1;background:#23262e;border:1px solid #3a3f4b;border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:default;overflow:visible">
+                const action = getItemAction(x.id);
+        const actionBg = action === 'sell' ? 'rgba(230,126,34,.35)' : (action === 'deposit' ? 'rgba(39,174,96,.35)' : '#23262e');
+        const actionBorder = action === 'sell' ? '#e67e22' : (action === 'deposit' ? '#27ae60' : '#3a3f4b');
+return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" data-desc="${esc(desc || '(ไม่มีคำอธิบาย)')}" style="position:relative;aspect-ratio:1;background:${actionBg};border:1px solid ${actionBorder};border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:visible" title="คลิก: เก็บ→ขาย→ฝาก">
           <img src="${itemIconUrl(x.id)}" style="max-width:80%;max-height:80%;image-rendering:pixelated" onerror="this.style.display='none'">
           <span style="position:absolute;bottom:0;right:2px;font-size:9px;color:#fff;text-shadow:0 0 2px #000,0 0 2px #000;font-weight:bold">${x.c > 999 ? Math.floor(x.c / 1000) + 'k' : x.c}</span>
         </div>`;
@@ -7688,6 +7693,20 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
       tipEl.style.top = (r.bottom + 6 > innerHeight - 160 ? r.top - 6 - tipEl.offsetHeight : r.bottom + 6) + 'px';
     });
     grid.addEventListener('mouseleave', () => { if (tipEl) tipEl.style.display = 'none'; });
+
+    // ★★ คลิกช่อง = วน toggle เก็บ(เทา)→ขาย(ส้ม)→ฝาก(เขียว) — สีพื้นหลังทันที (เหมือนสถิติ)
+    grid.addEventListener('click', (e) => {
+      const slot = e.target.closest('.invslot');
+      if (!slot) return;
+      e.stopPropagation();
+      const id = parseInt(slot.dataset.itemid, 10);
+      if (!id) return;
+      const newAction = cycleItemAction(id);
+      const bg = newAction === 'sell' ? 'rgba(230,126,34,.35)' : (newAction === 'deposit' ? 'rgba(39,174,96,.35)' : '#23262e');
+      const bd = newAction === 'sell' ? '#e67e22' : (newAction === 'deposit' ? '#27ae60' : '#3a3f4b');
+      slot.style.background = bg; slot.style.borderColor = bd;
+      if (tipEl) tipEl.style.display = 'none';
+    });
 
     overlay.querySelectorAll('.invtab').forEach(btn => {
       btn.onclick = (e) => {
