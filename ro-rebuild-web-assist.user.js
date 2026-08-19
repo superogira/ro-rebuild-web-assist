@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.145.1
+// @version      4.146.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,21 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.145.1';
+  const VERSION = '4.146.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.146.0', d: '2026-08-19', items: [
+      '⚖️ น้ำหนักอัปเดต real-time (delta-based) — ยืนยันจาก capture 2 ไฟล์',
+      '   ไม่มี packet น้ำหนักตอนเก็บของ → คำนวณจาก Weight ใน item DB',
+      '   CSV เป็นหน่วย ×10: Bird Feather 10=1, Apple 20=2, Orange Potion 100=10',
+      '   วิธี: delta = (count ใหม่-เก่า) × Weight → บวก/ลบ (anchor จาก server ตอน 0x38)',
+    ]},
+    { v: '4.146.0', d: '2026-08-19', items: [
+      '⚖️ น้ำหนักอัปเดต real-time — คำนวณจาก Weight ใน item DB',
+      '   (ยืนยันจาก capture 2 ไฟล์: เก็บ Bird Feather 0→1 · Apple 1→3',
+      '    ไม่มี packet น้ำหนักแยก — ต้องคำนวณเองจาก Weight×count)',
+      '   เรียกทุกครั้งที่ inventory เปลี่ยน (0x32) + ตอน init (0x38)',
+    ]},
     { v: '4.145.1', d: '2026-08-19', items: [
       '🏷️ label สถานะมุมซ้ายบนการ์ด item (พื้นดำ ตัวขาว): ขาย / ฝาก',
       '   แสดงเฉพาะตอนตั้งค่าขายหรือฝาก · อัปเดตทันทีเมื่อคลิกวน toggle',
@@ -672,11 +684,11 @@
   // ============================================================
   const DB_BASE = GITHUB_RAW.replace('/ro-rebuild-web-assist.user.js', '/db/Item/');
   const ITEMS_ICON_URL = GITHUB_RAW.replace('/ro-rebuild-web-assist.user.js', '/items/small/');
-  const ITEMDB_CACHE_KEY = 'roAssistItemDB_v2';   // ★ v2 = จาก db/Item ของ RagnarokRebuildTcp
+  const ITEMDB_CACHE_KEY = 'roAssistItemDB_v3';   // v3 = +weights   // ★ v2 = จาก db/Item ของ RagnarokRebuildTcp
   // ★★ itemDB v2 — 6 CSV ของ RagnarokRebuildTcp (2584 รายการ แทน items.csv เดิม 1016)
   //   cats: usable / equip (มี slot จาก Position) / etc (Ammo+Cards+Regular)
   //   + desc จาก ItemDescriptions/*.txt (format ::Code //Id + Unity <color> tags)
-  const itemDB = { names: {}, prices: {}, cats: {}, slots: {}, descs: {}, loaded: false };
+  const itemDB = { names: {}, prices: {}, cats: {}, slots: {}, descs: {}, weights: {}, loaded: false };
   const EQUIP_SLOT_ORDER = ['MainHand','Shield','Headgear','Armor','Garment','Boots','Accessory',
     '2HSword','2HAxe','2HSpear','2HRod','Sword','Axe','Spear','Rod','Dagger','Bow','Mace','Knuckle',
     'Katar','Book','Instrument','Whip','Handgun','Rifle','Shotgun','GatlingGun','Grenade','Shuriken'];
@@ -713,9 +725,9 @@
       const cached = localStorage.getItem(ITEMDB_CACHE_KEY);
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (parsed.v === 2 && parsed.names) {
+        if (parsed.v === 3 && parsed.names) {
           itemDB.names = parsed.names; itemDB.prices = parsed.prices || {};
-          itemDB.cats = parsed.cats || {}; itemDB.slots = parsed.slots || {}; itemDB.descs = parsed.descs || {};
+          itemDB.cats = parsed.cats || {}; itemDB.slots = parsed.slots || {}; itemDB.descs = parsed.descs || {}; itemDB.weights = parsed.weights || {}; itemDB.weights = parsed.weights || {};
           itemDB.loaded = true;
           log('🗃️ โหลด item DB v2 จาก cache (' + Object.keys(parsed.names).length + ' รายการ)');
           return;
@@ -745,12 +757,14 @@
         const { head, rows } = parseCsv(text);
         const idIdx = head.indexOf('Id'), nameIdx = head.indexOf('Name'), priceIdx = head.indexOf('Price');
         const slotIdx = slotCol ? head.indexOf(slotCol) : -1;
+        const weightIdx = head.indexOf('Weight');
         for (const r of rows) {
           const id = (r[idIdx] || '').trim();
           if (!id) continue;
           itemDB.names[id] = (r[nameIdx] || '').trim();
           itemDB.cats[id] = cat;
           if (priceIdx >= 0 && r[priceIdx]) itemDB.prices[id] = parseInt(r[priceIdx], 10) || 0;
+          if (weightIdx >= 0 && r[weightIdx]) itemDB.weights[id] = (parseFloat(r[weightIdx]) || 0) / 10;   // ★ CSV = หน่วย ×10 (Bird Feather 10=1, Apple 20=2, Orange Potion 100=10)
           if (slotIdx >= 0 && r[slotIdx]) itemDB.slots[id] = r[slotIdx].trim();
           n++;
         }
@@ -761,7 +775,7 @@
         Object.assign(itemDB.descs, parseDescs(text));
       }
       itemDB.loaded = true;
-      try { localStorage.setItem(ITEMDB_CACHE_KEY, JSON.stringify({ v: 2, names: itemDB.names, prices: itemDB.prices, cats: itemDB.cats, slots: itemDB.slots, descs: itemDB.descs })); } catch (e) {}
+      try { localStorage.setItem(ITEMDB_CACHE_KEY, JSON.stringify({ v: 3, names: itemDB.names, prices: itemDB.prices, cats: itemDB.cats, slots: itemDB.slots, descs: itemDB.descs, weights: itemDB.weights })); } catch (e) {}
       log('🗃️ โหลด item DB v2 สำเร็จ: ' + n + ' รายการ + ' + Object.keys(itemDB.descs).length + ' descriptions');
     } catch (e) {
       log('⚠️ โหลด item DB v2 ล้มเหลว (' + e.message + ') — ใช้ชื่อเริ่มต้น');
@@ -777,6 +791,16 @@
   }
   // ราคา item (buyPrice) — 0 ถ้าไม่มีข้อมูล
   function itemPrice(id) { return itemDB.prices[String(id)] || 0; }
+  // ★★ น้ำหนัก real-time (delta-based) — ยืนยันจาก capture: ไม่มี packet น้ำหนักตอนเก็บของ
+  //   server ส่งน้ำหนักจริงแค่ตอน 0x38 (เข้าเกม) — ตอนเก็บ/ขาย/ใช้ คำนวณจาก Weight ใน DB
+  //   วิธี: delta = (count ใหม่ - เก่า) × Weight → บวก/ลบ playerWeight (anchor จาก server)
+  function applyWeightDelta(itemId, oldCount, newCount) {
+    const iw = itemDB.weights[String(itemId)];
+    if (iw == null || playerWeight == null) return;
+    playerWeight = Math.round((playerWeight + (newCount - oldCount) * iw) * 10) / 10;
+    if (playerWeight < 0) playerWeight = 0;
+  }
+
   // URL รูป item (lazy-load จาก GitHub raw)
   function itemIconUrl(id) {
     // ★ Card ใช้ card.gif แทนรูปตามไอดี (การ์ดทุดใบเหมือนกัน)
@@ -1864,6 +1888,7 @@
         const countEnc = u16(u, 16);
         const count = countEnc >>> 1;
         if (itemId > 0 && itemId < 50000) {
+          applyWeightDelta(itemId, inventory.get(itemId) || 0, count);
           inventory.set(itemId, count);   // SET ตรงจาก server (แม่นยำเสมอ)
         }
       } else if (sub === 5 && u.length >= 15) {
