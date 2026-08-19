@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.131.0
+// @version      4.132.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,17 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.131.0';
+  const VERSION = '4.132.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.132.0', d: '2026-08-19', items: [
+      '🔴🔴 โดนมอนรุมแต่ไม่ตีกลับ — จนวาร์ปหนีรุม 5 (จาก log จริง: Condor ช่วยกัน)',
+      '   เหตุ: มอน linked-aggro ที่อยู่นอกจอเดินเข้ามาทาง 0x07 ก่อน SPAWN',
+      '   → ถูกสร้างเป็น kind=0 ghost (บั๊กเดียวกับเคสหนีผี) → targeting มองไม่เห็น',
+      '   + defensive retarget ข้าม (kind≠1) → เลือกเป้ามอนไกล 17-24 ช่องแทนทั้งที่โดนตี',
+      '   แก้: ผู้โจมตีเราผ่าน 0x0b = มอนแน่นอน (ยกเว้นผู้เล่นบน radar)',
+      '   → แก้ kind เป็น 1 ทันทีที่โดนตี + สร้าง entity ถ้ายังไม่มี → ตีกลับได้ทันที',
+    ]},
     { v: '4.131.0', d: '2026-08-19', items: [
       '🎛️ mini-bar: เพิ่ม pill 🤖 Auto (toggle auto-login — เขียว=เปิด/แดง=ปิด)',
       '   (มีผลตอน refresh ครั้งถัดไป — ระบบ login ทำงานตอนหน้าเว็บโหลด)',
@@ -2273,6 +2281,21 @@
       else if (victimId === playerId || (victimId === 0 && attacker !== playerId)) {
         mobAttackers.set(attacker, now);
         markCombat();
+        // ★★★ ผู้โจมตีเรา = มอนแน่นอน (ยกเว้นผู้เล่นบน radar) — แก้ ghost ทันที!
+        //   มอน linked-aggro (เช่น Condor ช่วยกัน) เดินเข้ามาทาง 0x07 ก่อน SPAWN
+        //   → ถูกสร้างเป็น kind=0 _src='move' → targeting มองไม่เห็น + defensive retarget ข้าม
+        //   → โดนรุมทั้งที่ไม่ตีกลับ (จาก log จริง: โดนตี 1→2→3→5 แล้ววาร์ปหนี)
+        if (!isBeaconPlayer(attacker, now)) {
+          const am = entities.get(attacker);
+          if (am && am.kind !== 1) {
+            am.kind = 1; am._src = 'attack';
+            dbg('🛠️ แก้ entity ผู้โจมตีเป็นมอน:', am.name || attacker.toString(16), '(เข้ามาทาง 0x07 ก่อน SPAWN)');
+          } else if (!am && player.x != null) {
+            // ยังไม่มี entity เลย — สร้างเป็นมอนไว้ก่อน (ตำแหน่งใกล้เรา — โจมตีเราอยู่แล้ว)
+            entities.set(attacker, { id: attacker, kind: 1, x: player.x, y: player.y, alive: true, _lastSeenAt: nowMs(), name: '', _src: 'attack' });
+            dbg('🛠️ สร้าง entity ผู้โจมตี (ยังไม่เคยเห็น):', attacker.toString(16));
+          }
+        }
         // ★★ real-time HP tracking — ลด HP ทันทีจาก damage (แก้ heal ช้า!)
         //   เดิม: รอ server ส่ง STAT (1-2 วิ) → HP ค้างที่ค่าเก่า → heal ช้า
         if (damage > 0 && hp.cur != null && hp.max > 0) {
