@@ -1,0 +1,1866 @@
+//Weapons
+
+::Sword //id 1101 - Sword
+<desc>A basic sword.</desc>
+
+::Sword_ //id 1102 - Sword
+<desc>A basic sword.</desc>
+
+::Falchion //id 1104 - Sword
+<desc>A sword with a rounded blade.</desc>
+
+::Falchion_ //id 1105 - Sword
+<desc>A sword with a rounded blade.</desc>
+
+::Blade //id 1107 - Sword
+<desc>A sword with a thick, flat blade.</desc>
+
+::Blade_ //id 1108 - Sword
+<desc>A sword with a thick, flat blade.</desc>
+
+::Rapier //id 1110 - Sword
+<desc>A sword with an elegant blade and cross guard.</desc>
+
+::Rapier_ //id 1111 - Sword
+<desc>A sword with an elegant blade and cross guard.</desc>
+
+::Scimiter //id 1113 - Sword
+<desc>A strong, swift sword with a curved blade.</desc>
+
+::Scimiter_ //id 1114 - Sword
+<desc>A strong, swift sword with a curved blade.</desc>
+
+::Katana //id 1116 - 2HSword
+<desc>A straight bladed sword inspired by eastern warriors.</desc>
+
+::Katana_ //id 1117 - 2HSword
+<desc>A straight bladed sword inspired by eastern warriors.</desc>
+
+::Tsurugi //id 1119 - Sword
+<desc>One of the most powerful common one-handed swords.</desc>
+
+::Tsurugi_ //id 1120 - Sword
+<desc>One of the most powerful common one-handed swords.</desc>
+
+::Ring_Pommel_Saber //id 1122 - Sword
+<desc>A sword with an elaborately designed hilt.</desc>
+
+::Haedonggum //id 1123 - Sword
+<desc>A ancient sword said to have the mysterious power to control minds.</desc>
+INT +3
+
+::Orcish_Sword //id 1124 - Sword
+<color=#808080>A sword crafted by orcish smiths that is symbolic to orc tribes.</color>
+
+::Ring_Pommel_Saber_ //id 1125 - Sword
+<desc>A sword with an elaborately designed hilt.</desc>
+
+::Saber //id 1126 - Sword
+<desc>A heavy cavalry sword with a slightly curved blade.</desc>
+
+::Saber_ //id 1127 - Sword
+<desc>A heavy cavalry sword with a slightly curved blade.</desc>
+
+::Haedonggum_ //id 1128 - Sword
+<desc>A ancient sword said to have the mysterious power to control minds.</desc>
+INT +3
+
+::Flamberge //id 1129 - Sword
+<desc>A powerful sword with a decoratively wavy, flame-like blade.</desc>
+
+::Nagan //id 1130 - Sword
+<desc>A sword topped with several extra edges for making wounds deeper and more unsightly.</desc>
++5% physical damage vs. Demi-Human
++25% double attack chance
+
+::Ice_Falchion //id 1131 - Sword
+<desc>A formal decorative sword imbued with water.</desc>
+MATK +80
+Enables use of <skill>Cold Bolt 3</skill>.
++10% chance to autocast <skill>Cold Bolt 3</skill> on melee attack.
++5% chance of <status>Freeze</status> on physical attack.
+
+::Edge //id 1132 - Sword
+<desc>A sword with an extremely sharp blade.</desc>
++0.3% chance of <color=#800000>Curse</color> on physical attack
++0.1% chance of dealing lethal damage to on attack
+
+::Fire_Brand //id 1133 - Sword
+<desc>A formal decorative sword imbued with fire.</desc>
+MATK +80
+Enables use of <skill>Fire Bolt 3</skill>.
++10% chance to autocast <skill>Fire Bolt 3</skill> on physical attack.
+
+::Caesar's_Sword //id 1134 - Sword
+<desc>A sword that looks like a pair of giant scissors.</desc>
+100% defense bypass vs <race>Plants</race>.
++25% physical damage vs. <race>Plants</race>.
+
+::Cutlus //id 1135 - Sword
+<color=#808080>A sword popularized by sea adventurers.</color>
+STR +2, DEF +1
+Enables use of <skill>Bash 5</skill>.
+
+::Solar_Sword //id 1136 - Sword
+<desc>A sword adorned with an engraving of the sun, symbolizing battle spirit and vigor.</desc>
+1% of physical damage dealt is recovered as HP.
+SP Regeneration -20%
+
+::Excalibur //id 1137 - Sword
+<desc>The sword of legend that supposedly selects its owner by its own will.</desc>
+LUK +10, INT +5, DEX -1
+
+::Mistilteinn //id 1138 - Sword
+<desc>A sword inspired by the legendary twig that killed Baldur, god of light.</desc>
+DEX +3
++30% damage against Demi-human, beast, insect, dragon, aquatic, and plant.
++10% Autospell <color=#0000FF>Stone Curse 3</color> on non-skill attack
+
+::Tyrfing //id 1139 - Sword
+<desc>A sword rumored to bring a horrific fate to whoever wields it.</desc>
+
+::Byeol-ungeom //id 1140 - Sword
+<desc>A giant sword used by ancient war generals.</desc>
++2 STR, VIT, INT, DEX, AGI, LUK
++50% physical damage vs. Boss
++10% damage from non-Boss
+
+::Immaterial_Sword //id 1141 - Sword
+<desc>A formless sword that can ravage the enemy's mind.</desc>
+0.3% of physical damage dealt is recovered as SP.
+
+
+::Jeweled_Sword //id 1142 - Sword
+<desc>A sword with a beautiful, transparent blade and a hilt adorned with a princely jewel.</desc>
+
+::Gaia_Sword //id 1143 - Sword
+<desc>An enchanted sword that draws ore from fallen monsters.</desc>
+
+::Sashimi //id 1144 - Sword
+<desc>An extremely sharp, thin bladed sword easily slices fish.</desc>
+
+::Holy_Avenger //id 1145 - Sword
+神聖な力で敵を攻撃する剣。
+
+
+::Town_Sword //id 1146 - Sword
+<desc>A common, humbly made sword that is intended for the use by those without sword expertise.</desc>
+
+::Town_Sword_ //id 1147 - Sword
+<desc>A common, humbly made sword that is intended for the use by those without sword expertise.</desc>
+
+::Star_Dust_Blade //id 1148 - Sword
+<desc>A spectacular sword with a blade forged out of meteorite that shines like starlight during the night.</desc>
++5% chance of <color=#800000>Stun</color> on melee attack
+
+::Flamberge_ //id 1149 - Sword
+<desc>A powerful sword with a decoratively wavy, flame-like blade.</desc>
+
+::Slayer //id 1151 - 2HSword
+<desc>A fearsome sword that has slain many warriors in battle.</desc>
+
+::Slayer_ //id 1152 - 2HSword
+<desc>A fearsome sword that has slain many warriors in battle.</desc>
+
+::Bastard_Sword //id 1154 - 2HSword
+<desc>A straight bladed sword that can be brutally swung like a baseball bat.</desc>
+
+::Bastard_Sword_ //id 1155 - 2HSword
+<desc>A straight bladed sword that can be brutally swung like a baseball bat.</desc>
+
+::Two-Handed_Sword //id 1157 - 2HSword
+<desc>A mighty, yet awfully basic, sword.</desc>
+
+::Two-Handed_Sword_ //id 1158 - 2HSword
+<desc>A mighty, yet awfully basic, sword.</desc>
+
+::Broad_Sword //id 1160 - 2HSword
+<desc>A sword with a wide, double sided blade.</desc>
+DEF +5
+
+::Balmung //id 1161 - 2HSword
+<desc>Sword wielded by mighty GOD-POING, the lawless heroine.</desc>
+INT, LUK +20
+
+::Broad_Sword_ //id 1162 - 2HSword
+<desc>A sword with a wide, double sided blade.</desc>
+DEF +5
+
+::Claymore //id 1163 - 2HSword
+<desc>A large, double-edged broad sword that was used by the highlanders.</desc>
+
+::Muramasa //id 1164 - 2HSword
+<desc>An oriental sword named after the legendary swordsmith, Muramasa.</desc>
+CRIT +30, ASPD +8%
+
+::Masamune //id 1165 - 2HSword
+<desc>An oriental sword named after the legendary swordsmith, Masamune.</desc>
+STR -5, DEF -66%
+ASPD +12%, FLEE +30
+
+::Dragon_Slayer //id 1166 - 2HSword
+<desc>A giant sword, made from a dragon's tooth, that can easily cut through dragon scales.</desc>
++15% physical damage vs. Dragon
+
+::Schweizersabel //id 1167 - 2HSword
+<desc>A formal decorative sword imbued with wind.</desc>
+MATK +120, DEF +1
++10% Autospell <color=#0000FF>Lightning Bolt 3</color> on non-skill attack
+
+::Zweihander //id 1168 - 2HSword
+<desc>An enormous sword designed for two hands.</desc>
+
+::Executioner //id 1169 - 2HSword
+<desc>A gruesome sword used to behead criminals judged with the death penalty.</desc>
++100% DEF ignore vs. Demi-Human
++20% physical damage vs. Demi-Human
++10% damage from Demi-Human
+
+::Katzbalger //id 1170 - 2HSword
+<desc>A sword with a unique "S" shaped hilt.</desc>
+DEF +10, VIT +5
+
+::Zweihander_ //id 1171 - 2HSword
+<desc>An enormous sword designed for two hands.</desc>
+
+::Claymore_ //id 1172 - 2HSword
+<desc>A large, double-edged broad sword that was used by the highlanders.</desc>
+
+::Atlas_Weapon //id 1175 - 2HSword
+<desc>A massive sword wielded by Atroce that is too large to be handled by ordinary warriors.</desc>
+CRIT +10
+
+::Muscle_Cutter //id 1176 - 2HSword
+<desc>A weapon that is designed to easily slice muscles.</desc>
++3% Autospell <color=#0000FF>Decrease AGI 1</color> on non-skill attack
++8% chance of <color=#800000>Bleed</color> on melee attack
+
+::Schweizersabel_ //id 1178 - 2HSword
+<desc>A formal decorative sword imbued with wind.</desc>
+MATK +120, DEF +1
++10% Autospell <color=#0000FF>Lightning Bolt 3</color> on non-skill attack
+
+::Executioner_ //id 1179 - 2HSword
+<desc>A gruesome sword used to behead criminals judged with the death penalty.</desc>
++100% DEF ignore vs. Demi-Human
++20% physical damage vs. Demi-Human
++10% damage from Demi-Human
+
+::Dragon_Slayer_ //id 1180 - 2HSword
+<desc>A giant sword, made from a dragon's tooth, that can easily cut through dragon scales.</desc>
++100% DEF ignore vs. Dragon
++15% physical damage vs. Dragon
+
+::Tae_Goo_Lyeon //id 1181 - 2HSword
+<desc>A sword passed down from master to master.</desc>
+Perfect Dodge +10
+
+::Bloody_Eater //id 1182 - 2HSword
+<desc>A magical sword that emits a dismal black aura.</desc>
+Recover 100 HP/melee kill
+
+::Brave_Katzbalger //id 1183 - 2HSword
+STR +2
++20% DEF ignore vs. Demi-Human
++55% physical damage vs. Demi-Human
+
+::Valorous_Katzbalger //id 1184 - 2HSword
+CRIT +20
+CRIT damage +20%
++55% physical damage vs. Demi-Human
+
+::Violet_Fear //id 1185 - 2HSword
+<desc>A huge violet sword made from the twin swords of Naght Sieger.</desc>
+
+::Death_Guidance //id 1186 - 2HSword
+<desc>A cursed weapon that longs for the destruction of all living beings, including its owner, and secludes them to a life of misery.</desc>
+STR +5, AGI +2
+Perfect Dodge +20
+
+::Glorious_Claymore //id 1187 - 2HSword
++25% DEF ignore vs. Demi-Human
++70% physical damage vs. Demi-Human
+
+::Knife //id 1201 - Dagger
+<desc>A simple knife.</desc>
+
+::Knife_ //id 1202 - Dagger
+<desc>A simple knife.</desc>
+
+::Cutter //id 1204 - Dagger
+<desc>A knife used for cutting.</desc>
+
+::Cutter_ //id 1205 - Dagger
+<desc>A knife used for cutting.</desc>
+
+::Main_Gauche //id 1207 - Dagger
+<desc>A dagger held in the left hand to parry attacks.</desc>
+
+::Main_Gauche_ //id 1208 - Dagger
+<desc>A dagger held in the left hand to parry attacks.</desc>
+
+::Dirk //id 1210 - Dagger
+<desc>An ancient knife used by highlanders.</desc>
+
+::Dirk_ //id 1211 - Dagger
+<desc>An ancient knife used by highlanders.</desc>
+
+::Dagger //id 1213 - Dagger
+<desc>A knife used for stabbing.</desc>
+
+::Dagger_ //id 1214 - Dagger
+<desc>A knife used for stabbing.</desc>
+
+::Stiletto //id 1216 - Dagger
+<desc>A long, thin blade that is used as a concealed weapon by assassins.</desc>
+
+::Stiletto_ //id 1217 - Dagger
+<desc>A long, thin blade that is used as a concealed weapon by assassins.</desc>
+
+::Gladius //id 1219 - Dagger
+<desc>A strong dagger crafted by traditional artisans.</desc>
+
+::Gladius_ //id 1220 - Dagger
+<desc>A strong dagger crafted by traditional artisans.</desc>
+
+::Damascus //id 1222 - Dagger
+<desc>A knife made of a special metal alloy that is incredibly strong.</desc>
+
+::Fortune_Sword //id 1223 - Dagger
+<desc>A knife with a gold handle that brings great fortune to whoever holds it.</desc>
+LUK +5
+Perfect Dodge +20
+
+::Swordbreaker //id 1224 - Dagger
+<desc>A powerful dagger built to catch and destroy weapons.</desc>
+
+::Mailbreaker //id 1225 - Dagger
+<desc>A sharp dagger built to puncture and destroy armor.</desc>
+
+::Damascus_ //id 1226 - Dagger
+<desc>A knife made of a special metal alloy that is incredibly strong.</desc>
+
+::Weeder_Knife //id 1227 - Dagger
+<desc>A blade created to cut down stubborn weeds.</desc>
++100% DEF ignore vs. Plant
++15% physical damage vs. Plant
+-15% damage from Plant
+
+::Combat_Knife //id 1228 - Dagger
+<desc>A military knife crafted for battle against humanoids.</desc>
++100% DEF ignore vs. Demi-Human
++10% physical damage vs. Demi-Human
+-10% damage from Demi-Human
+
+::Kitchen_Knife //id 1229 - Dagger
+<desc>A domestic knife used by housewives, or househusbands, for cooking.</desc>
+CRIT +30
+
+::Ice_Pick //id 1230 - Dagger
+<desc>A thin, sharp blade capable of piercing the strongest of armors.</desc>
+Physical Damage Scales with Enemy Defense
+
+::Bazerald //id 1231 - Dagger
+<color=#808080>A decorative dagger engraved with luxurious emblems.</color>
+INT +5
+MATK +40, MATK +10%
+
+::Assassin_Dagger //id 1232 - Dagger
+<desc>A dagger commonly used by assassins.</desc>
+HP +20%, SP +15%, ASPD +2%
+
+::Exorciser //id 1233 - Dagger
+<desc>A ceremonial dagger used in exorcisms.</desc>
++100% DEF ignore vs. Demon
++10% physical damage vs. Demon
+-5% damage from Demon
+
+::Moonlight_Dagger //id 1234 - Dagger
+<desc>A dagger imbued with the lunar spirit that drains the enemy's soul.</desc>
+SP +10%
+Recover 3 SP/melee attack
+
+::Azoth //id 1235 - Dagger
+<desc>A dagger that symbolizes the potential of Alchemy.</desc>
+
+::Sucsamad //id 1236 - Dagger
+<color=#808080>A dagger crafted in the ancient, traditional ways of a small desert tribe.</color>
++25% physical damage vs. Earth
++25% physical damage vs. Wind
+
+::Grimtooth //id 1237 - Dagger
+<desc>A cursed dagger forged out of a monster's tooth that causes insanity to whoever wields it.</desc>
+DEF -33%
+FLEE +15
+Perfect Dodge +10
+
+::Zeny_Knife //id 1238 - Dagger
+<desc>A dagger crafted by pickpockets to assist them in their daily life.</desc>
+
+::Poison_Knife //id 1239 - Dagger
+<desc>A dreadful dagger that has been soaked in toxin.</desc>
++30% chance of <color=#800000>Poison</color> on physical attack
+
+::Cursed_Dagger //id 1241 - Dagger
+<desc>A dagger possessed by evil and given power by hatred and malice.</desc>
++50% chance of <color=#800000>Curse</color> on physical attack
+
+::Dagger_of_Counter //id 1242 - Dagger
+<desc>A dagger that has a high chance to do critical damage.</desc>
+CRIT +90
+
+::Novice_Main_Gauche //id 1243 - Dagger
+<desc>An exclusive main gauche for new adventurers.</desc>
+
+::Cinquedea //id 1245 - Dagger
+<desc>A wide bladed short sword crafted in a western country.</desc>
+
+::Cinquedea_ //id 1246 - Dagger
+<desc>A wide bladed short sword crafted in a western country.</desc>
+
+::Kindle_Dagger //id 1247 - Dagger
+<desc>A dagger that can be effectively used to start a fire.</desc>
+
+::Obsidian_Dagger //id 1248 - Dagger
+<desc>A dagger made from pure obsidian glass that shines eerily.</desc>
+
+::Fisherman's_Dagger //id 1249 - Dagger
+<desc>A dagger used by fishermen to catch shellfish and oysters.</desc>
+
+::Jur //id 1250 - Katar
+<desc>A set of blades worn on the back of both hands.</desc>
+
+::Jur_ //id 1251 - Katar
+<desc>A set of blades worn on the back of both hands.</desc>
+
+::Katar //id 1252 - Katar
+<desc>A set of daggers in which the blades are positioned above the knuckles.</desc>
+DEX +1
+
+::Katar_ //id 1253 - Katar
+<desc>A set of daggers in which the blades are positioned above the knuckles.</desc>
+DEX +1
+
+::Jamadhar //id 1254 - Katar
+<desc>A katar with two blades that move like scissors to reveal a third blade from within.</desc>
+
+::Jamadhar_ //id 1255 - Katar
+<desc>A katar with two blades that move like scissors to reveal a third blade from within.</desc>
+
+::Katar_of_Frozen_Icicle //id 1256 - Katar
+<desc>A katar fashioned from a cold, sharp icicle.</desc>
++5% chance of <color=#800000>Freeze</color> on physical attack
+
+::Katar_of_Quaking //id 1257 - Katar
+<desc>A katar sculpted from the desert.</desc>
++5% chance of <color=#800000>Blind</color> on physical attack
+
+::Katar_of_Raging_Blaze //id 1258 - Katar
+<desc>A katar molded from an inferno.</desc>
++5% chance of <color=#800000>Silence</color> on physical attack
+
+::Katar_of_Piercing_Wind //id 1259 - Katar
+<desc>A katar forged from powerful stormy winds.</desc>
++5% chance of <color=#800000>Sleep</color> on physical attack
+
+::Sharpened_Legbone_of_Ghoul //id 1260 - Katar
+<desc>A katar crafted from a ghoul's femur that radiates a dark, deathly aura.</desc>
+
+::Infiltrator //id 1261 - Katar
+<desc>A katar designed for quick human assassinations.</desc>
+DEF +3, FLEE +5
+Perfect Dodge +2
++50% physical damage vs. Demi-Human
+
+::Loki's_Nail //id 1262 - Katar
+<desc>A double bladed katar that inflicts incurable wounds.</desc>
++3% chance of <color=#800000>Bleed</color> on melee attack
+
+::Unholy_Touch //id 1263 - Katar
+<desc>A katar forged out of resentment for the living.</desc>
+CRIT -1
++2% chance of <color=#800000>Curse</color> on melee attack
+
+::Specialty_Jur //id 1264 - Katar
+<desc>A katar with many slots that is difficult to handle.</desc>
+
+::Bloody_Roar //id 1265 - Katar
+<desc>A katar designed to kill human that evokes a bestial roar when drenched in blood.</desc>
++100% DEF ignore vs. Demi-Human
+
+::Infiltrator_ //id 1266 - Katar
+<desc>A katar designed for quick human assassinations.</desc>
+DEF +3, FLEE +5
+Perfect Dodge +2
++50% physical damage vs. Demi-Human
+
+::Katar_of_Frozen_Icicle_ //id 1275 - Katar
+<desc>A katar fashioned from a cold, sharp icicle.</desc>
++5% chance of <color=#800000>Freeze</color> on physical attack
+
+::Katar_of_Quaking_ //id 1276 - Katar
+<desc>A katar sculpted from the desert.</desc>
++5% chance of <color=#800000>Blind</color> on physical attack
+
+::Katar_of_Raging_Blaze_ //id 1277 - Katar
+<desc>A katar molded from an inferno.</desc>
++5% chance of <color=#800000>Silence</color> on physical attack
+
+::Katar_of_Piercing_Wind_ //id 1278 - Katar
+<desc>A katar forged from powerful stormy winds.</desc>
++5% chance of <color=#800000>Sleep</color> on physical attack
+
+::Brave_Katar //id 1279 - Katar
+STR +1, DEX +1, LUK +1
++20% DEF ignore vs. Demi-Human
++70% physical damage vs. Demi-Human
+Indestructible
+
+::Valorous_Katar //id 1280 - Katar
+STR +1, DEX +1, LUK +1
+ASPD +5%
+CRIT damage +20%
++70% physical damage vs. Demi-Human
+Indestructible
+
+::Glorious_Bloody_Roar //id 1281 - Katar
++20% DEF ignore vs. Demi-Human
++70% physical damage vs. Demi-Human
+
+::Glorious_Jamadhar //id 1282 - Katar
++70% physical damage vs. Demi-Human
++20% CRIT damage
+
+::Axe //id 1301 - Axe
+<desc>A common axe.</desc>
+
+::Axe_ //id 1302 - Axe
+<desc>A common axe.</desc>
+
+::Orcish_Axe //id 1304 - Axe
+<desc>An axe crafted by orc smiths for orc warriors.</desc>
+
+::Cleaver //id 1305 - Axe
+<desc>A heavy, broad bladed hatchet used by butchers.</desc>
++5% physical damage vs. Demi-Human
+
+::War_Axe //id 1306 - Axe
+<desc>A bloodthirsty axe that has aided many warriors in battle.</desc>
+DEX +2, LUK +2
+
+::Windhawk //id 1307 - Axe
+<desc>An axe that summons wind around it, granting unprecedented speed.</desc>
+ASPD +5%
+
+::Orcish_Axe_ //id 1309 - Axe
+<desc>An axe crafted by orc smiths for orc warriors.</desc>
+
+::Glorious_Cleaver //id 1310 - Axe
++20% DEF ignore vs. Demi-Human
++75% physical damage vs. Demi-Human
+
+::Battle_Axe //id 1351 - 2HAxe
+<desc>A sturdy axe for fighting multiple enemies at once.</desc>
+
+::Battle_Axe_ //id 1352 - 2HAxe
+<desc>A sturdy axe for fighting multiple enemies at once.</desc>
+
+::Hammer //id 1354 - 2HAxe
+<desc>A really big hammer.</desc>
+
+::Hammer_ //id 1355 - 2HAxe
+<desc>A really big hammer.</desc>
+
+::Buster //id 1357 - 2HAxe
+<desc>A powerful axe that lives up to its mighty appearance.</desc>
+
+::Buster_ //id 1358 - 2HAxe
+<desc>A powerful axe that lives up to its mighty appearance.</desc>
+
+::Two-Handed_Axe //id 1360 - 2HAxe
+<color=#808080>A two-handed, double bladed axe.</color>
+
+::Two-Handed_Axe_ //id 1361 - 2HAxe
+<desc>A two-handed, double bladed axe.</desc>
+
+::Bloody_Axe //id 1363 - 2HAxe
+<desc>A terrifying axe that drenches the battlefield with blood once it cuts flesh.</desc>
+STR +10
+Movement Speed +34%
+
+::Great_Axe //id 1364 - 2HAxe
+<desc>A humongous, double bladed axe.</desc>
++15% chance of <color=#800000>Stun</color> on physical attack
+
+::Sabbath //id 1365 - 2HAxe
+<desc>An axe that guides lost souls to the afterlife.</desc>
++50 CRIT vs. Undead
++0.5% chance to deal lethal damage to Undead on attack
+
+::Light_Epsilon //id 1366 - 2HAxe
+<desc>A ceremonial axe that possesses a holy power.</desc>
++3% physical damage vs. Demon
+Enable use of <skill>Heal 3</skill>
+
+::Slaughter //id 1367 - 2HAxe
+<desc>An axe that brutally slaughters enemies.</desc>
++100% DEF ignore vs. Brute
++0.4% chance to deal lethal damage to Brute on attack
+
+::Tomahawk //id 1368 - 2HAxe
+<desc>A light, windy axe that can be thrown.</desc>
+
+::Guillotine //id 1369 - 2HAxe
+<desc>A huge guillotine blade welded to a handle for combat use.</desc>
+Recover 2 SP/melee attack vs. Demi-Human
+Recover 20 SP/melee kill vs. Demi-Human
++0.3% chance to deal lethal damage to Demi-Human on attack
+
+::Doom_Slayer //id 1370 - 2HAxe
+<desc>A gigantic, ridiculously heavy axe that requires great strength to use.</desc>
+
+::Doom_Slayer_ //id 1371 - 2HAxe
+<desc>A gigantic, ridiculously heavy axe that requires great strength to use.</desc>
+
+::Bardiche //id 1375 - 2HAxe
+<desc>A long bladed axe that deflects enemy attacks.</desc>
+-13% damage from Medium
+-15% damage from Large
+
+::Heart_Breaker //id 1376 - 2HAxe
+<desc>An axe that breaks faces like Kafra Jasmine breaks hearts.</desc>
+ASPD +5%
+
+::Hurricane_Fury //id 1377 - 2HAxe
+<desc>A massive axe embedded with an orb imbued with the power of a hurricane.</desc>
+ASPD +Refine%
+-(10 + Refine)% damage taken from medium size enemies.
+
+::Brave_Battle_Axe //id 1379 - 2HAxe
+STR +3
++20% DEF ignore vs. Demi-Human
++55% physical damage vs. Demi-Human
+
+::Valorous_Battle_Axe //id 1380 - 2HAxe
+STR +3
++55% physical damage vs. Demi-Human
+
+::Glorious_Two-Handed_Axe //id 1382 - 2HAxe
++25% DEF ignore vs. Demi-Human
++70% physical damage vs. Demi-Human
+
+::Javelin //id 1401 - Spear
+<desc>A light spear that can be thrown, its safer to hold on to it though.</desc>
+
+::Javelin_ //id 1402 - Spear
+<desc>A light spear that can be thrown, its safer to hold on to it though.</desc>
+
+::Spear //id 1404 - Spear
+<desc>A basic spear that enables slightly longer ranged melee attacks.</desc>
+
+::Spear_ //id 1405 - Spear
+<desc>A basic spear that enables slightly longer ranged melee attacks.</desc>
+
+::Pike //id 1407 - Spear
+<desc>A long spear issued to foot soldiers.</desc>
+
+::Pike_ //id 1408 - Spear
+<desc>A long spear issued to foot soldiers.</desc>
+
+::Lance //id 1410 - 2HSpear
+<desc>A spear commonly used by mounted knights.</desc>
+
+::Lance_ //id 1411 - 2HSpear
+<desc>A spear commonly used by mounted knights.</desc>
+
+::Gungnir //id 1413 - Spear
+<desc>A legendary spear known for its accuracy.</desc>
+HIT +30, Perfect Hit +25
+
+::Gelerdria //id 1414 - Spear
+<desc>A unique spear from a desert land.</desc>
+HP +800, SP -50
+
+::Brocca //id 1415 - Spear
+<desc>A spear that pierces through enemy armor.</desc>
++100% DEF ignore vs. non-Boss
++25% damage vs. Neutral
+
+::Tjungkuletti //id 1416 - Spear
+<desc>A spear that drains the souls of defeated enemies.</desc>
+Recover 1 SP/melee attack
+
+::Pole_Axe //id 1417 - Spear
+<desc>An axe head mounted on a long pole that breaks through thick armored plates.</desc>
+STR +1, INT +2, DEX +1
+
+::Gungnir_ //id 1418 - Spear
+<desc>A legendary spear known for its accuracy.</desc>
+HIT +30, Perfect Hit +25
+
+::Long_Horn //id 1420 - Spear
+<desc>A spear fashioned from a unicorn's horn, enabling it to neutralize poisons and inflict deep wounds.</desc>
+Enable <color=#0000FF>Detoxify</color>
++5% chance of <color=#800000>Bleed</color> on melee attack
+
+::Battle_Hook //id 1421 - Spear
+<desc>A spear tipped with a hook that can push and pull enemies.</desc>
++20% physical damage vs. Demi-Human
++5% chance of <color=#800000>Stun</color> on melee attack
+
+::Hunting_Spear //id 1422 - Spear
+<desc>A spear with a leaf shaped point that inflicts damage with its heavy weight.</desc>
++100% DEF ignore vs. Brute
+
+::Assaulter_Spear //id 1425 - Spear
+STR +2
++20% DEF ignore vs. Demi-Human
++95% physical damage vs. Demi-Human
+
+::Glorious_Spear //id 1426 - Spear
++20% DEF ignore vs. Demi-Human
++95% physical damage vs. Demi-Human
+
+::Guisarme //id 1451 - 2HSpear
+<desc>A spear with a curved blade and puncturing spike that excels in mounted combat.</desc>
+
+::Guisarme_ //id 1452 - 2HSpear
+<desc>A spear with a curved blade and puncturing spike that excels in mounted combat.</desc>
+
+::Glaive //id 1454 - 2HSpear
+<desc>A spear with a huge sword-like spearhead.</desc>
+
+::Glaive_ //id 1455 - 2HSpear
+<desc>A spear with a huge sword-like spearhead.</desc>
+
+::Partizan //id 1457 - 2HSpear
+<desc>A spear topped with a double edged blade.</desc>
+
+::Partizan_ //id 1458 - 2HSpear
+<desc>A spear topped with a double edged blade.</desc>
+
+::Trident //id 1460 - 2HSpear
+<desc>A triple pronged spear that can also be used for fishing.</desc>
+
+::Trident_ //id 1461 - 2HSpear
+<desc>A triple pronged spear that can also be used for fishing.</desc>
+
+::Halberd //id 1463 - 2HSpear
+<desc>A spear with a steel spike and axe-blade which enables both piercing and hacking.</desc>
+
+::Halberd_ //id 1464 - 2HSpear
+<desc>A spear with a steel spike and axe-blade which enables both piercing and hacking.</desc>
+
+::Crescent_Scythe //id 1466 - 2HSpear
+<desc>A heavy scythe carried by the Grim Reaper.</desc>
+HIT +10, CRIT +30
+
+::Bill_Guisarme //id 1467 - 2HSpear
+<desc>A spear with a hooked blade that has proven its versatility in battle.</desc>
++10% physical damage vs. Brute
++5% physical damage vs. Demi-Human
+
+::Zephyrus //id 1468 - 2HSpear
+<desc>A decorative spear imbued with wind.</desc>
++10% Autospell <color=#0000FF>Thunderstorm 3</color> on non-skill attack
++2% chance of <color=#800000>Silence</color> on physical attack
+
+::Longinus'_Spear //id 1469 - 2HSpear
+<desc>A legendary spear owned by the tragic soldier, Longinus.</desc>
++10% physical damage vs. Demi-Human, Angel
+
+::Brionac //id 1470 - 2HSpear
+<desc>A spear that radiates with the warm, glowing light of pure holiness.</desc>
+Enable <color=#0000FF>Heal 5</color>
++10% Autospell <color=#0000FF>Soul Strike 3</color> on non-skill attack
+
+::Hellfire //id 1471 - 2HSpear
+<desc>A spear enchanted with the power to summon flame.</desc>
+STR +3
++10% Autospell <color=#0000FF>Fireball 5</color> on non-skill attack
+
+::Soul_Staff //id 1472 - Rod
+<desc>A high quality staff that amplifies psychic power.</desc>
+AGI +2, INT +5
+MATK +20%
+
+::Wizardry_Staff //id 1473 - Rod
+<desc>An awesome staff crafted by an ancient wizard.</desc>
+INT +6, DEX +2
+MATK +20%
+
+::Gae_Bolg //id 1474 - 2HSpear
+<desc>A spear, created from the body of a dead, giant sea creature.</desc>
++100% DEF ignore vs. Dragon
++10% physical damage vs. Boss
+
+::Crescent_Scythe_ //id 1476 - 2HSpear
+<desc>A heavy scythe carried by the Grim Reaper.</desc>
+HIT +10, CRIT +30
+
+::Spectral_Spear //id 1477 - 2HSpear
+<desc>The creator of this formidable spear sacrificed his own life to forge it, resulting in a curse that will try to dominate the wearer's soul.</desc>
++20% physical damage vs. Demon, Shadow, Decay
+-10% damage from Demon
+-10% damage from Decay, Shadow attacks
+
+::Ahlspiess //id 1478 - 2HSpear
+<desc>An auger-shaped spear designed for striking enemy weak points.</desc>
++100% DEF ignore
++10% physical damage vs. Demi-Human
+
+::Spectral_Spear_ //id 1479 - 2HSpear
+<desc>The creator of this formidable spear sacrificed his own life to forge it, resulting in a curse that will try to dominate the wearer's soul.</desc>
++20% physical damage vs. Demon, Shadow, Decay
+-10% damage from Demon
+-10% damage from Decay, Shadow attacks
+
+::Gae_Bolg_ //id 1480 - 2HSpear
+<desc>A spear, created from the body of a dead, giant sea creature.</desc>
++100% DEF ignore vs. Dragon
++10% physical damage vs. Boss
+
+::Zephyrus_ //id 1481 - 2HSpear
+<desc>A decorative spear imbued with wind.</desc>
++10% Autospell <color=#0000FF>Thunderstorm 3</color> on non-skill attack
++2% chance of <color=#800000>Silence</color> on physical attack
+
+::Assaulter_Lance //id 1482 - 2HSpear
+STR +2
++100% DEF ignore vs. Demi-Human
++25% physical damage vs. Demi-Human
+
+::Ivory_Lance //id 1483 - 2HSpear
+<desc>A two handed spear crafted from fine ivory.</desc>
+AGI +2, ASPD +3%
+
+::Cardo //id 1484 - 2HSpear
+<desc>A massive spear that could be mistaken for a temple pillar.</desc>
+
+::Battle_Fork //id 1485 - 2HSpear
+<desc>A three-pronged fork that doubles as a spear, it is lightweight despite its size.</desc>
+
+::Glorious_Lance //id 1486 - 2HSpear
++25% DEF ignore vs. Demi-Human
++70% physical damage vs. Demi-Human
+
+::Club //id 1501 - Mace
+<desc>A heavy bludgeon that makes a handy weapon in a pinch.</desc>
+
+::Club_ //id 1502 - Mace
+<desc>A heavy bludgeon that makes a handy weapon in a pinch.</desc>
+
+::Mace //id 1504 - Mace
+<desc>A flanged, solid club that is effective for simple smashing.</desc>
+
+::Mace_ //id 1505 - Mace
+<desc>A flanged, solid club that is effective for simple smashing.</desc>
+
+::Smasher //id 1507 - Mace
+<desc>A basic, big hammer with spikes, it's excellent for breaking all sorts of things.</desc>
+
+::Smasher_ //id 1508 - Mace
+<desc>A basic, big hammer with spikes, it's excellent for breaking all sorts of things.</desc>
+
+::Flail //id 1510 - Mace
+<desc>An itimidating spiked metal ball that swings freely from a chain.</desc>
+
+::Flail_ //id 1511 - Mace
+<desc>An itimidating spiked metal ball that swings freely from a chain.</desc>
+
+::Morning_Star //id 1513 - Mace
+<desc>A metal club topped with a solid steel ball that's covered in spikes.</desc>
+
+::Morning_Star_ //id 1514 - Mace
+<desc>A metal club topped with a solid steel ball that's covered in spikes.</desc>
+
+::Sword_Mace //id 1516 - Mace
+<desc>A specialty weapon that beautifully combines combines the power of swords and maces.</desc>
+
+::Sword_Mace_ //id 1517 - Mace
+<desc>A specialty weapon that beautifully combines combines the power of swords and maces.</desc>
+
+::Chain //id 1519 - Mace
+<desc>A simple flail that consists of a thin mace attached to a chain of iron links.</desc>
+
+::Chain_ //id 1520 - Mace
+<desc>A simple flail that consists of a thin mace attached to a chain of iron links.</desc>
+
+::Stunner //id 1522 - Mace
+<desc>A huge, unwieldy club that can knock enemies unconscious.</desc>
++10% chance of <color=#800000>Stun</color> on physical attack
+
+::Spike //id 1523 - Mace
+<desc>A flail, entirely covered in spikes, that swing wildly and haphazardly.</desc>
+DEF -66%, CRIT +40
+
+::Golden_Mace //id 1524 - Mace
+<desc>A mace forged out of pure gold.</desc>
++20% physical damage vs. Undead
+
+::Long_Mace //id 1525 - Mace
+<desc>A long, thin mace built like a spear.</desc>
+-10% damage from range attacks
+
+::Slash //id 1526 - Mace
+<desc>A hefty mace with curved, sharp blades.</desc>
++15% physical damage vs. Undead
++5% EXP from Undead
++0.1% chance of dealing lethal damage to Undead on attack
+
+::Quadrille //id 1527 - Mace
+<desc>A heavy and powerful iron mace with a rounded top.</desc>
++10% physical damage vs. Demi-Human, Earth, Undead
+Indestructible
+
+::Grand_Cross //id 1528 - Mace
+<desc>A cruciform mace that was blessed by the pope of the Rune Midgard kingdom.</desc>
+Recover 1 SP/melee attack vs. Undead
+
+::Iron_Driver //id 1529 - Mace
+<desc>A heavy, round headed club intended for athletic competitions.</desc>
+
+::Mjolnir //id 1530 - Mace
+<desc>A facsimile of the mighty hammer wielded by Thor, god of thunder.</desc>
+STR +15, DEX +40, ASPD +10%
+
+::Wrench //id 1531 - Mace
+<desc>A heavy tool with many practical applications.</desc>
++1% chance of <color=#800000>Blind</color>, <color=#800000>Freeze</color>, <color=#800000>Poison</color>, <color=#800000>Stun</color> on physical attack
+
+::Stunner_ //id 1532 - Mace
+<desc>A blow from this hefty mace can cause someone to black out.</desc>
++10% chance of <color=#800000>Stun</color> on physical attack
+
+::Spike_ //id 1538 - Mace
+<desc>A flail, entirely covered in spikes, that swing wildly and haphazardly.</desc>
+DEF -66%, CRIT +40
+
+::Golden_Mace_ //id 1539 - Mace
+<desc>A mace forged out of pure gold.</desc>
++20% physical damage vs. Undead
+
+::Grand_Cross_ //id 1540 - Mace
+<desc>A cruciform mace that was blessed by the pope of the Rune Midgard kingdom.</desc>
+Recover 1 SP/melee attack vs. Undead
+
+::Nemesis //id 1541 - Mace
+<desc>A large silver mace made for exorcisms.</desc>
++10% physical damage vs. Demon, Shadow
+
+::Brave_Morning_Star //id 1542 - Mace
+STR +1, DEX +1
++20% DEF ignore vs. Demi-Human
++75% physical damage vs. Demi-Human
+
+::Valorous_Morning_Star //id 1543 - Mace
+STR +1, DEX +1
++75% physical damage vs. Demi-Human
+
+::Lunakaligo //id 1544 - Mace
+<desc>An old, large black frying pan.</desc>
+
+::Glorious_Morning_Star //id 1546 - Mace
++20% DEF ignore vs. Demi-Human
++75% physical damage vs. Demi-Human
+
+::Book //id 1550 - Book
+<desc>A book that's sturdy enough to be wielded as a weapon in an emergency.</desc>
+
+::Bible //id 1551 - Book
+<desc>A book containing a compilation of ancient and sacred writings.</desc>
+INT +2
+
+::Tablet //id 1552 - Book
+<desc>A tablet on which the words of the ancients have been engraved and immortalized.</desc>
+
+::Book_of_Billows //id 1553 - Book
+<desc>A hefty hard cover book enchanted with water.</desc>
+
+::Book_of_Mother_Earth //id 1554 - Book
+<desc>A hefty hard cover book enchanted with earth.</desc>
+
+::Book_of_Blazing_Sun //id 1555 - Book
+<desc>A hefty hard cover book enchanted with fire.</desc>
+
+::Book_of_Gust_of_Wind //id 1556 - Book
+<desc>A hefty hard cover book enchanted with wind.</desc>
+
+::Book_of_the_Apocalypse //id 1557 - Book
+<desc>A book that details prophesies concerning the end of the world.</desc>
++7% physical damage vs. Water, Earth, Fire, Wind
++5% physical damage vs. Holy
+
+::Girl's_Diary //id 1558 - Book
+<desc>A cute diary which details a young girl's closest secrets, you can't bear the thought of reading it.</desc>
+
+::Legacy_of_Dragon //id 1559 - Book
+<desc>A book which details the origin and history of dragons.</desc>
+INT +3
++100% DEF ignore vs. Dragon
+Recover 10 SP/melee kill vs. Dragon
+
+::Sage's_Diary //id 1560 - Book
+<desc>The diary of a great sage, published without his knowledge.</desc>
+MATK +15%
+
+::Hardcover_Book //id 1561 - Book
+<desc>A thick and heavy hardcover book that could really do some harm if swung around.</desc>
+STR +3, DEX +2
+
+::Encyclopedia //id 1564 - Book
+<desc>An encyclopedia crafted by a Prontera publisher famous for its craftsmanship.</desc>
+INT +3, DEX +2
+MATK +15%
+
+::Ledger_of_Death //id 1565 - Book
+<desc>A book used by demons to kill humans by inscribing their names. The last name, "Hollg--" looks like it wasn't completed.</desc>
+STR +3, INT +3, LUK -20
+
+::Book_of_Billows_ //id 1568 - Book
+<desc>A hefty hard cover book enchanted with water.</desc>
+
+::Book_of_Mother_Earth_ //id 1569 - Book
+<desc>A hefty hard cover book enchanted with earth.</desc>
+
+::Book_of_Blazing_Sun_ //id 1570 - Book
+<desc>A hefty hard cover book enchanted with fire.</desc>
+
+::Book_of_Gust_of_Wind_ //id 1571 - Book
+<desc>A hefty hard cover book enchanted wind.</desc>
+
+::Principles_of_Magic //id 1572 - Book
+<desc>A book that helps students build a strong foundation in magic.</desc>
+INT +3, MATK +20%
+SP Regeneration +5%
+
+::Ancient_Magic //id 1573 - Book
+<desc>A book with the impressive phrase, "There is no royal road to learning" on its cover.</desc>
+INT +4, MATK +15%
+
+::Brave_Book //id 1574 - Book
+STR +2, INT +1, MATK +15%
++20% DEF ignore vs. Demi-Human
++75% physical damage vs. Demi-Human
+
+::Valorous_Book //id 1575 - Book
+STR +1, INT +2, MATK +15%
++25% DEF ignore vs. Demi-Human
++75% physical damage vs. Demi-Human
+
+::Glorious_Tablet //id 1576 - Book
+MATK +15%
++25% DEF ignore vs. Demi-Human
++80% physical damage vs. Demi-Human
+
+::Glorious_Book //id 1577 - Book
+MATK +15%
++25% DEF ignore vs. Demi-Human
++80% physical damage vs. Demi-Human
+
+::Angra_Manyu //id 1599 - Mace
+<desc>The Real Holy Cross</desc>
+ATK + 3000, MATK + 3000
+All Stats + 50
+
+::Gamemaster's_Bow //id 1744 - Bow
+<desc>It fucking slaps</desc>
+ATK + 2000, MATK + 2000
+All Stats + 80
+
+::Rod //id 1601 - Rod
+<desc>A simple magic wand.</desc>
+MATK +15%
+
+::Rod_ //id 1602 - Rod
+<desc>A simple magic wand.</desc>
+MATK +15%
+
+::Wand //id 1604 - Rod
+<desc>A rough-hewn wand that's great for spell casting.</desc>
+INT +1, MATK +15%
+
+::Wand_ //id 1605 - Rod
+<desc>A rough-hewn wand that's great for spell casting.</desc>
+INT +1, MATK +15%
+
+::Staff //id 1607 - Rod
+<desc>A wooden staff adorned with an enchanted jewel.</desc>
+INT +2, MATK +15%
+
+::Staff_ //id 1608 - Rod
+<desc>A wooden staff adorned with an enchanted jewel.</desc>
+INT +2, MATK +15%
+
+::Arc_Wand //id 1610 - Rod
+<desc>An ornate, elegantly crafted wand.</desc>
+INT +3, MATK +15%
+
+::Arc_Wand_ //id 1611 - Rod
+<desc>An ornate, elegantly crafted wand.</desc>
+INT +3, MATK +15%
+
+::Mighty_Staff //id 1613 - Rod
+<desc>A rare staff that converts psychic energy into brute strength.</desc>
+STR +10, MATK +15%
+
+::Wand_of_Occult //id 1614 - Rod
+<desc>A shamanic wand topped with a goat's skull.</desc>
+INT +3, MATK +15%
+
+::Evil_Bone_Wand //id 1615 - Rod
+<desc>A wand of human bone, its dark aura can be sensed by those who wield it.</desc>
+INT +4, MATK +15%
+
+::Wing_Staff //id 1616 - Rod
+<desc>A staff containing a wind fairy that grants the essence of speed.</desc>
+MATK +15%
+Cast Time -5%
+
+::Survivor's_Rod //id 1617 - Rod
+<desc>One of two staves developed through the united efforts of the Mage Guild and Prontera Church.</desc>
+HP +300, DEX +2, MATK +15%
+
+::Survivor's_Rod_ //id 1618 - Rod
+<desc>One of two staves developed through the united efforts of the Mage Guild and Prontera Church.</desc>
+HP +400, DEX +3, MATK +15%
+
+::Survivor's_Rod__ //id 1619 - Rod
+<desc>One of two staves developed through the united efforts of the Mage Guild and Prontera Church.</desc>
+HP +300, INT +2, MATK +15%
+
+::Survivor's_Rod___ //id 1620 - Rod
+<desc>One of two staves developed through the united efforts of the Mage Guild and Prontera Church.</desc>
+HP +400, INT +3, MATK +15%
+
+::Hypnotist's_Staff //id 1621 - Rod
+<desc>A staff with a hypnotizing effect that can make a Novice feel just like a High Wizard, sort of.</desc>
+INT +1, MATK +25%
+
+::Hypnotist's_Staff_ //id 1622 - Rod
+<desc>A staff with a hypnotizing effect that can make a Novice feel just like a High Wizard, sort of.</desc>
+INT +1, MATK +25%
+
+::Lich's_Bone_Wand //id 1624 - Rod
+<desc>A wand crafted from a lich's skull that threatens to curse anyone that harms its owner.</desc>
+SP +300, INT +1, DEX +1
+MATK +20%
+
+::Healing_Staff //id 1625 - Rod
+<desc>A staff made from the Yggdrasil Tree branches with the engraving "Health and Longevity".</desc>
+MATK +15%
+
+::Piercing_Staff //id 1626 - Rod
+<desc>A staff inset with a gem that disrupts magical protection.</desc>
+INT +4, MATK +15%
+
+::Gentleman_Staff //id 1629 - Rod
+<desc>A staff owned by a gentleman somewhere long ago.</desc>
+DEX +1, MATK+15%
+
+::Release_of_Wish //id 1630 - Rod
+<desc>A crystal staff that shines beautifully in sunlight.</desc>
+INT +3, MATK +15%
+
+::Holy_Stick //id 1631 - Rod
+<desc>A holy stick modified for exorcisms.</desc>
+MATK +15%
+
+::Brave_Arc_Wand //id 1632 - Rod
+INT +4, DEX +3, MATK +15%
+
+::Valorous_Arc_Wand //id 1633 - Rod
+INT +3, DEX +3, MATK +15%
+
+::Brave_Recovery_Wand //id 1634 - Rod
+MATK +15%
+
+::Valorous_Recovery_Wand //id 1635 - Rod
+INT +3, DEX +2, MATK +15%
+
+::Thorn_Staff_of_Darkness //id 1636 - Rod
+<desc>A dark staff that is covered with thorns.</desc>
+INT +3, DEX +3, MATK +20%
+
+::Eraser //id 1637 - Rod
+<desc>A staff that disrupts the cognitive ability of foes.</desc>
+INT +3, DEX +2, MATK +20%
+
+::Novice_Rod //id 1639 - Rod
+<desc>A training rod, it's a bit weak, but its usefulness to weight ratio can't be beat.</desc>
+MATK + 8
+
+::Glorious_Arc_Wand //id 1640 - Rod
+MATK +15%
++25% MDEF ignore vs. Demi-Human
++15% magical damage vs. Demi-Human
+
+::Glorious_Recovery_Wand //id 1641 - Rod
+MATK +15%
+
+::Bow //id 1701 - Bow
+<desc>A common bow.</desc>
+
+::Bow_ //id 1702 - Bow
+<desc>A common bow.</desc>
+
+::Composite_Bow //id 1704 - Bow
+<desc>An average bow used for small game hunting.</desc>
+
+::Composite_Bow_ //id 1705 - Bow
+<desc>An average bow used for small game hunting.</desc>
+
+::Great_Bow //id 1707 - Bow
+<desc>A simply constructed bow that offers balanced performance.</desc>
+
+::Great_Bow_ //id 1708 - Bow
+<desc>A simply constructed bow that offers balanced performance.</desc>
+
+::Cross_Bow //id 1710 - Bow
+<desc>A specially bow that uses a mechanical firing mechanism.</desc>
+
+::Cross_Bow_ //id 1711 - Bow
+<desc>A specially bow that uses a mechanical firing mechanism.</desc>
+
+::Arbalest_Bow //id 1713 - Bow
+<desc>A powerful siege weapon that is, in essence, a huge crossbow.</desc>
+DEX +2
+
+::Gakkung_Bow //id 1714 - Bow
+<desc>A bow made famous by its use by Goongso, a legendary archer.</desc>
+
+::Arbalest_Bow_ //id 1715 - Bow
+<desc>A powerful siege weapon that is, in essence, a huge crossbow.</desc>
+DEX +2
+
+::Gakkung_Bow_ //id 1716 - Bow
+<desc>A bow made famous by its use by Goongso, a legendary archer.</desc>
+
+::Hunter_Bow //id 1718 - Bow
+<desc>A mighty bow that can only be effectively used by Hunters.</desc>
+
+::Roguemaster's_Bow //id 1719 - Bow
+<desc>A bow, created just for Thieves, that has excellent range.</desc>
+Attack Range +6
+
+::Rudra_Bow //id 1720 - Bow
+<desc>A bow imbued with the sacred essence of Rudra, one of the ancient gods.</desc>
+INT +5
+Enable <color=#0000FF>Heal 1</color>, <color=#0000FF>Cure 1</color>
++50% <color=#800000>Curse</color>, <color=#800000>Poison</color>, <color=#800000>Chaos</color>, <color=#800000>Blind</color>, <color=#800000>Silence</color> resist
+
+::Repeating_Crossbow //id 1721 - Bow
+<desc>A crossbow that has improved range.</desc>
+Attack Range +4
+
+::Ballista //id 1722 - Bow
+<desc>A huge bow inspired by giant siege weapons.</desc>
+
+::Luna_Bow //id 1723 - Bow
+<desc>A heavy moonstone bow that deflects attacks.</desc>
+DEF +2
+
+::Dragon_Wing //id 1724 - Bow
+<desc>A bow constructed out of dragon bone.</desc>
++100% DEF ignore vs. Dragon
+
+::Hunter_Bow_ //id 1726 - Bow
+<desc>A mighty bow that can only be effectively used by Hunters.</desc>
+
+::Ballista_ //id 1727 - Bow
+<desc>A huge bow inspired by giant siege weapons.</desc>
+
+::Burning_Bow //id 1730 - Bow
+<desc>A flaming bow that seems dangerous to grasp but is cool to the touch.</desc>
+-10% damage from Fire attacks
+
+::Frozen_Bow //id 1731 - Bow
+<desc>A frozen bow whose drawstring seems too solid to be pulled.</desc>
++10% chance of <color=#800000>Freeze</color> on range physical attack
+
+::Earthen_Bow //id 1732 - Bow
+<desc>A warm bow that draws its power from the plains.</desc>
+
+::Gust_Bow //id 1733 - Bow
+<desc>A light bow that has been enhanced with the power of whirlwinds.</desc>
+
+::Orc_Archer_Bow //id 1734 - Bow
+<desc>A large, powerful bow used by Orc Archers.</desc>
+<color=#800080>Set Bonus</color> with <color=#008080>Steel Arrow</color>
+ +50% range physical damage
+
+::Brave_Cross_Bow //id 1738 - Bow
+DEX +2
++20% DEF ignore vs. Demi-Human
++55% physical damage vs. Demi-Human
+
+::Valorous_Cross_Bow //id 1739 - Bow
+INT +10, DEX +2
++55% physical damage vs. Demi-Human
+
+::Cursed_Lyre //id 1741 - Bow
+<desc>A cursed bow that killed a hero of an ancient nation long ago.</desc>
+LUK -2
++4% chance of <color=#800000>Curse</color> on range physical attack
+
+::Glorious_Bow //id 1743 - Bow
+CRIT damage +(2*Refine)%
++20% DEF ignore vs. Demi-Human
++55% physical damage vs. Demi-Human
+
+::Waghnak //id 1801 - Knuckle
+<desc>A common, yet effective claw that's known as the "Tiger's Fang".</desc>
+
+::Waghnak_ //id 1802 - Knuckle
+<desc>A common, yet effective claw that's known as the "Tiger's Fang".</desc>
+
+::Knuckle_Dusters //id 1803 - Knuckle
+<desc>A protective covering that shields the back of the hand and forearm.</desc>
+
+::Knuckle_Dusters_ //id 1804 - Knuckle
+<desc>A protective covering that shields the back of the hand and forearm.</desc>
+
+::Studded_Knuckles //id 1805 - Knuckle
+<desc>A silver, spiked knuckle with diamond studs.</desc>
+
+::Studded_Knuckles_ //id 1806 - Knuckle
+<desc>A silver, spiked knuckle with diamond studs.</desc>
+
+::Fist //id 1807 - Knuckle
+<desc>A fist covering that enhances your physical strength.</desc>
+
+::Fist_ //id 1808 - Knuckle
+<desc>A fist covering that enhances your physical strength.</desc>
+
+::Claw //id 1809 - Knuckle
+<desc>A knuckle with three long steel claws.</desc>
+STR +2
+
+::Claw_ //id 1810 - Knuckle
+<desc>A knuckle with three long steel claws.</desc>
+STR +2
+
+::Finger //id 1811 - Knuckle
+<desc>A knuckle shaped like human fingers with long, sharp nails.</desc>
+
+::Finger_ //id 1812 - Knuckle
+<desc>A knuckle shaped like human fingers with long, sharp nails.</desc>
+
+::Kaiser_Knuckle //id 1813 - Knuckle
+<desc>A knuckle blessed by Zephyrus, god of the west wind.</desc>
++10% physical damage vs. Water, Earth, Fire, Wind
++5% physical damage vs. Undead
+
+::Berserk //id 1814 - Knuckle
+<desc>A knuckle imbued with the essence of madness.</desc>
+ASPD +12%
+
+::Hati_Claw //id 1815 - Knuckle
+<desc>A blood stained weapon created from the claws of Hati.</desc>
+HP -2%
++2% chance of <color=#800000>Bleed</color> on melee attack
+
+::Berserk_ //id 1816 - Knuckle
+<desc>A claw imbued with the essence of madness.</desc>
+ASPD +12%
+
+::Magma_Fist //id 1818 - Knuckle
+<desc>A knuckle imbued with the power of a volcano.</desc>
+
+::Icicle_Fist //id 1819 - Knuckle
+<desc>A knuckle imbued with the power of ice.</desc>
+
+::Electric_Fist //id 1820 - Knuckle
+<desc>A knuckle imbued with the power of lightning.</desc>
+
+::Seismic_Fist //id 1821 - Knuckle
+<desc>A knuckle imbued with the power of Mother Earth.</desc>
+
+::Combo_Battle_Glove //id 1822 - Knuckle
+<desc>A knuckle engraved with magic glyphs that grant incredible power.</desc>
+
+::Brave_Fist //id 1823 - Knuckle
+STR +2, AGI +1
++20% DEF ignore vs. Demi-Human
++95% physical damage vs. Demi-Human
+
+::Valorous_Fist //id 1824 - Knuckle
+STR +2, INT +1
++95% physical damage vs. Demi-Human
+
+::Glorious_Claw //id 1826 - Knuckle
++25% DEF ignore vs. Demi-Human
++95% physical damage vs. Demi-Human
+
+::Glorious_Fist //id 1827 - Knuckle
++20% DEF ignore vs. Demi-Human
++95% physical damage vs. Demi-Human
+
+::Violin //id 1901 - Instrument
+<desc>A classical stringed instrument favored by Rocker, who'd rather play music than do actual work.</desc>
+
+::Violin_ //id 1902 - Instrument
+<desc>A classical stringed instrument favored by Rocker, who'd rather play music than do actual work.</desc>
+
+::Mandolin //id 1903 - Instrument
+<desc>A small instrument used in baroque, classical, country, and folk music.</desc>
+
+::Mandolin_ //id 1904 - Instrument
+<desc>A small instrument used in baroque, classical, country, and folk music.</desc>
+
+::Lute //id 1905 - Instrument
+<desc>A classical plucked string instrument that is difficult to tune.</desc>
+
+::Lute_ //id 1906 - Instrument
+<desc>A classical plucked string instrument that is difficult to tune.</desc>
+
+::Guitar //id 1907 - Instrument
+<desc>A six stringed instrument that is played by plucking the strings with a pick.</desc>
+
+::Guitar_ //id 1908 - Instrument
+<desc>A six-stringed instrument that is played by plucking the strings with a pick.</desc>
+
+::Harp //id 1909 - Instrument
+<desc>A stringed instrument known for its beautiful sound.</desc>
+INT +2
+
+::Harp_ //id 1910 - Instrument
+<desc>A stringed instrument known for its beautiful sound.</desc>
+INT +2
+
+::Gumoongoh //id 1911 - Instrument
+<desc>A traditional chordophone, favored by the aristocracy in days past.</desc>
+
+::Gumoongoh_ //id 1912 - Instrument
+<desc>A traditional chordophone, favored by the aristocracy in days past.</desc>
+
+::Electric_Guitar //id 1913 - Instrument
+<desc>An electric guitar which amplifies its user's power.</desc>
+AGI +1, INT +2
+Enable <color=#0000FF>Jupitel Thunder 1</color>
++10% Autospell <color=#0000FF>Jupitel Thunder 1</color> on non-skill attack
+
+::Burning_Passion_Guitar //id 1914 - Instrument
+<desc>A dazzling guitar that bewitches its user to play songs of passion.</desc>
+
+::Loner's_Guitar //id 1915 - Instrument
+<desc>A loner's guitar which makes a depressing sound when strummed.</desc>
+
+::Green_Acre_Guitar //id 1916 - Instrument
+<desc>A quaint guitar that resonates with the earth itself.</desc>
+
+::Gentle_Breeze_Guitar //id 1917 - Instrument
+<desc>A whimsical guitar that inspires a desire for travel.</desc>
+
+::Oriental_Lute //id 1918 - Instrument
+<desc>An ancient lute seen on display in oriental towns such as Payon, Amatsu or Kunlun.</desc>
+
+::Oriental_Lute_ //id 1922 - Instrument
+<desc>An ancient lute seen on display in oriental towns such as Payon, Amatsu or Kunlun.</desc>
+
+::Brave_Guitar //id 1923 - Instrument
+DEX +2
++20% DEF ignore vs. Demi-Human
++95% physical damage vs. Demi-Human
+
+::Valorous_Guitar //id 1924 - Instrument
+DEX +2
++20% <color=#0000FF>Arrow Vulcan</color> damage
++95% physical damage vs. Demi-Human
+
+::Glorious_Guitar //id 1927 - Instrument
++95% physical damage vs. Demi-Human
++20% DEF ignore vs. Demi-Human
+
+::Rope //id 1950 - Whip
+<color=#808080>A strong, thick cord composed of tightly braided fibers.</color>
+
+::Rope_ //id 1951 - Whip
+<color=#808080>A strong, thick cord composed of tightly braided fibers.</color>
+
+::Cord //id 1952 - Whip
+<color=#808080>A standard whip that's perfect for adventuring Dancers.</color>
+
+::Cord_ //id 1953 - Whip
+<color=#808080>A standard whip that's perfect for adventuring Dancers.</color>
+
+::Wire_Whip //id 1954 - Whip
+<color=#808080>A whip made of a flexible wire attached to an iron handle.</color>
+
+::Wire_Whip_ //id 1955 - Whip
+<color=#808080>A whip made of a flexible wire attached to an iron handle.</color>
+
+::Rante_Whip //id 1956 - Whip
+<color=#808080>A whip with a spiked ball attached at the end.</color>
+
+::Rante_Whip_ //id 1957 - Whip
+<color=#808080>A whip with a spiked ball attached at the end.</color>
+
+::Tail_Whip //id 1958 - Whip
+<color=#808080>A whip fashioned out of an animal's tail that brings good fortune.</color>
+
+::Tail_Whip_ //id 1959 - Whip
+<color=#808080>A whip fashioned out of an animal's tail that brings good fortune.</color>
+
+::Leather_Whip //id 1960 - Whip
+<color=#808080>A common and normal whip.</color>
+
+::Leather_Whip_ //id 1961 - Whip
+<color=#808080>A common and normal whip.</color>
+
+::Lariat_Whip //id 1962 - Whip
+<color=#808080>A hefty whip made from toughened snake skin.</color>
+
+::Rapture_Rose //id 1963 - Whip
+<color=#808080>A whip constructed purely of thorny rosebush stems.</color>
+
+::Chemeti_Whip //id 1964 - Whip
+<color=#808080>A powerful whip made of steel chain for heavy duty battles.</color>
+
+::Red_Flame_Whip //id 1965 - Whip
+<color=#808080>A whip fashioned from worn, hot leather dried in the desert sun.</color>
+
+::Icicle_Whip //id 1966 - Whip
+<color=#808080>A whip fashioned from enchanted, eternally frozen, icicles.</color>
+
+::Gaia_Whip //id 1967 - Whip
+<color=#808080>A whip fashioned from tough braided tree roots.</color>
+
+::Skipping_Rope //id 1968 - Whip
+<color=#808080>A skipping rope with wooden handles.</color>
+
+::Blade_Whip //id 1969 - Whip
+<color=#808080>A wire in which blade fragments are interwoven, that makes this whip as sharp as a sword.</color>
+
+::Queen's_Whip //id 1970 - Whip
+<color=#808080>A whip fit for a queen.</color>
+
+::Electric_Wire //id 1971 - Whip
+<color=#808080>A whip fashioned from a live electric wire.</color>
+
+::Queen's_Whip_ //id 1976 - Whip
+<color=#808080>A whip thats the best of the best.</color>
+
+::Brave_Lariat //id 1977 - Whip
+DEX +2
+
+::Valorous_Lariat //id 1978 - Whip
+DEX +2
+
+::Glorious_Lariat //id 1981 - Whip
++20% DEF ignore vs. Demi-Human
+
+::Staff_of_Destruction //id 2000 - 2HRod
+<desc>A tremendously powerful staff that can be wielded by the spiritually strong.</desc>
+MATK +25%
+AGI +10, INT +3
+Every 2 refine increase MATK by 1%.
+Every refine increases SP cost by 2%.
+Adds (2 * Refine)% chance to autospell Jupitel Thunder 5 when receiving melee damage.
+
+::Divine_Cross //id 2001 - 2HRod
+<desc>A staff that is composed of two parts to form a cross.</desc>
+DEX +4, MATK +15%
+-15% damage from Undead, Demon
+
+::Glorious_Staff //id 2002 - 2HRod
+MATK +15%
+
+::Jujube_Dagger //id 13000 - Dagger
+<desc>This dagger is made from Jujube tree struck by lightning.</desc>
+
+::Dragon_Killer //id 13001 - Dagger
+<desc>A dagger crafted from a dragon's fang that can easily pierce dragon scales.</desc>
++100% DEF ignore vs. Dragon
++10% EXP from Dragon
+
+::Ginnungagap //id 13002 - Dagger
+<desc>A dagger with an unnaturally dark colored blade, there is an instinctive sense of danger wielding this weapon.</desc>
++5% chance of <color=#800000>Blind</color> on melee attack
+
+::Cowardice_Blade //id 13003 - Dagger
+<desc>A dagger invented by a cowardly thief who prioritized defense.</desc>
+DEF +5
+
+::Cowardice_Blade_ //id 13004 - Dagger
+<desc>A dagger invented by a cowardly thief who prioritized defense.</desc>
+DEF +5
+
+::Khukri //id 13006 - Dagger
+<desc>A dark dagger whose hilt is crafted from a black dragon scale.</desc>
++10% chance of <color=#800000>Curse</color> on melee attack
+
+::Jitte //id 13007 - Dagger
+<desc>A dagger topped with a hook that can catch and break weapons.</desc>
++2% chance WeaponBreak on physical attack
+
+::Jitte_ //id 13008 - Dagger
+<desc>A dagger topped with a hook that can catch and break weapons.</desc>
++2% chance WeaponBreak on physical attack
+
+::Kamaitachi //id 13009 - Dagger
+<desc>A legendary weapon with extremely sharp blades.</desc>
+CRIT +3, ASPD +3%
+
+::Asura //id 13010 - Dagger
+<desc>A legendary dagger that is said to have been given to mankind by the gods.</desc>
+MATK +10%
+
+::Asura_ //id 13011 - Dagger
+<desc>A legendary dagger that is said to have been given to mankind by the gods.</desc>
+MATK +10%
+
+::Murasame //id 13012 - Dagger
+<desc>A famous sword sharp enough to divide oceans or cut the air to make it bleed water.</desc>
+CRIT +10 vs. Demi-Human
+
+::Murasame_ //id 13013 - Dagger
+<desc>A famous sword sharp enough to divide oceans or cut the air to make it bleed water.</desc>
+CRIT +10 vs. Demi-Human
+
+::Hakujin //id 13014 - Dagger
+<desc>A dagger that has a shining white blade crafted of bone.</desc>
+INT +2
++1% Autospell <color=#0000FF>Heal 1</color> (self) on non-skill attack
+
+::Hakujin_ //id 13015 - Dagger
+<desc>A dagger that has a shining white blade crafted of bone.</desc>
+INT +2
++1% Autospell <color=#0000FF>Heal 1</color> (self) on non-skill attack
+
+::Poison_Knife_ //id 13016 - Dagger
+<desc>A dreadful dagger that has been soaked in toxin.</desc>
++30% chance of <color=#800000>Poison</color> on physical attack
+
+::Ice_Pick_ //id 13017 - Dagger
+<desc>A thin, sharp blade capable of piercing the strongest of armors.</desc>
+Physical Damage Scales with Enemy Defense
+
+::Sucsamad_ //id 13018 - Dagger
+<desc>A dagger crafted in the ancient, traditional ways of a small desert tribe.</desc>
++25% physical damage vs. Earth, Wind
+
+::Ginnungagap_ //id 13019 - Dagger
+<desc>A dagger with an unnaturally dark colored blade, there is an instinctive sense of danger wielding this weapon.</desc>
++5% chance of <color=#800000>Blind</color> on melee attack
+
+::Scalpel //id 13027 - Dagger
+<desc>A small, light, and sharp dagger optimized for swift strikes.</desc>
++5% chance of <color=#800000>Bleed</color> on melee attack
+
+::Tooth_Blade //id 13028 - Dagger
+<desc>A dentist's scalpel that can impede the victim's ability to speak.</desc>
++5% Autospell <color=#0000FF>Slow Cast 1</color> on non-skill attack
+if Refine > 8:
+ +7% Autospell <color=#0000FF>Slow Cast 2</color> instead
+
+::Dragon_Killer_ //id 13030 - Dagger
+<desc>A dagger crafted from a dragon's fang that can easily pierce dragon scales.</desc>
++100% DEF ignore vs. Dragon
+
+::Swordbreaker_ //id 13031 - Dagger
+<desc>A powerful dagger built to catch and destroy weapons.</desc>
+
+::Mailbreaker_ //id 13032 - Dagger
+<desc>A sharp dagger built to puncture and destroy armor.</desc>
+
+::Assassin_Dagger_ //id 13033 - Dagger
+<desc>A dagger commonly used by assassins.</desc>
+HP +20%, SP +15%, ASPD +2%
+
+::Brave_Damascus //id 13036 - Dagger
+STR +1, AGI +1
+
+::Valorous_Damascus //id 13037 - Dagger
+STR +1, AGI +1
+
+::Ivory_Knife //id 13039 - Dagger
+<desc>An ivory dagger, its sharp tip makes it effective for stabbing.</desc>
+AGI +2, ASPD +3%
+
+::Glorious_Gladius //id 13042 - Dagger
++20% DEF ignore vs. Demi-Human
+
+::Six_Shooter //id 13100 - Handgun
+<color=#808080>A basic six chambered pistol.</color>
+
+::Six_Shooter_ //id 13101 - Handgun
+<color=#808080>A basic six chambered pistol.</color>
+
+::Crimson_Bolt //id 13102 - Handgun
+<color=#808080>A bloody red pistol that is rumored to be cursed, but it's only a rumor.</color>
+
+::Crimson_Bolt_ //id 13103 - Handgun
+<color=#808080>A bloody red pistol that is rumored to be cursed, but it's only a rumor.</color>
+
+::Garrison //id 13104 - Handgun
+<color=#808080>A rare pistol whose authenticity can be verified by the engraving.</color>
+
+::Garrison_ //id 13105 - Handgun
+<color=#808080>A rare pistol whose authenticity can be verified by the engraving.</color>
+
+::Gold_Lux //id 13106 - Handgun
+<color=#808080>A decorative, beautiful golden pistol.</color>
+
+::Wasteland's_Outlaw //id 13107 - Handgun
+<color=#808080>A firearm used by gunslingers to brave the wilderness.</color>
+
+::Soldier_Pistol //id 13108 - Handgun
+DEX +2, HIT -10
+
+::Glorious_Pistol //id 13110 - Handgun
++20% DEF ignore vs. Demi-Human
+
+::Branch //id 13150 - Rifle
+<color=#808080>A firearm with a focus on range and accuracy.</color>
+
+::Cyclone //id 13151 - Rifle
+<color=#808080>A high performance rifle with great range and power.</color>
+
+::Cyclone_ //id 13152 - Rifle
+<color=#808080>A high performance rifle with great range and power.</color>
+
+::Dusk //id 13153 - Rifle
+<color=#808080>An advanced rifle with reinforced explosive power.</color>
+
+::Rolling_Stone //id 13154 - Shotgun
+<color=#808080>A heavy shotgun which sounds like flint striking steel.</color>
+
+::Black_Rose //id 13155 - Shotgun
+<color=#808080>A dark, stylish shotgun.</color>
+
+::Gate_Keeper //id 13156 - Shotgun
+<color=#808080>The most powerful shotgun available, a Gunslinger's best friend.</color>
+
+::Drifter //id 13157 - GatlingGun
+<color=#808080>A gatling gun which evokes the image of a lonely traveler.</color>
+
+::Butcher //id 13158 - GatlingGun
+<color=#808080>A gatling gun with enormous destructive power.</color>
+
+::Butcher_ //id 13159 - GatlingGun
+<color=#808080>A gatling gun with enormous destructive power.</color>
+
+::Destroyer //id 13160 - Grenade
+<color=#808080>A top of the line, high performance grenade launcher.</color>
+
+::Destroyer_ //id 13161 - Grenade
+<color=#808080>A top of the line, high performance grenade launcher.</color>
+
+::Inferno //id 13162 - Grenade
+<color=#808080>A grenade launcher that propels bullets with hellfire.</color>
+
+::Long_Barrel //id 13163 - Rifle
+<color=#808080>A sniping rifle with a lengthened barrel for improved accuracy.</color>
+
+::Long_Barrel_ //id 13164 - Rifle
+<color=#808080>A sniping rifle with a lengthened barrel for improved accuracy.</color>
+
+::Jungle_Carbine //id 13165 - Rifle
+<color=#808080>A short barrel rifle suited close quarters combat in the jungle.</color>
+
+::Jungle_Carbine_ //id 13166 - Rifle
+<color=#808080>A short barrel rifle suited close quarters combat in the jungle.</color>
+
+::Gate_Keeper-DD //id 13167 - Shotgun
+<color=#808080>TA modified Gate Keeper with a barrel coated in pure oridecon.</color>
+
+::Thunder_P //id 13168 - Shotgun
+<color=#808080>A sawed off shotgun that fires rapidly at the cost of reduced accuracy.</color>
+
+::Thunder_P_ //id 13169 - Shotgun
+<color=#808080>A sawed off shotgun that fires rapidly at the cost of reduced accuracy.</color>
+
+::Lever_Action_Rifle //id 13170 - Rifle
+<color=#808080>An ornate rifle that fires penetrating shots but reloads slowly.</color>
+
+::Soldier_Rifle //id 13171 - Rifle
+DEX +2, HIT +10, CRIT +10
+
+::Soldier_Gatling_Gun //id 13172 - GatlingGun
+DEX +2
+
+::Soldier_Shotgun //id 13173 - Shotgun
+DEX +2
+
+::Soldier_Grenade_Launcher //id 13174 - Grenade
+DEX +2
+
+::Glorious_Rifle //id 13176 - Rifle
++20% DEF ignore vs. Demi-Human
+
+::Glorious_Gatling_Gun //id 13177 - GatlingGun
++20% DEF ignore vs. Demi-Human
+
+::Glorious_Shotgun //id 13178 - Shotgun
+splash 3x3 AoE on non-skill attack
+
+::Glorious_Grenade_Launcher //id 13179 - Grenade
++20% DEF ignore vs. Demi-Human
+
+::Huuma_Wing_Shuriken //id 13300 - Shuriken
+<color=#808080>A famous huuma that is shaped like a wing.</color>
+
+::Huuma_Giant_Wheel_Shuriken //id 13301 - Shuriken
+<color=#808080>A heavy, giant huuma shaped like a bladed wheel.</color>
+
+::Huuma_Giant_Wheel_Shuriken_ //id 13302 - Shuriken
+<color=#808080>A heavy, giant huuma shaped like a bladed wheel.</color>
+
+::Huuma_Blaze_Shuriken //id 13303 - Shuriken
+<color=#808080>A huuma that sparks like a firecracker when it strikes enemies.</color>
+
+::Huuma_of_Calm_Mind //id 13304 - Shuriken
+<color=#808080>A huuma that enables the user to remain calm in any situation.</color>
+
+::Brave_Huuma //id 13305 - Shuriken
+STR +2, DEX +1
+
+::Valorous_Huuma //id 13306 - Shuriken
+STR +2, DEX +1
+
+::Glorious_Huuma //id 13307 - Shuriken
+MATK +15%
+
+::Cutlus_ //id 13400 - Sword
+<desc>A sword popularized by sea adventurers.</desc>
+STR +2, DEF +1
+Enable <color=#0000FF>Bash 5</color>
+
+::Platinum_Shotel //id 13404 - Sword
+<desc>A fearsome weapon with a unique curved blade.</desc>
+CRIT +50
+
+::Curved_Sword //id 13405 - Sword
+<desc>A thick, flexible sword forged from an elastic alloy.</desc>
+ASPD +10%
++3% chance of <color=#800000>Curse</color> on melee attack
+
+::Brave_Blade //id 13410 - Sword
+STR +1, DEX +1
++20% DEF ignore vs. Demi-Human
++75% physical damage vs. Demi-Human
+
+::Valorous_Blade //id 13411 - Sword
+STR +1, DEX +1
+
+::Twin_Edge_of_Naght_Sieger //id 13412 - Sword
+<desc>One of the twin swords of Naght Sieger, this blue blade exerts raw technique.</desc>
+
+::Twin_Edge_of_Naght_Sieger_ //id 13413 - Sword
+<desc>One of the twin swords of Naght Sieger, this red blade exerts raw strength.</desc>
+
+::Elemental_Sword //id 13414 - Sword
+<desc>A magical sword that attacks with a variety of elements.</desc>
+STR +2, INT +4, DEX +1
+MATK +5%
+
+::Glorious_Flamberge //id 13416 - Sword
++20% DEF ignore vs. Demi-Human
+
+::Glorious_Rapier //id 13417 - Sword
+INT +(Refine + 1)
+
+::Glorious_Holy_Avenger //id 13418 - Sword
+INT +(1 + Refine)
+
