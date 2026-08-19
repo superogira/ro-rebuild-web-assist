@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.138.0
+// @version      4.139.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,16 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.138.0';
+  const VERSION = '4.139.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.139.0', d: '2026-08-19', items: [
+      '🎒 Inventory เริ่มต้นถูกส่งมาใน 0x38 ตัวที่สอง (หลังเลือกตัวละคร) — เพิ่ง decode!',
+      '   (จากการเทียบ capture 3 ครั้ง: ว่าง / Orange 502×1 / +Red Herb 507×2)',
+      '   โครง: signature + รายการ [id×4 :u32][count×4 :u16] + field น้ำหนัก',
+      '   → parse เติม inventory ทันทีตอนเข้าเกม — แก้ปัญหา heal/sell เห็นของว่าง',
+      '   ช่วงแรกก่อนมี 0x32 increment แรก (ทดสอบ parser กับข้อมูลจริง 3 ไฟล์ ตรง 100%)',
+    ]},
     { v: '4.138.0', d: '2026-08-19', items: [
       '🔴 แก้ batch 0x3c — ค้นพบจาก capture วาร์ป: byte หลัง opcode คือ จำนวนระเบียน',
       '   (ไม่ใช่ sub) + flag ต่อระเบียน: 1=ผู้เล่น / 3=MiniBoss / 4=Boss / 5=Warp portal',
@@ -1870,10 +1877,35 @@
     // 0x38 MAP_DATA: zone-enter data — ★ มี zeny ที่ offset 9 (u32LE)
     //   format: [38][u32:?][u32:?][u32:ZENY][...rest...] (mirror protocol.js:1415-1421)
     //   ★ ส่งตอนเข้าแมป/วาร์ป — เป็นแหล่งเดียวที่บอก zeny ปัจจุบัน
+    //   ★★ ตัวที่สอง (หลัง SELECT_CHAR) มี INVENTORY เริ่มต้นท้าย packet!
+    //   (จาก capture เปรียบเทียบ 3 ครั้ง: ว่าง / Orange Potion 502×1 / +Red Herb 507×2)
+    //   โครง: ...[น้ำหนัก:2] + signature `05 00 02 00 0e 04 00 02 00 00` + [prelude 5B]
+    //   + รายการ [id×4 :u32][count×4 :u16] จน id=0 — เช่น d8 07 00 00 = 2008 = 502×4 ✓
     else if (op === 0x38 && u.length >= 13) {
       const zeny = u32(u, 9);
       if (zeny != null && zeny !== playerZeny) {
         playerZeny = zeny;
+      }
+      // ★★★ parse inventory เริ่มต้น — หา signature ก่อน (คงที่ทุก capture)
+      const INV_SIG = [0x05, 0x00, 0x02, 0x00, 0x0e, 0x04, 0x00, 0x02, 0x00, 0x00];
+      let sigIdx = -1;
+      outer: for (let i = 60; i <= u.length - 25; i++) {
+        for (let j = 0; j < INV_SIG.length; j++) { if (u[i + j] !== INV_SIG[j]) continue outer; }
+        sigIdx = i; break;
+      }
+      if (sigIdx >= 0) {
+        let p = sigIdx + INV_SIG.length + 5;   // ข้าม prelude 5 bytes
+        let n = 0;
+        while (p + 6 <= u.length) {
+          const idEnc = u32(u, p);
+          if (idEnc === 0 || idEnc % 4 !== 0) break;   // จบรายการ
+          const cntEnc = u16(u, p + 4);
+          const itemId = idEnc >>> 2, count = cntEnc >>> 2;
+          if (itemId <= 0 || itemId >= 50000 || count <= 0 || count > 30000) break;
+          inventory.set(itemId, count);
+          n++; p += 6;
+        }
+        if (n > 0) dbg('🎒 inventory เริ่มต้น: ' + n + ' รายการ — ' + [...inventory.entries()].slice(0, 8).map(([id, c]) => nameOf(id) + '×' + c).join(', ') + ([...inventory.entries()].length > 8 ? ' ฯลฯ' : ''));
       }
     }
     // ★ 0x3c MINIMAP_MARKER: 2 โหมด
