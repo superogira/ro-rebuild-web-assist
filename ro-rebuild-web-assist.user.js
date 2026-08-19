@@ -119,6 +119,15 @@
   const VERSION = '4.140.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.143.0', d: '2026-08-19', items: [
+      '🎒ใหม่! ปุ่ม Inventory ใน mini-bar — popup แบบในเกม',
+      '   3 tab แนวตั้ง: Item (ของใช้) / Equip (ชุด+อาวุธ เรียงตาม slot) / Etc. (Ammo+Card+ของธรรมดา)',
+      '   grid 10 ช่อง/แถว + icon (บางอันไม่มีรูป) + hover แสดงชื่อ+desc จาก ItemDescriptions',
+      '   แสดงจำนวนชิ้นมุมช่อง + สรุปหัว modal: ชนิด/ชิ้น/น้ำหนัก',
+      '🗃️ item DB v2 — จาก db/Item ของ RagnarokRebuildTcp (2584 รายการ แทน items.csv 1016)',
+      '   เพิ่ม: หมวด (usable/equip/etc) + slot + descriptions (ถอด <color> tags)',
+      '   cache localStorage v2 · Item/Etc เรียงตาม id · Equip ตามลำดับ slot เกม',
+    ]},
     { v: '4.142.0', d: '2026-08-19', items: [
       '🎒 generalize parser inventory + น้ำหนัก — ผ่านทุกกรณีจริง 4/4',
       '   anchor [01|02][maxW×10][f32][curW×10] (prefix ต่างตามตัวละคร) + validation-scan',
@@ -636,51 +645,102 @@
   // ============================================================
   //  Item database (โหลดจาก GitHub raw + cache localStorage)
   // ============================================================
-  const ITEMS_CSV_URL = GITHUB_RAW.replace('/ro-rebuild-web-assist.user.js', '/items.csv');
-  const ITEMS_META_URL = GITHUB_RAW.replace('/ro-rebuild-web-assist.user.js', '/items/meta.json');
+  const DB_BASE = GITHUB_RAW.replace('/ro-rebuild-web-assist.user.js', '/db/Item/');
   const ITEMS_ICON_URL = GITHUB_RAW.replace('/ro-rebuild-web-assist.user.js', '/items/small/');
-  const ITEMDB_CACHE_KEY = 'roAssistItemDB_v1';
-  const itemDB = { names: {}, prices: {}, loaded: false };
+  const ITEMDB_CACHE_KEY = 'roAssistItemDB_v2';   // ★ v2 = จาก db/Item ของ RagnarokRebuildTcp
+  // ★★ itemDB v2 — 6 CSV ของ RagnarokRebuildTcp (2584 รายการ แทน items.csv เดิม 1016)
+  //   cats: usable / equip (มี slot จาก Position) / etc (Ammo+Cards+Regular)
+  //   + desc จาก ItemDescriptions/*.txt (format ::Code //Id + Unity <color> tags)
+  const itemDB = { names: {}, prices: {}, cats: {}, slots: {}, descs: {}, loaded: false };
+  const EQUIP_SLOT_ORDER = ['MainHand','Shield','Headgear','Armor','Garment','Boots','Accessory',
+    '2HSword','2HAxe','2HSpear','2HRod','Sword','Axe','Spear','Rod','Dagger','Bow','Mace','Knuckle',
+    'Katar','Book','Instrument','Whip','Handgun','Rifle','Shotgun','GatlingGun','Grenade','Shuriken'];
+  function equipSlotRank(slot) { const i = EQUIP_SLOT_ORDER.indexOf(slot); return i < 0 ? 999 : i; }
+  function parseCsv(text) {
+    const lines = text.split(/\r?\n/);
+    const head = lines[0].split(',');
+    const rows = [];
+    for (let i = 1; i < lines.length; i++) {
+      if (!lines[i].trim()) continue;
+      rows.push(lines[i].split(','));
+    }
+    return { head, rows };
+  }
+  function parseDescs(text) {
+    const map = {};
+    const parts = text.split(/^::/m);
+    for (const part of parts) {
+      if (!part.trim()) continue;
+      const nl = part.indexOf('\n');
+      if (nl < 0) continue;
+      const m = part.slice(0, nl).trim().match(/^(\S+)\s*\/\/\s*(\d+)/);
+      if (!m) continue;
+      const body = part.slice(nl + 1).trim()
+        .replace(/<color=[^>]*>/gi, '').replace(/<\/color>/gi, '')
+        .replace(/<[^>]+>/g, '');
+      if (body) map[m[2]] = body;
+    }
+    return map;
+  }
   async function loadItemDB() {
     if (itemDB.loaded) return;
-    // ลอง cache ก่อน
     try {
       const cached = localStorage.getItem(ITEMDB_CACHE_KEY);
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (parsed.names && parsed.prices) {
-          itemDB.names = parsed.names;
-          itemDB.prices = parsed.prices;
+        if (parsed.v === 2 && parsed.names) {
+          itemDB.names = parsed.names; itemDB.prices = parsed.prices || {};
+          itemDB.cats = parsed.cats || {}; itemDB.slots = parsed.slots || {}; itemDB.descs = parsed.descs || {};
           itemDB.loaded = true;
-          log('🗃️ โหลด item DB จาก cache (' + Object.keys(parsed.names).length + ' รายการ)');
+          log('🗃️ โหลด item DB v2 จาก cache (' + Object.keys(parsed.names).length + ' รายการ)');
           return;
         }
       }
     } catch (e) {}
-    // โหลดจาก GitHub
     try {
-      log('🗃️ กำลังโหลด item DB จาก GitHub...');
-      const [csvRes, metaRes] = await Promise.all([fetch(ITEMS_CSV_URL), fetch(ITEMS_META_URL)]);
-      if (csvRes.ok) {
-        const csv = await csvRes.text();
-        for (const line of csv.split('\n')) {
-          const c = line.indexOf(',');
-          if (c > 0) { const id = line.slice(0, c).trim(); const nm = line.slice(c + 1).trim(); if (id && nm) itemDB.names[id] = nm; }
+      log('🗃️ กำลังโหลด item DB v2 จาก GitHub (db/Item)...');
+      const files = [
+        ['ItemsUsable.csv', 'usable', null],
+        ['ItemsEquipment.csv', 'equip', 'Position'],
+        ['ItemsWeapons.csv', 'equip', 'Position'],
+        ['ItemsAmmo.csv', 'etc', null],
+        ['ItemsCards.csv', 'etc', 'EquipableSlot'],
+        ['ItemsRegular.csv', 'etc', null],
+      ];
+      const descsFiles = ['DescUsableItems.txt', 'DescEquipment.txt', 'DescWeapons.txt', 'DescAmmunition.txt', 'DescCards.txt', 'DescRegularItems.txt'];
+      const texts = await Promise.all([
+        ...files.map(x => fetch(DB_BASE + x[0]).then(r => r.ok ? r.text() : null).catch(() => null)),
+        ...descsFiles.map(x => fetch(DB_BASE + 'ItemDescriptions/' + x).then(r => r.ok ? r.text() : null).catch(() => null)),
+      ]);
+      let n = 0;
+      for (let fi = 0; fi < files.length; fi++) {
+        const text = texts[fi];
+        if (!text) continue;
+        const [, cat, slotCol] = files[fi];
+        const { head, rows } = parseCsv(text);
+        const idIdx = head.indexOf('Id'), nameIdx = head.indexOf('Name'), priceIdx = head.indexOf('Price');
+        const slotIdx = slotCol ? head.indexOf(slotCol) : -1;
+        for (const r of rows) {
+          const id = (r[idIdx] || '').trim();
+          if (!id) continue;
+          itemDB.names[id] = (r[nameIdx] || '').trim();
+          itemDB.cats[id] = cat;
+          if (priceIdx >= 0 && r[priceIdx]) itemDB.prices[id] = parseInt(r[priceIdx], 10) || 0;
+          if (slotIdx >= 0 && r[slotIdx]) itemDB.slots[id] = r[slotIdx].trim();
+          n++;
         }
       }
-      if (metaRes.ok) {
-        const meta = await metaRes.json();
-        for (const [id, info] of Object.entries(meta)) {
-          if (info && info.buyPrice != null) itemDB.prices[id] = info.buyPrice;
-        }
+      for (let di = 0; di < descsFiles.length; di++) {
+        const text = texts[files.length + di];
+        if (!text) continue;
+        Object.assign(itemDB.descs, parseDescs(text));
       }
       itemDB.loaded = true;
-      // cache ลง localStorage (กันโหลดใหม่ทุกครั้ง)
-      try { localStorage.setItem(ITEMDB_CACHE_KEY, JSON.stringify({ names: itemDB.names, prices: itemDB.prices })); } catch (e) {}
-      log('🗃️ โหลด item DB สำเร็จ: ' + Object.keys(itemDB.names).length + ' ชื่อ, ' + Object.keys(itemDB.prices).length + ' ราคา');
+      try { localStorage.setItem(ITEMDB_CACHE_KEY, JSON.stringify({ v: 2, names: itemDB.names, prices: itemDB.prices, cats: itemDB.cats, slots: itemDB.slots, descs: itemDB.descs })); } catch (e) {}
+      log('🗃️ โหลด item DB v2 สำเร็จ: ' + n + ' รายการ + ' + Object.keys(itemDB.descs).length + ' descriptions');
     } catch (e) {
-      log('⚠️ โหลด item DB ล้มเหลว (offline?) — ใช้ชื่อเริ่มต้น');
-      itemDB.loaded = true;   // ไม่ลองใหม่
+      log('⚠️ โหลด item DB v2 ล้มเหลว (' + e.message + ') — ใช้ชื่อเริ่มต้น');
+      itemDB.loaded = true;
     }
   }
   // ชื่อ item จาก DB (fallback ไป CFG.itemNames หรือ item_<id>)
@@ -6075,6 +6135,7 @@
         <span class="pill off" data-auto>🤖</span>
         <span class="pill" data-teleport style="background:#4a2c6a;color:#d1b3ff">🌀</span>
         <span class="pill" data-monitor style="background:#1a237e;color:#90caf9">🖥️</span>
+        <span class="pill" data-inventory style="background:#3a2a1a;color:#ffb74d" title="Inventory">🎒</span>
         <span class="pill" data-remote style="background:#1a3a1a;color:#81c784;display:none">🌐</span>
         <span class="pill" data-logview style="background:#1a2a3a;color:#82b1ff" title="ดู Log">📋</span>
         <span class="pill" data-chatroom style="background:#1a3a4a;color:#4fc3f7;position:relative" title="ห้องแชท">💬<span id="__assist_chatbadge" style="position:absolute;top:-4px;right:-4px;background:#e74c3c;color:#fff;font-size:8px;border-radius:50%;width:14px;height:14px;display:none;align-items:center;justify-content:center;font-weight:bold"></span></span>
@@ -6590,6 +6651,7 @@
           if (sendRandomWarp()) log('🌀 วาร์ปสุ่ม (กดจาก mini-bar)');
         }
         if (pill.hasAttribute('data-monitor')) { openMonitor(); }
+        if (pill.hasAttribute('data-inventory')) { openInventoryModal(); }
         if (pill.hasAttribute('data-remote')) { openRemoteMonitor(); }
         if (pill.hasAttribute('data-feedback')) { openFeedbackModal(); }
         if (pill.hasAttribute('data-chatroom')) { openChatRoomModal(); }
@@ -7505,7 +7567,96 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
       }
     }, true);
   }
-  function openChangelogModal() {
+  // ★★ INVENTORY POPUP — 3 tab แนวตั้ง (Item/Equip/Etc.) แบบในเกม
+  //   grid 10 ช่อง/แถว + icon (บางอันไม่มีรูป → กล่องว่าง) + hover tooltip ชื่อ+desc
+  //   Equip เรียงตาม slot ลำดับเกม · Item/Etc เรียงตาม id
+  function openInventoryModal() {
+    const old = document.getElementById('__assist_inv_modal');
+    if (old) { old.remove(); return; }
+    const overlay = document.createElement('div');
+    overlay.id = '__assist_inv_modal';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:999999;display:flex;align-items:center;justify-content:center';
+    overlay.innerHTML = `
+      <div style="background:#1a1a2e;color:#e8e8e8;border-radius:12px;padding:14px;width:660px;max-width:92vw;max-height:82vh;display:flex;flex-direction:column;font-family:sans-serif;box-shadow:0 8px 32px rgba(0,0,0,.5)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <span style="font-size:15px;font-weight:700;color:#ffb74d">🎒 Inventory <span id="__assist_inv_count" style="font-size:11px;color:#888"></span></span>
+          <span>
+            <button id="__assist_inv_close" style="background:none;border:none;color:#888;font-size:18px;cursor:pointer">✕</button>
+          </span>
+        </div>
+        <div style="display:flex;gap:8px;flex:1;min-height:0">
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <button class="invtab on" data-tab="usable" style="writing-mode:vertical-rl;text-orientation:mixed;padding:10px 6px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#4a3a1a;color:#ffd54f;min-height:110px">Item</button>
+            <button class="invtab" data-tab="equip" style="writing-mode:vertical-rl;text-orientation:mixed;padding:10px 6px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#333;color:#aaa;min-height:110px">Equip</button>
+            <button class="invtab" data-tab="etc" style="writing-mode:vertical-rl;text-orientation:mixed;padding:10px 6px;font-size:12px;cursor:pointer;border:none;border-radius:6px;background:#333;color:#aaa;min-height:110px">Etc.</button>
+          </div>
+          <div id="__assist_inv_grid" style="flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(10,1fr);gap:4px;align-content:start;padding-right:4px"></div>
+        </div>
+        <div id="__assist_inv_hint" style="font-size:9px;color:#666;margin-top:6px">★ เรียงตาม id (Equip เรียงตาม slot เกม) · hover ดูรายละเอียด</div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const grid = overlay.querySelector('#__assist_inv_grid');
+    const cntEl = overlay.querySelector('#__assist_inv_count');
+
+    function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+    function render(tab) {
+      const items = [...inventory.entries()]
+        .filter(([id, c]) => c > 0 && itemDB.cats[String(id)] === tab)
+        .map(([id, c]) => ({ id, c }));
+      if (tab === 'equip') items.sort((a, b) => {
+        const ra = equipSlotRank(itemDB.slots[String(a.id)] || ''), rb = equipSlotRank(itemDB.slots[String(b.id)] || '');
+        return ra !== rb ? ra - rb : a.id - b.id;
+      });
+      else items.sort((a, b) => a.id - b.id);
+      const total = items.reduce((s, x) => s + x.c, 0);
+      cntEl.textContent = items.length + ' ชนิด · ' + total.toLocaleString() + ' ชิ้น' + (playerWeight != null ? ' · ' + Math.round(playerWeight) + '/' + playerMaxWeight : '');
+      grid.innerHTML = items.map(x => {
+        const k = String(x.id);
+        const name = itemDB.names[k] || ('item_' + x.id);
+        const slot = itemDB.slots[k];
+        const desc = itemDB.descs[k] || '';
+        const tip = '【' + name + '】' + (slot ? ' [' + slot + ']' : '') + (x.id >= 4001 && x.id <= 4520 ? ' [Card]' : '') + '\n' + (desc || '(ไม่มีคำอธิบาย)');
+        return `<div class="invslot" data-tip="${esc(tip)}" style="position:relative;aspect-ratio:1;background:#23262e;border:1px solid #3a3f4b;border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:default;overflow:visible">
+          <img src="${itemIconUrl(x.id)}" style="max-width:80%;max-height:80%;image-rendering:pixelated" onerror="this.style.display='none'">
+          <span style="position:absolute;bottom:0;right:2px;font-size:9px;color:#fff;text-shadow:0 0 2px #000,0 0 2px #000;font-weight:bold">${x.c > 999 ? Math.floor(x.c / 1000) + 'k' : x.c}</span>
+        </div>`;
+      }).join('') || '<div style="grid-column:1/-1;color:#666;font-size:11px;padding:20px;text-align:center">(ว่างเปล่า)</div>';
+    }
+    // ★ tooltip ตาม hover (div เดียว reuse)
+    let tipEl = null;
+    grid.addEventListener('mouseover', (e) => {
+      const slot = e.target.closest('.invslot');
+      if (!slot) return;
+      if (!tipEl) {
+        tipEl = document.createElement('div');
+        tipEl.style.cssText = 'position:fixed;z-index:1000000;background:#111;border:1px solid #555;border-radius:6px;padding:8px 10px;font-size:11px;color:#ddd;max-width:280px;white-space:pre-wrap;pointer-events:none;box-shadow:0 4px 12px rgba(0,0,0,.6);line-height:1.5';
+        document.body.appendChild(tipEl);
+      }
+      tipEl.textContent = slot.dataset.tip || '';
+      tipEl.style.display = '';
+      const r = slot.getBoundingClientRect();
+      tipEl.style.left = Math.min(r.left, innerWidth - 300) + 'px';
+      tipEl.style.top = (r.bottom + 6 > innerHeight - 160 ? r.top - 6 - tipEl.offsetHeight : r.bottom + 6) + 'px';
+    });
+    grid.addEventListener('mouseleave', () => { if (tipEl) tipEl.style.display = 'none'; });
+
+    overlay.querySelectorAll('.invtab').forEach(btn => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        overlay.querySelectorAll('.invtab').forEach(b => { b.style.background = '#333'; b.style.color = '#aaa'; });
+        btn.style.background = '#4a3a1a'; btn.style.color = '#ffd54f';
+        render(btn.dataset.tab);
+      };
+    });
+    render('usable');   // เริ่มที่ Item
+
+    const close = () => { if (tipEl) tipEl.remove(); overlay.remove(); };
+    overlay.querySelector('#__assist_inv_close').onclick = close;
+    overlay.onclick = (e) => { if (e.target === overlay) close(); };
+    // ★ กัน Unity ขโมย click
+    overlay.addEventListener('mousedown', (e) => { e.stopPropagation(); }, true);
+  }
+    function openChangelogModal() {
     const old = document.getElementById('__assist_changelog_modal');
     if (old) old.remove();
     const overlay = document.createElement('div');
