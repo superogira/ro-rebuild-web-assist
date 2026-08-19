@@ -119,6 +119,10 @@
   const VERSION = '4.140.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.143.1', d: '2026-08-19', items: [
+      '🎨 tooltip inventory: ชื่อ item เป็นแถบ bg สีน้ำเงิน (เหมือนในเกม) — desc ธรรมดา',
+      '📍 popup inventory ชิดขวาจอแล้ว (เหมือน log modal)',
+    ]},
     { v: '4.143.0', d: '2026-08-19', items: [
       '🎒ใหม่! ปุ่ม Inventory ใน mini-bar — popup แบบในเกม',
       '   3 tab แนวตั้ง: Item (ของใช้) / Equip (ชุด+อาวุธ เรียงตาม slot) / Etc. (Ammo+Card+ของธรรมดา)',
@@ -7253,7 +7257,7 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
     if (old) old.remove();
     const overlay = document.createElement('div');
     overlay.id = '__assist_feedback_modal';
-    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:999999;display:flex;align-items:center;justify-content:center';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:999999;display:flex;align-items:center;justify-content:flex-end;padding-right:10px';
     overlay.innerHTML = `
       <div style="background:#1e1e2e;color:#e8e8e8;border-radius:12px;padding:20px;width:480px;max-width:90vw;font-family:sans-serif;box-shadow:0 8px 32px rgba(0,0,0,.5)">
         <div style="font-size:16px;font-weight:700;margin-bottom:4px">💬 แจ้งปัญหา / ข้อเสนอแนะ</div>
@@ -7615,24 +7619,26 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
         const name = itemDB.names[k] || ('item_' + x.id);
         const slot = itemDB.slots[k];
         const desc = itemDB.descs[k] || '';
-        const tip = '【' + name + '】' + (slot ? ' [' + slot + ']' : '') + (x.id >= 4001 && x.id <= 4520 ? ' [Card]' : '') + '\n' + (desc || '(ไม่มีคำอธิบาย)');
-        return `<div class="invslot" data-tip="${esc(tip)}" style="position:relative;aspect-ratio:1;background:#23262e;border:1px solid #3a3f4b;border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:default;overflow:visible">
+        const nameBar = name + (slot ? ' [' + slot + ']' : '') + (x.id >= 4001 && x.id <= 4520 ? ' [Card]' : '');
+        return `<div class="invslot" data-name="${esc(nameBar)}" data-desc="${esc(desc || '(ไม่มีคำอธิบาย)')}" style="position:relative;aspect-ratio:1;background:#23262e;border:1px solid #3a3f4b;border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:default;overflow:visible">
           <img src="${itemIconUrl(x.id)}" style="max-width:80%;max-height:80%;image-rendering:pixelated" onerror="this.style.display='none'">
           <span style="position:absolute;bottom:0;right:2px;font-size:9px;color:#fff;text-shadow:0 0 2px #000,0 0 2px #000;font-weight:bold">${x.c > 999 ? Math.floor(x.c / 1000) + 'k' : x.c}</span>
         </div>`;
       }).join('') || '<div style="grid-column:1/-1;color:#666;font-size:11px;padding:20px;text-align:center">(ว่างเปล่า)</div>';
     }
-    // ★ tooltip ตาม hover (div เดียว reuse)
+    // ★ tooltip ตาม hover (div เดียว reuse) — ชื่อเป็นแถบ bg + desc ธรรมดา
     let tipEl = null;
     grid.addEventListener('mouseover', (e) => {
       const slot = e.target.closest('.invslot');
       if (!slot) return;
       if (!tipEl) {
         tipEl = document.createElement('div');
-        tipEl.style.cssText = 'position:fixed;z-index:1000000;background:#111;border:1px solid #555;border-radius:6px;padding:8px 10px;font-size:11px;color:#ddd;max-width:280px;white-space:pre-wrap;pointer-events:none;box-shadow:0 4px 12px rgba(0,0,0,.6);line-height:1.5';
+        tipEl.style.cssText = 'position:fixed;z-index:1000000;background:#111;border:1px solid #555;border-radius:6px;padding:0;font-size:11px;color:#ddd;max-width:280px;pointer-events:none;box-shadow:0 4px 12px rgba(0,0,0,.6);line-height:1.5;overflow:hidden';
+        tipEl.innerHTML = '<div class="__inv_name" style="background:#2a4a7a;color:#fff;font-weight:bold;padding:5px 10px"></div><div class="__inv_desc" style="padding:6px 10px;white-space:pre-wrap"></div>';
         document.body.appendChild(tipEl);
       }
-      tipEl.textContent = slot.dataset.tip || '';
+      tipEl.querySelector('.__inv_name').textContent = slot.dataset.name || '';
+      tipEl.querySelector('.__inv_desc').textContent = slot.dataset.desc || '';
       tipEl.style.display = '';
       const r = slot.getBoundingClientRect();
       tipEl.style.left = Math.min(r.left, innerWidth - 300) + 'px';
