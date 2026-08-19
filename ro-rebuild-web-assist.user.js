@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.139.2
+// @version      4.140.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,12 +116,20 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.139.2';
+  const VERSION = '4.140.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.140.0', d: '2026-08-19', items: [
+      '🔴🔴 HOTFIX — แก้ syntax error ที่ทำให้ script รันไม่ได้เลย (mini-bar หาย!)',
+      '   เหตุ: changelog 4.139.2 มี newline หลุดเข้าไปใน string บรรทัด 123',
+      '   → ทั้งไฟล์ parse ไม่ผ่าน → ไม่มี panel/log/บอท ทั้งหมดตาย',
+      '   (console ขึ้น (index):124 Invalid or unexpected token ตอน Tampermonkey ฉีด script)',
+      '🛠️ โบนัส: PANEL RESURRECTION — ตรวจทุก 5s ถ้าหน้าเกมพังแล้วล้าง DOM ไปพร้อม panel',
+      '   → สร้างใหม่อัตโนมัติ (สูงสุด 10 ครั้ง) + log 🛠️ ทุกครั้ง',
+    ]},
     { v: '4.139.2', d: '2026-08-19', items: [
-      '🐛 แก้ offset น้ำหนัก (off-by-one): maxW@sig-16 · curW@sig-8 — ตรวจกับไฟล์จริง 3 ไฟล์
-      0/3130 · 10/3130 · 16/3130 ✓ ตรงหมด (เดิมอ่านเพี้ยนเพราะนับระยะผิด 1 byte)',
+      '🐛 แก้ offset น้ำหนัก (off-by-one): maxW@sig-16 · curW@sig-8 — ตรวจกับไฟล์จริง 3 ไฟล์',
+      '   0/3130 · 10/3130 · 16/3130 ✓ ตรงหมด (เดิมอ่านเพี้ยนเพราะนับระยะผิด 1 byte)',
     ]},
     { v: '4.139.1', d: '2026-08-19', items: [
       '⚖️ decode น้ำหนักจาก 0x38 (ยืนยันด้วยค่าจริงจากผู้ใช้: max 3130, Orange 10/ชิ้น, Red Herb 3/ชิ้น)',
@@ -8396,6 +8404,19 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
   // ---------- bootstrap UI (รอ DOM ready) ----------
   function startUI() {
     buildUI();
+    // ★★ PANEL RESURRECTION — หน้าเกมพังกลางทางแล้วล้าง DOM (เช่น loader retry สร้าง body ใหม่)
+    //   = panel ของเราโดนลบไปพร้อมกัน → ตรวจทุก 5s ถ้า root หายไปให้สร้างใหม่
+    //   (เคสจริง: (index):124 SyntaxError ใน Object.send ของหน้าเกม → mini-bar หาย)
+    let uiRebuilds = 0;
+    setInterval(() => {
+      if (document.getElementById('__assist_root')) return;
+      if (uiRebuilds >= 10) return;   // กันวนสร้างไม่จบ (หน้าพังถาวร — ปล่อย)
+      uiRebuilds++;
+      try {
+        buildUI();
+        log('🛠️ panel โดนลบจากหน้าเว็บ (หน้าเกมพัง/ล้าง DOM?) → สร้างใหม่แล้ว (ครั้ง ' + uiRebuilds + ')');
+      } catch (e) {}
+    }, 5000);
     uiLoop = setInterval(() => {
       renderUI();
       sendMonitorData();   // ★ ส่งไป monitor.html
