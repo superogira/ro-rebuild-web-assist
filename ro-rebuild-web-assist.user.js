@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.150.0
+// @version      4.151.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,17 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.150.0';
+  const VERSION = '4.151.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.151.0', d: '2026-08-20', items: [
+      '⚔️ Equip: ถอด bag slot id จาก login block (@28 ค่า ≥1000) — ของที่มาตั้งแต่ login',
+      '   ตอนนี้มี slot id ให้ฝาก/ขายได้แล้ว (เดิมไม่มี → ส่งเป็น stackable → server ปฏิเสธเงียบ',
+      '   → ของไม่ยอมออกจากรายการ = "รายการไม่ตรงกับความจริง" ที่เจอ)',
+      '🛡️ กันพัง: slot id จาก login block จะไม่ optimistic ลบตอนฝาก (รอ server ยืนยัน 0x32)',
+      '   — ต่างจากของที่ได้จาก sub=5 (verified) ที่ optimistic ได้ตามเดิม',
+      'ℹ️ Equip tab = ของสวมอยู่ + ของในถุง รวมกัน (protocol เกมส่งมาแบบนี้ — ยังแยกไม่ได้ 100%)',
+    ]},
     { v: '4.150.0', d: '2026-08-20', items: [
       '🌀 TELEPORT SERIALIZER — server รับ 0x40 ห่างกัน ~3s ยิงถี่ ตัวหลังถูกดรอปเงียบ!',
       '   เคสจริง: วาร์ปกลับฟาร์ม+เริ่มฝาก+วาร์ปสุ่ม ใน 3 วิ → warp หาย → "ประกาศวาร์ปแต่ไม่ไปไหน"',
@@ -1982,6 +1990,7 @@
             const slots = equipmentSlots.get(itemId) || [];
             if (!slots.includes(slotId)) slots.push(slotId);
             equipmentSlots.set(itemId, slots);
+            verifiedEquipSlots.add(slotId);   // ★ ยืนยันแน่จาก server (ต่างจาก @28 ของ login block)
           }
           dbg('⚔️ +equipment:', nameOf(itemId), '(slot', slotId + ') — รายการ equip อัปเดต');
         }
@@ -2170,6 +2179,8 @@
           if (eqStart >= 0) {
             equipmentList.length = 0;
             invDataVer++;
+            // ★★ login = ความจริงชุดใหม่ → ล้าง slot id เก่าก่อน (id เก่าจากรอบก่อนหน้าใช้ไม่ได้)
+            equipmentSlots.clear();
             let ep = eqStart;
             while (ep + 44 <= u.length) {
               const inst = u32(u, ep);
@@ -2179,6 +2190,17 @@
               const eqId = idE2 >>> 2;
               if (eqId <= 0 || eqId > 12000) break;
               equipmentList.push(eqId);
+              // ★★ @28 = bag slot id ของชิ้นที่ "ไม่ได้สวม" (ค่า ≥1000 — เช่น 16126-16647)
+              //   scale เดียวกับ sub=5 (20xxx) — id โตตามอายุไอเทม
+              //   → ลงทะเบียนให้ equipmentSlots = ฝาก/ขายของที่มาตั้งแต่ login ได้
+              //   (เดิม: ของ login ไม่มี slot id → ถูกส่งเป็น stackable → server ปฏิเสธเงียบ)
+              //   ค่าเล็ก 0/1/2 = ชิ้นที่กำลังสวมอยู่ (slot id ไม่ถูกส่ง) → ข้าม
+              const bagSlotE = u32(u, ep + 28);
+              if (bagSlotE >= 1000 && bagSlotE < 100000) {
+                const slots2 = equipmentSlots.get(eqId) || [];
+                if (!slots2.includes(bagSlotE)) slots2.push(bagSlotE);
+                equipmentSlots.set(eqId, slots2);
+              }
               ep += 44;
             }
           }
@@ -3240,8 +3262,9 @@
       const eqSlots = equipmentSlots.get(itemId);
       if (eqSlots && eqSlots.length > 0) {
         // ★★ equipment — ฝากจาก slot สูง→ต่ำ (กัน index shift) ทีละชิ้น amount=1
+        //   verified=false (slot id จาก login block) → ไม่ optimistic ลบ รอ server ยืนยัน
         const sorted = [...eqSlots].sort((a, b) => b - a);
-        for (const slotId of sorted) queue.push({ itemId, amount: 1, invId: slotId, isEquipment: true });
+        for (const slotId of sorted) queue.push({ itemId, amount: 1, invId: slotId, isEquipment: true, verified: verifiedEquipSlots.has(slotId) });
       } else {
         // ★ stackable — ทั้งกองทีเดียว (moveId = itemId)
         queue.push({ itemId, amount: stock, invId: itemId, isEquipment: false });
@@ -3352,10 +3375,14 @@
       }
       const item = storageMoveQueue[storageMoveIdx];
       const moveId = item.isEquipment ? item.invId : item.itemId;
-      log('🏦 ฝาก', nameOf(item.itemId) + (item.isEquipment ? ' (slot ' + item.invId + ')' : ' ×' + item.amount));
+      log('🏦 ฝาก', nameOf(item.itemId) + (item.isEquipment ? ' (slot ' + item.invId + (item.verified === false ? ' ?' : '') + ')' : ' ×' + item.amount));
       sendStorageMove(moveId, item.amount);
       // ★ optimistic: ลบ slot + ลด inventory count (server จะส่ง 0x32 removal ยืนยัน)
-      if (item.isEquipment) {
+      //   ★★ เฉพาะ slot id ที่ verified (จาก sub=5) — ตัวจาก login block (@28) ถ้า decode ผิด
+      //      แล้ว server ปฏิเสธ จะได้ไม่ลบของหลอก ๆ (รอ 0x32 removal เป็นตัวชี้ขาด)
+      if (item.isEquipment && item.verified === false) {
+        // ข้าม optimistic — รอ server ยืนยัน
+      } else if (item.isEquipment) {
         const slots = equipmentSlots.get(item.itemId);
         if (slots) {
           const i = slots.indexOf(item.invId);
@@ -3409,6 +3436,7 @@
   // ★★ equipmentList — อาวุธ/ชุดแยกเป็นชิ้นตามลำดับใน packet (ก้อน 0x13880 = ลำดับ slot เกม)
   const equipmentList = [];    // itemId -> count (authoritative from 0x32, mirror world.js:34)
   const equipmentSlots = new Map(); // ★ itemId -> [slotId, slotId, ...] (mirror world.js:773-777)
+  const verifiedEquipSlots = new Set(); // ★ slotId ที่ยืนยันแน่ (จาก 0x32 sub=5) — ต่างจากของ login block (@28)
   let invDataVer = 0;          // ★ version ของ inventory/equipment — bump ทุกครั้งที่ข้อมูลเปลี่ยน (modal live-refresh)
   let lastOutEquip = null;     // ★ OUT 0x30 ล่าสุด {idx, action, at} — ให้ IN 0x30 รู้ทิศทาง สวมใส่/ถอด
   let inventoryFull = false;      // true เมื่อ server ส่ง "too full" (0x20)
