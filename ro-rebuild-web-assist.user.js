@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.160.1
+// @version      4.160.2
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,17 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.160.1';
+  const VERSION = '4.160.2';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.160.2', d: '2026-08-20', items: [
+      '🔓 แก้ deadlock ค้างหลังกด "ฝากเดี๋ยวนี้" — sellLoop/storageLoop บล็อกกันเอง',
+      '   (sell รอ storage จบ / storage รอ sell จบ) จน watchdog ทั้งคู่ตาย ค้างถาวร',
+      '   เกิดเมื่อ: ขายรอบ equipment ยังไม่ได้คำตอบ แล้วกดฝากทับ → ทั้งคู่ตาย',
+      '   → ย้ายการ์ดกัน race ไปไว้เฉพาะช่วง trigger — state machine + watchdog',
+      '     ของแต่ละตัวรันต่อเสมอ (sell ติด 15s ก็ abort เองได้ ไม่ลาก storage ตาย)',
+      '🚫 depositNow/sellNow ปฏิเสธถ้าอีกฝ่ายกำลังทำอยู่ (บอกชัด รอให้จบก่อน)',
+    ]},
     { v: '4.160.1', d: '2026-08-20', items: [
       '🐛 แก้ "ไม่มีของที่จะฝากใน inventory" ทั้งที่มี equipment เต็มถุง —',
       '   ของ equipment จาก login อยู่ใน equipmentList/equipmentSlots ไม่ใช่ inventory map',
@@ -3364,15 +3372,16 @@
   }
   // สร้าง trigger check + state machine ใน loop เดียว
   const sellLoop = setInterval(() => {
-    if (!CFG.sellEnabled) return;
     if (!activeWS || activeWS.readyState !== 1) return;
     if (isDead) return;
-    // ★ กัน race: ถ้า storage กำลังทำอยู่ → รอก่อน
-    if (storageState !== 'IDLE') return;
     const now = nowMs();
 
     // === trigger (เฉพาะ IDLE) ===
+    //   ★★ การ์ดกัน race อยู่ "ข้างใน" trigger เท่านั้น — ห้ามบล็อคทั้ง loop!
+    //   (เคยเป็น deadlock: sell รอ storage จบ / storage รอ sell จบ จน watchdog ตายทั้งคู่)
     if (sellState === 'IDLE') {
+      if (!CFG.sellEnabled) return;
+      if (storageState !== 'IDLE') return;   // storage กำลังทำ → ไม่ trigger ขาย
       let shouldSell = false; let reason = '';
       // trigger 1: ของเต็ม
       if (CFG.sellOnFull && inventoryFull && CFG.sellItemIds.length > 0) { shouldSell = true; reason = 'ของเต็ม'; }
@@ -3543,15 +3552,15 @@
     return queue;
   }
   const storageLoop = setInterval(() => {
-    if (!CFG.storageEnabled) return;
     if (!activeWS || activeWS.readyState !== 1) return;
     if (isDead) return;
-    // ★ กัน race: ถ้า sell กำลังทำอยู่ → รอก่อน (storage จะ trigger หลัง sell เสร็จผ่าน depositAfterSell chain)
-    if (sellState !== 'IDLE') return;
     const now = nowMs();
 
     // === trigger (IDLE เท่านั้น) ===
+    //   ★★ การ์ดกัน race อยู่ "ข้างใน" trigger เท่านั้น — ห้ามบล็อคทั้ง loop (กัน deadlock เหมือน sellLoop)
     if (storageState === 'IDLE') {
+      if (!CFG.storageEnabled) return;
+      if (sellState !== 'IDLE') return;   // sell กำลังทำ → ไม่ trigger ฝาก (chain หลัง sell เสร็จอยู่แล้ว)
       let shouldDeposit = false; let reason = '';
       // trigger 1: ของเต็ม (เหมือน sell แต่ฝากแทน)
       if (CFG.depositOnFull && inventoryFull && CFG.depositItemIds.length > 0) { shouldDeposit = true; reason = 'ของเต็ม'; }
@@ -5684,7 +5693,7 @@
     setSellItems(...ids) { CFG.sellItemIds = ids; log('💰 ขาย item:', ids.map(nameOf).join(', ')); },
     addSellItem(id) { if (!CFG.sellItemIds.includes(id)) CFG.sellItemIds.push(id); log('💰 เพิ่มขาย:', nameOf(id)); },
     removeSellItem(id) { CFG.sellItemIds = CFG.sellItemIds.filter(x => x !== id); log('💰 เลิกขาย:', nameOf(id)); },
-    sellNow() { if (sellState === 'IDLE' && currentMap && player.x != null) { sellReturnTo = { map: currentMap, x: Math.round(player.x), y: Math.round(player.y) }; sendTeleport(CFG.sellNpcMap, CFG.sellNpcX, CFG.sellNpcY); setSellState('WARP_TO_NPC'); log('💰 ขายทันที! → วาร์ป', CFG.sellNpcMap, '@(', CFG.sellNpcX, CFG.sellNpcY + ')'); } else { log('⚠️ ไม่สามารถขายได้ตอนนี้ (state:', sellState + ')'); } },
+    sellNow() { if (storageState !== 'IDLE') { log('⚠️ กำลังฝากของอยู่ (state:', storageState + ') — รอให้จบก่อนแล้วค่อยขาย'); return; } if (sellState === 'IDLE' && currentMap && player.x != null) { sellReturnTo = { map: currentMap, x: Math.round(player.x), y: Math.round(player.y) }; sendTeleport(CFG.sellNpcMap, CFG.sellNpcX, CFG.sellNpcY); setSellState('WARP_TO_NPC'); log('💰 ขายทันที! → วาร์ป', CFG.sellNpcMap, '@(', CFG.sellNpcX, CFG.sellNpcY + ')'); } else { log('⚠️ ไม่สามารถขายได้ตอนนี้ (state:', sellState + ')'); } },
     getInventory() { return [...inventory.entries()].map(([id, c]) => ({ id, name: itemDisplayName(id), count: c, action: getItemAction(Number(id)) })).sort((a, b) => b.count - a.count); },
 
     // ---------- Auto-Storage (ฝากเข้า Kafra) ----------
@@ -5707,6 +5716,7 @@
     removeDepositItem(id) { CFG.depositItemIds = CFG.depositItemIds.filter(x => x !== id); log('🏦 เลิกฝาก:', nameOf(id)); },
     depositNow() {
       if (storageState !== 'IDLE') { log('⚠️ กำลังฝากอยู่แล้ว (state:', storageState + ')'); return; }
+      if (sellState !== 'IDLE') { log('⚠️ กำลังขายของอยู่ (state:', sellState + ') — รอให้จบก่อนแล้วค่อยกดฝาก'); return; }
       if (!CFG.depositItemIds.length) { log('⚠️ ยังไม่ได้เลือก item ที่จะฝาก'); return; }
       if (!currentMap || player.x == null) { log('⚠️ ยังไม่รู้พิกัดตัวละคร'); return; }
       // ★★ ตรวจผ่าน equipmentSlots ด้วย — ของ equipment จาก login ไม่เคยเข้า inventory map
