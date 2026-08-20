@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.158.1
+// @version      4.159.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,19 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.158.1';
+  const VERSION = '4.159.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.159.0', d: '2026-08-20', items: [
+      '🐛 แก้ฝาก equipment ไม่ได้ + "Cannot store while equipped":',
+      '   ของที่สวมอยู่ก็ยังถือ bag slot ของตัวเอง! สูตรเดิม (ข้ามชิ้นสวมตอนนับ slot) ทำให้เลขเลื่อน',
+      '   ไปโดนชิ้นที่สวมอยู่ → server ปฏิเสธ หรือฝากผิดชิ้นแบบเงียบ ๆ',
+      '   → slot id = 20000 + ลำดับในก้อน (รวมชิ้นสวม) · ลงทะเบียนฝากได้เฉพาะชิ้นที่ไม่ได้สวม',
+      '🔄 สวม (ผ่านเกม) → slot ถูกถอดออกจากคิวฝากทันที · ถอด → คืน slot เดิม',
+      '📊 สรุปผลฝากจริง: "สำเร็จ X/Y" นับเฉพาะชิ้นที่ server ตอบ 0x32 ยืนยัน —',
+      '   แก้เคส "ขึ้นว่าฝากครบแต่ไม่มีอะไรถูกฝากจริง" (server ปฏิเสธเงียบ ๆ)',
+      '⚠️ จับข้อความ "Cannot store while equipped" แสดง log ชัดเจน',
+    ]},
     { v: '4.158.1', d: '2026-08-20', items: [
       '🎒 pill Inventory ใน mini-bar ใส่ icon 🎒 นำหน้าจำนวนเสมอ (เดิมตัว setter เขียนทับจน icon หาย)',
       '   + แก้ selector ชนกัน — ตอนนี้แถวสถิติ 🎒 Inventory ก็อัปเดตแล้วด้วย (เดิมค้าง ?)',
@@ -2116,6 +2126,10 @@
           inventory.set(itemId, count);   // SET ตรงจาก server (แม่นยำเสมอ)
           // ★ จดว่า "เก็บได้ใน session นี้" เมื่อจำนวนเพิ่มขึ้น (หรือเห็นครั้งแรก) — สำหรับแท็บสถิติ
           if (prevCnt == null || count > prevCnt) sessionPickups.set(itemId, Date.now());
+          // ★ ฝาก stackable สำเร็จจริง (จำนวนลดจาก server) — สำหรับสรุปผลตอนปิด storage
+          if (typeof storageMoveQueue !== 'undefined' && storageState === 'MOVE_ITEMS' && prevCnt != null && count < prevCnt) {
+            for (const q of storageMoveQueue) if (!q.isEquipment && q.itemId === itemId) q._confirmed = true;
+          }
         }
       } else if (sub === 5 && u.length >= 15) {
         // ★ equipment add (sub=5): itemId @ offset 12 (2B LE) bit-packed >>> 1
@@ -2160,6 +2174,10 @@
                 if (eqIdx >= 0) equipmentList.splice(eqIdx, 1);
                 invDataVer++;
                 inventoryFull = false;   // ★ server ยืนยันมีของออกจริง = slot ว่างแน่นอน
+                // ★ ทำเครื่องหมายว่ารายการฝากชิ้นนี้สำเร็จจริง (สำหรับสรุปผลตอนปิด storage)
+                if (typeof storageMoveQueue !== 'undefined' && storageState === 'MOVE_ITEMS') {
+                  for (const q of storageMoveQueue) if (q.isEquipment && q.invId === slotId) q._confirmed = true;
+                }
                 break;
               }
             }
@@ -2186,13 +2204,33 @@
       if (matchOut) wantWorn = (o.action === 1);
       else if (recentOut && o.action === 1) wantWorn = false;   // ข้อความคู่ของ swap = ชิ้นเก่าถูกถอดออก
       if (wantWorn !== null) {
-        let hitId = null;
+        // ★ หาชิ้นจาก slot low-byte — เช็คทั้ง equipmentSlots (ของ sub=5) และ slotId ใน record (ของ login)
+        let rec = null, slotFull = null;
         for (const [iid, slots] of equipmentSlots) {
-          if (slots.some(s => (s & 0xff) === invIdx)) { hitId = iid; break; }
+          const f = slots.find(s => (s & 0xff) === invIdx);
+          if (f != null) { slotFull = f; rec = equipmentList.find(x => x.id === iid && x.slotId === f) || equipmentList.find(x => x.id === iid); break; }
         }
-        if (hitId != null) {
-          const rec = equipmentList.find(x => x.id === hitId && x.worn !== wantWorn) || equipmentList.find(x => x.id === hitId);
-          if (rec && rec.worn !== wantWorn) { rec.worn = wantWorn; invDataVer++; }
+        if (!rec) {
+          rec = equipmentList.find(x => x.slotId != null && (x.slotId & 0xff) === invIdx && x.worn !== wantWorn)
+             || equipmentList.find(x => x.slotId != null && (x.slotId & 0xff) === invIdx);
+          if (rec) slotFull = rec.slotId;
+        }
+        if (rec && rec.worn !== wantWorn) {
+          if (rec.slotId != null) slotFull = rec.slotId;
+          rec.worn = wantWorn;
+          if (wantWorn) {
+            // ★ สวม → ออกจากถุง: ถอด slot ออกจาก equipmentSlots (กันส่งฝากแล้วโดน "equipped")
+            if (slotFull != null) {
+              const ss = equipmentSlots.get(rec.id);
+              if (ss) { const si = ss.indexOf(slotFull); if (si >= 0) ss.splice(si, 1); if (ss.length === 0) equipmentSlots.delete(rec.id); }
+            }
+          } else if (slotFull != null) {
+            // ★ ถอด → กลับเข้าถุง: คืน slot เดิม (ยืนยัน: สวม/ถอดใช้ idx เดิมซ้ำ)
+            const ss = equipmentSlots.get(rec.id) || [];
+            if (!ss.includes(slotFull)) ss.push(slotFull);
+            equipmentSlots.set(rec.id, ss);
+          }
+          invDataVer++;
         }
       }
       if (matchOut) {
@@ -2225,6 +2263,10 @@
         if (msg.includes('could not complete sale') || msg.includes('do not match')) {
           // sell failed signal
           if (sellState === 'SELL') { log('⚠️ ขายของล้มเหลว (server ปฏิเสธ)'); }
+        }
+        // ★ ฝากของที่กำลังสวมอยู่ — server ปฏิเสธเงียบ ๆ (เคสจริง: slot id เลื่อนไปโดนชิ้นที่สวม)
+        if (msg.includes("while it's equipped") || msg.includes('while equipped')) {
+          log('⚠️ ฝากไม่ได้: ชิ้นนั้นกำลังถูกสวมอยู่ (Cannot store while equipped)');
         }
       } catch (e) {}
     }
@@ -2380,16 +2422,18 @@
               if (i2 < recs.length) recs[i2].worn = true;
             }
           }
-          // ★★ pass 3: bag slot id = 20000 + ลำดับในถุง (ข้ามชิ้นที่สวมอยู่ — ไม่ถือ bag slot)
-          //   ยืนยันจาก deposit จริง: Cotton=20000 · Guard=20003 · Egg=20004 (ตอนไม่สวมอะไร)
-          let bagIdx = 0;
-          for (const r of recs) {
+          // ★★ pass 3: bag slot id = 20000 + ลำดับในก้อน "รวมชิ้นที่สวมอยู่ด้วย"
+          //   ★ ของที่สวมก็ยังถือ slot ของตัวเอง (ไม่หายไปไหน) — ยืนยันจาก server error
+          //   "Cannot store an item while it's equipped" ตอนสูตรเดิม (ข้ามชิ้นสวม) ทำให้เลขเลื่อน
+          //   ไปโดนชิ้นที่สวมอยู่ + สวม/ถอดกลับมาที่ slot เดิมเสมอ (0x30 ใช้ idx เดิมซ้ำ)
+          //   → เก็บ slotId ไว้ใน record ทุกชิ้น แต่ลงทะเบียนให้ฝาก/ขายได้เฉพาะชิ้นที่ไม่ได้สวม
+          for (let bi = 0; bi < recs.length; bi++) {
+            const r = recs[bi];
+            r.slotId = 20000 + bi;
             if (!r.worn) {
-              const slotId2 = 20000 + bagIdx;
               const slots2 = equipmentSlots.get(r.id) || [];
-              if (!slots2.includes(slotId2)) slots2.push(slotId2);
+              if (!slots2.includes(r.slotId)) slots2.push(r.slotId);
               equipmentSlots.set(r.id, slots2);
-              bagIdx++;
             }
             equipmentList.push(r);
           }
@@ -3572,8 +3616,12 @@
       // ★ ส่งของทีละชิ้น (รอ 800ms ระหว่างชิ้น กัน server บล็อก)
       if (now - storageLastMoveAt < 800) return;
       if (storageMoveIdx >= storageMoveQueue.length) {
-        // ครบแล้ว → ปิด storage
-        log('🏦 ฝากครบแล้ว → ปิด storage');
+        // ★★ สรุปผลจริง — นับเฉพาะชิ้นที่ server ตอบกลับมายืนยัน (0x32)
+        //   แก้เคส: ส่งครบทุกชิ้นแล้วขึ้น "ฝากครบแล้ว" ทั้งที่ server ปฏิเสธเงียบ ๆ ทั้งหมด
+        const okN = storageMoveQueue.filter(q => q._confirmed).length;
+        const failN = storageMoveQueue.length - okN;
+        log('🏦 ฝากเสร็จ: สำเร็จ ' + okN + '/' + storageMoveQueue.length + (failN > 0 ? ' ⚠️ ไม่ตอบ ' + failN + ' ชิ้น (server ปฏิเสธ/สวมอยู่)' : ' ✅'));
+        log('🏦 ปิด storage');
         sendStorageClose();
         setStorageState('CLOSE_STORAGE');
         return;
