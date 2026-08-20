@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.158.0
+// @version      4.158.1
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,14 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.158.0';
+  const VERSION = '4.158.1';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.158.1', d: '2026-08-20', items: [
+      '🎒 pill Inventory ใน mini-bar ใส่ icon 🎒 นำหน้าจำนวนเสมอ (เดิมตัว setter เขียนทับจน icon หาย)',
+      '   + แก้ selector ชนกัน — ตอนนี้แถวสถิติ 🎒 Inventory ก็อัปเดตแล้วด้วย (เดิมค้าง ?)',
+      '🔀 ย้ายปุ่ม Inventory มาไว้หลังปุ่ม 🤖 Auto',
+    ]},
     { v: '4.158.0', d: '2026-08-20', items: [
       '🏷️ ชื่ออุปกรณ์แสดงจำนวนช่องการ์ดจริง เช่น "Sword[3]" / "+7 Helm[1]" (ไม่มีช่อง = ไม่แสดง)',
       '📊 Tooltip อุปกรณ์แสดงสเตตัสก่อนคำอธิบาย:',
@@ -6646,9 +6651,9 @@
         <span class="pill off" data-storage>🏦</span>
         <span class="pill off" data-flee>🏃</span>
         <span class="pill off" data-auto>🤖</span>
+        <span class="pill" data-inventory style="background:#3a2a1a;color:#ffb74d" title="Inventory">🎒</span>
         <span class="pill" data-teleport style="background:#4a2c6a;color:#d1b3ff">🌀</span>
         <span class="pill" data-monitor style="background:#1a237e;color:#90caf9">🖥️</span>
-        <span class="pill" data-inventory style="background:#3a2a1a;color:#ffb74d" title="Inventory">🎒</span>
         <span class="pill" data-remote style="background:#1a3a1a;color:#81c784;display:none">🌐</span>
         <span class="pill" data-logview style="background:#1a2a3a;color:#82b1ff" title="ดู Log">📋</span>
         <span class="pill" data-chatroom style="background:#1a3a4a;color:#4fc3f7;position:relative" title="ห้องแชท">💬<span id="__assist_chatbadge" style="position:absolute;top:-4px;right:-4px;background:#e74c3c;color:#fff;font-size:8px;border-radius:50%;width:14px;height:14px;display:none;align-items:center;justify-content:center;font-weight:bold"></span></span>
@@ -8917,7 +8922,12 @@ return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" d
     set('[data-combat-target]', tgt ? (tgt.id + ' pending:' + tgt.pending) : '(none)');
     set('[data-combat-aggro]', agg.mobAttackers + ' ตี / ' + agg.aggro + ' aggro / ' + agg.threat + ' threat / ' + agg.monstersNearby + ' รอบ');
     // inventory + sell state
-    set('[data-inventory]', inventory.size + ' ชนิด' + (inventoryFull ? ' ⚠️เต็ม' : ''));
+    // ★ inventory — pill mini-bar ใส่ 🎒 นำหน้าเสมอ (เดิม set ทับ icon จนหาย) + แถวสถิติแยกกัน
+    const invCountTxt = inventory.size + ' ชนิด' + (inventoryFull ? ' ⚠️เต็ม' : '');
+    const invPill = root.querySelector('.pill[data-inventory]');
+    if (invPill) invPill.textContent = '🎒 ' + invCountTxt;
+    const invRow = root.querySelector('.v[data-inventory]');
+    if (invRow) invRow.textContent = invCountTxt;
     set('[data-sellstate]', CFG.sellEnabled ? (sellState === 'IDLE' ? 'ON (รอ trigger)' : sellState) : 'OFF');
     set('[data-storagestate]', CFG.storageEnabled ? (storageState === 'IDLE' ? 'ON (รอ trigger)' : storageState) : 'OFF');
 
