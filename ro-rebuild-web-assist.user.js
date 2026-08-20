@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.161.0
+// @version      4.161.1
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,15 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.161.0';
+  const VERSION = '4.161.1';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.161.1', d: '2026-08-20', items: [
+      '🐛 แก้ปุ่ม เก็บ/ขาย/ฝาก ใน remote monitor กดแล้วเงียบ — relay server ส่งต่อแค่',
+      '   system+action และตัด itemId ทิ้ง → คำสั่ง item action หายกลางทาง',
+      '   → relay forward itemId ด้วย + log ชัดเจน',
+      '💾 cycleItemAction บันทึก config ถาวรแล้ว (เดิมไม่ save — refresh หายทั้ง UI และ monitor)',
+    ]},
     { v: '4.161.0', d: '2026-08-20', items: [
       '🖥️ Remote Monitor: การ์ด Inventory → "ของที่เก็บได้ (session)" เหมือนแท็บสถิติใน UI',
       '   + ปุ่มวน เก็บ→ขาย→ฝาก กดจาก monitor ได้ทันที (คำสั่งใหม่ system:item)',
@@ -1359,6 +1365,7 @@
     if (cur === 'keep') { CFG.sellItemIds.push(id); log('💰', nameOf(id), '→ ขาย'); }
     else if (cur === 'sell') { CFG.depositItemIds.push(id); log('🏦', nameOf(id), '→ ฝาก'); }
     else { log('📦', nameOf(id), '→ เก็บ'); }
+    saveConfigDebounced();   // ★ บันทึกถาวร (กดจาก UI หรือ remote monitor เหมือนกัน)
     return getItemAction(id);
   }
 

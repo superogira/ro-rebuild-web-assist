@@ -464,12 +464,14 @@ wss.on('connection', (ws, req) => {
       if (entry && entry.botWs && entry.botWs.readyState === 1) {
         // ★ ฝัง sourceMonitorId เพื่อ forward ack กลับไป monitor ที่สั่ง
         // ★★ forward x, y ด้วย (สำหรับ move command — คลิกแผนที่)
+        // ★★ forward itemId ด้วย (สำหรับ item action — วน เก็บ→ขาย→ฝาก จาก monitor)
         const fwd = { type: 'command', system: msg.system, action: msg.action, _fromMonitor: ws._monitorId || null };
         if (msg.x != null) fwd.x = msg.x;
         if (msg.y != null) fwd.y = msg.y;
         if (msg.targetId != null) fwd.targetId = msg.targetId;
+        if (msg.itemId != null) fwd.itemId = msg.itemId;
         entry.botWs.send(JSON.stringify(fwd));
-        log(`🎮 Command → bot ${msg.playerId}: ${msg.system} ${msg.action}` + (msg.x != null ? ` (${msg.x},${msg.y})` : ''));
+        log(`🎮 Command → bot ${msg.playerId}: ${msg.system} ${msg.action}` + (msg.x != null ? ` (${msg.x},${msg.y})` : '') + (msg.itemId != null ? ` itemId=${msg.itemId}` : ''));
       }
       return;
     }
