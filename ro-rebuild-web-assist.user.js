@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.155.0
+// @version      4.156.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,18 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.155.0';
+  const VERSION = '4.156.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.156.0', d: '2026-08-20', items: [
+      '🔓 ปริศนาครบ! ก้อน equipment ตอน login = "ของในถุงเท่านั้น" ไม่รวมที่สวมอยู่',
+      '   (ยืนยัน: deposit ทำกับของในก้อนได้ตรง ๆ — ทฤษฎี @28&3=สวม/ถุง เมื่อวานเป็นเรื่องบังเอิญ ถอดทิ้งแล้ว)',
+      '🎯 ลำดับในก้อน = bag slot id (20000+N) — ยืนยันจาก deposit จริง:',
+      '   Cotton=20000 · Guard=20003 · Egg=20004 ✓ + relogin จัดเลขใหม่ compact ✓',
+      '   → ฝาก/ขาย equipment ที่มาตั้งแต่ login ได้เลย (เดิมต้องผ่านคาฟราก่อน)!',
+      '   + สวม/ถอด mid-session ตามได้ครบทุกชิ้น (เพราะรู้ slot id ตั้งแต่ login)',
+      '🛡️ slot id จาก login = unverified → ฝากไม่ optimistic ลบ รอ server ยืนยัน (กันพังถ้า decode ผิด)',
+    ]},
     { v: '4.155.0', d: '2026-08-20', items: [
       '🔀 ย้ายการตั้งค่า Warp Dance ไปไว้ล่างสุดของ Sub-tab Combat (เดิมคั่นกลางระหว่าง blacklist กับค่าอื่น)',
       '⚙️ เพิ่มช่องตั้ง attackPendingMax ใน Combat (abandon ถ้า server เงียบครบ N ครั้ง)',
@@ -2241,55 +2250,60 @@
         for (let s = i + 14; s < i + 60; s++) { const r = tryParse(s); if (r && r.length >= 1) { items = r; break; } }
         if (items && items.length > 0) {
           for (const [iid, c] of items) inventory.set(iid, c);
-          // ★★ EQUIPMENT INVENTORY — ก้อนต่อท้าย inventory ธรรมดา (stride 44):
-          //   [inst:4 = 0x13880+i][itemId×4:4][a:2][b:2][UUID:16][slot:4][?:4][pad:4]
-          //   ยืนยันจาก capture จริง 10/10 ตรงทุก id (Knife 1201 → Gladius 1220)
-          // ★ หาก้อน equipment แบบอิสระ — สแกนหา 0x13880 (กันเคส inventory ว่างแต่มี equipment)
-          // ★★ ล้าง+สร้าง equipmentList ใหม่เฉพาะเมื่อเจอก้อน 0x13880 (มีเฉพาะตอนเข้าเกม)
-          //   0x38 resend หลังสวมใส่/ถอด/คาฟรา "ไม่มี" ก้อน equipment — ห้ามล้าง (ไม่งั้นรายการหายทั้งหมด!)
-          let eqStart = -1;
-          for (let q = i + 14; q < u.length - 44; q++) {
-            if (u32(u, q) === 0x13880) { eqStart = q; break; }
-          }
-          if (eqStart >= 0) {
-            equipmentList.length = 0;
-            invDataVer++;
-            // ★★ login = ความจริงชุดใหม่ → ล้าง slot id เก่าก่อน (id เก่าจากรอบก่อนหน้าใช้ไม่ได้)
-            equipmentSlots.clear();
-            let ep = eqStart;
-            while (ep + 44 <= u.length) {
-              const inst = u32(u, ep);
-              if (inst < 0x13880 || inst > 0x13900) break;
-              const idE2 = u32(u, ep + 4);
-              if (idE2 === 0 || idE2 % 4 !== 0) break;
-              const eqId = idE2 >>> 2;
-              if (eqId <= 0 || eqId > 12000) break;
-              // ★★★ decode record 44B (ยืนยันจาก capture + ground truth ผู้เล่น 13/13 ชิ้น):
-              //   u8@11  >> 2 = refine (0x1C>>2=+7 Manteau/Boots[1]/Helm · 0x20>>2=+8 Masamune/Full Plate)
-              //   u32@28 >> 2 = card id ในชิ้น (16647>>2=4161 Grand Peco ✓ · 16367>>2=4091 Kobold ✓
-              //                 16411>>2=4102 Whisper · 16155>>2=4038 Zombie · 16126>>2=4031 Peco Peco ✓)
-              //   u32@28 &  3 = 1 = อยู่ในถุง / 0,2,3 = สวมอยู่ (ยืนยัน 9 สวม + 4 ถุง ครบ)
-              //   (เดิมเคยเข้าใจว่า @28 = bag slot id — ผิด! มันคือข้อมูลการ์ด อย่าใช้เป็น slot id เด็ดขาด)
-              const f28 = u32(u, ep + 28);
-              const cardId = f28 >> 2;
-              const refineE = u[ep + 11] >> 2;
-              equipmentList.push({
-                id: eqId,
-                worn: (f28 & 3) !== 1,
-                card: (cardId >= 4001 && cardId <= 4600) ? cardId : 0,
-                refine: refineE > 1 ? refineE : 0,   // encode พิเศษของชิ้นไร้ refine → ไม่แสดง
-              });
-              ep += 44;
-            }
-            if (equipmentList.length > 0) {
-              const wornN = equipmentList.filter(x => x.worn).length;
-              dbg('⚔️ equipment: ' + equipmentList.length + ' ชิ้น (สวม ' + wornN + ' · ถุง ' + (equipmentList.length - wornN) + ') — ' + equipmentList.slice(0, 6).map(x => equipDisplayName(x)).join(', '));
-            }
-          }
-          if (equipmentList.length > 0) dbg('⚔️ equipment: ' + equipmentList.length + ' ชิ้น — ' + equipmentList.slice(0, 6).map(id => nameOf(id)).join(', '));
           dbg('🎒 inventory เริ่มต้น: ' + items.length + ' รายการ (' + items.reduce((s2, x) => s2 + x[1], 0) + ' ชิ้น) — ' + items.slice(0, 8).map(([id, c]) => nameOf(id) + '×' + c).join(', ') + (items.length > 8 ? ' ฯลฯ' : ''));
         }
         break;   // เจอ anchor น้ำหนักแล้ว — ไม่ต้องไล่ต่อ
+      }
+
+      // ★★ EQUIPMENT INVENTORY — ก้อน 0x13880 (stride 44) — สแกนแบบ "อิสระ" จาก anchor น้ำหนัก
+      //   เพราะบางตัวละคร anchor ไม่ match (เช่น maxW=31284 หาร 10 ไม่ลงตัว) → เดิมหลุดทั้งก้อน!
+      //   ★★ มีเฉพาะตอนเข้าเกม — 0x38 resend หลังสวมใส่/ถอด/คาฟราไม่มีก้อนนี้ → ไม่ล้างของเดิม
+      if (u.length > 100) {
+        let eqStart = -1;
+        for (let q = 10; q < u.length - 44; q++) {
+          if (u32(u, q) === 0x13880) { eqStart = q; break; }
+        }
+        if (eqStart >= 0) {
+          equipmentList.length = 0;
+          invDataVer++;
+          // ★★ login = ความจริงชุดใหม่ → ล้าง slot id เก่าก่อน (relogin จัดเลขใหม่หมด —
+          //   ยืนยันจาก capture: Hood 20001→20000 หลัง relogin)
+          equipmentSlots.clear();
+          let ep = eqStart;
+          let bagIdx = 0;
+          while (ep + 44 <= u.length) {
+            const inst = u32(u, ep);
+            if (inst < 0x13880 || inst > 0x13900) break;
+            const idE2 = u32(u, ep + 4);
+            if (idE2 === 0 || idE2 % 4 !== 0) break;
+            const eqId = idE2 >>> 2;
+            if (eqId <= 0 || eqId > 12000) break;
+            // ★★★ ก้อน 0x13880 = "ของในถุง equipment เท่านั้น" ไม่รวมที่สวมอยู่!
+            //   ยืนยันจาก capture ฝากคาฟรา: ของในก้อน deposit ได้ตรง ๆ (Cotton=20000 ·
+            //   Guard=20003 · Egg=20004) — และลำดับในก้อน = ลำดับ bag slot id (20000+N)
+            //   (สรุปใหม่ลบล้างทฤษฎีเดิมที่ว่า @28&3 = สวม/ถุง — ผิด!)
+            //   u8@11 >> 2 = refine · u32@28 >> 2 = card id ในชิ้น (ยืนยัน 6/6 การ์ด)
+            const f28 = u32(u, ep + 28);
+            const cardId = f28 >> 2;
+            const refineE = u[ep + 11] >> 2;
+            equipmentList.push({
+              id: eqId,
+              worn: false,   // ก้อนนี้ = ของในถุงทั้งหมด (worn จะถูกพลิกโดย 0x30 ตอนสวมใส่)
+              card: (cardId >= 4001 && cardId <= 4600) ? cardId : 0,
+              refine: refineE > 1 ? refineE : 0,
+            });
+            // ★★ ลงทะเบียน slot id = 20000+ลำดับ (unverified — ถ้าผิด server จะปฏิเสธแบบไม่พังข้อมูล)
+            const slotId2 = 20000 + bagIdx;
+            const slots2 = equipmentSlots.get(eqId) || [];
+            if (!slots2.includes(slotId2)) slots2.push(slotId2);
+            equipmentSlots.set(eqId, slots2);
+            bagIdx++;
+            ep += 44;
+          }
+          if (equipmentList.length > 0) {
+            dbg('⚔️ equipment ในถุง: ' + equipmentList.length + ' ชิ้น (slot 20000-' + (20000 + equipmentList.length - 1) + ') — ' + equipmentList.slice(0, 6).map(x => equipDisplayName(x)).join(', '));
+          }
+        }
       }
     }
     // ★ 0x3c MINIMAP_MARKER: 2 โหมด
@@ -8013,7 +8027,7 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
           </div>
           <div id="__assist_inv_grid" style="flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(10,1fr);gap:4px;align-content:start;padding-right:4px"></div>
         </div>
-        <div id="__assist_inv_hint" style="font-size:9px;color:#666;margin-top:6px">★ Equip: เฉพาะของในถุง (ไม่รวมที่สวมอยู่) · ชื่อ +refine/การ์ด · ถอด/สวม/ฝาก/เก็บ อัปเดตสด · refresh เต็มตอนเข้าเกม · คลิก: เก็บ→ขาย→ฝาก</div>
+        <div id="__assist_inv_hint" style="font-size:9px;color:#666;margin-top:6px">★ Equip: ของในถุง (ไม่รวมที่สวมอยู่) · ชื่อ +refine/การ์ด · ฝาก/ขาย/เก็บ/สวม-ถอด อัปเดตสด · คลิก: เก็บ→ขาย→ฝาก · hover ดูรายละเอียด</div>
       </div>`;
     document.body.appendChild(overlay);
     const grid = overlay.querySelector('#__assist_inv_grid');
