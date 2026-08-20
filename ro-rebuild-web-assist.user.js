@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.169.0
+// @version      4.170.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,18 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.169.0';
+  const VERSION = '4.170.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.170.0', d: '2026-08-21', items: [
+      '🌀 แก้วาร์ปปิงปองรัว ๆ เมื่อเปิด Guard + Buff (จาก log จริง):',
+      '   warp-back-to-farm ใน 0x12 handler ดึงไป farmMap สู้กับ Guard ที่ดึงมา guardMap',
+      '   (กรณี farmMap ≠ guardMap เช่น prt_fild07 vs pay_fild07 — วนไม่รู้จบ)',
+      '   → Guard เปิด = 0x12 หยุด warp-back (combatLoop guard branch คุมเอง)',
+      '💀 แก้ตายซ้ำหลัง respawn: 0x12 warp กลับ farmMap ทันทีก่อนนั่งพัก',
+      '   (HP 2% ไปตกจุดมอนเดิม → ตายซ้ำใน 3 วิ) → ห้าม warp ตอน isDead/postRespawnRest',
+      '   — รอพักเสร็จ combatLoop warp กลับเอง + กันแทรกระหว่างขาย/ฝาก',
+    ]},
     { v: '4.169.0', d: '2026-08-21', items: [
       '🐛 แก้ "บัพจน SP ต่ำแต่ไม่นั่งพัก" — 2 ชั้น:',
       '   1. SP gate ของบัพเป็นค่า flat (spMin) ไม่ใช่ % → ช่วง spmin ถึง restSpPercent',
@@ -2314,8 +2323,20 @@
           //   เงื่อนไข: warpBackToFarm=on AND farmMap ไม่ว่าง AND ตอนนี้ไม่ใช่ farmMap
           //   ★★ ไม่จำกัดแค่ "มาจาก farmMap" — ถ้าอยู่แมปผิดก็วาร์ปกลับเสมอ (กันติดแมปอื่น)
           //   ยกเว้น: อยู่ใน sell/storage routine (sellNpcMap/kafraMap) — ไม่วาร์ปกลับ
+          //   ★★★ guard เพิ่ม (จาก log จริง — วาร์ปปิงปองรัว ๆ + ตายซ้ำ):
+          //   1. Guard เปิด → combatLoop guard branch คุมแมปเอง (0x12 ดึงไป farmMap สู้กับ
+          //      Guard ดึงมา guardMap ไม่จบ — กรณี farmMap ≠ guardMap เช่น prt_fild07 vs pay_fild07)
+          //   2. เพิ่งตาย/กำลังพักหลัง respawn → ห้าม warp กลับทันที (เคยวาร์ปกลับไปตก
+          //      จุดมอนเดิมด้วย HP 2% → ตายซ้ำใน 3 วิ) — รอ postRespawnRest พักจบก่อน
+          //      แล้ว combatLoop farm-guard จะวาร์ปกลับเอง (throttle 5s + รอพักเรียบร้อย)
+          //   3. กำลังขาย/ฝากอยู่ → ห้ามแทรก warp กลาง routine
           if (CFG.warpBackToFarm && CFG.farmMap && name !== CFG.farmMap
-              && name !== CFG.sellNpcMap && name !== CFG.kafraMap) {
+              && name !== CFG.sellNpcMap && name !== CFG.kafraMap
+              && !(CFG.guardEnabled && CFG.guardMap)
+              && !isDead
+              && !(typeof postRespawnRest !== 'undefined' && postRespawnRest)
+              && !(typeof sellState !== 'undefined' && sellState !== 'IDLE')
+              && !(typeof storageState !== 'undefined' && storageState !== 'IDLE')) {
             log('🌀 อยู่แมปผิด (' + name + '≠' + CFG.farmMap + ') → วาร์ปกลับ');
             sendTeleport(CFG.farmMap, CFG.farmMapX, CFG.farmMapY);
             lastFarmWarpBackAt = nowMs();
