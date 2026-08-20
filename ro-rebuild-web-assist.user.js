@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.164.0
+// @version      4.165.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,18 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.164.0';
+  const VERSION = '4.165.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.165.0', d: '2026-08-21', items: [
+      '🤝 โหมดสกิลใหม่ "ally" — สกิล Ally ของ Skills.toml (Heal/Blessing/Kyrie ฯลฯ)',
+      '   ใช้กับตัวเองผ่าน targetId ของเรา (packet [1d][01]) ต่างจาก selfCast ([1d][05] ไม่มี target)',
+      '   แก้ preset 13 สกิล Ally ที่เคยตั้งเป็น selfCast ผิด: Heal, Increase Agility, Blessing, Cure,',
+      '   Detoxify, Aspersio, Benedicto, Impositio Manus, Kyrie, Resurrection, Status Recovery,',
+      '   Suffragium, Enchant Poison → ally + desc "Ally→ใช้กับตัวเอง"',
+      '❤️ Heal preset พร้อมใช้: HP<50% + cooldown 2.5s (ไม่ใช่ interval 4 นาทีแบบบัพ)',
+      '✅ ยืนยัน: Passive ไม่มีใน preset ทั้งหมด (ตรวจครบ) · โหมดครบ 5: targeted/ground/AoE/self/ally',
+    ]},
     { v: '4.164.0', d: '2026-08-21', items: [
       '❤️ เงื่อนไขสกิลใหม่: "ใช้เมื่อ HP < %" — เช่น Heal ตัวเองเมื่อ HP ต่ำกว่า 50%',
       '   0 หรือว่าง = ไม่สน HP (ใช้ตามเงื่อนไขเดิม) · HP ไม่รู้ค่า (?) = ไม่ใช้ (กันยิงพร่ำเพรื่อ)',
@@ -4857,9 +4866,12 @@
       for (const skill of CFG.skills) {
         if (!skill || skill.skillId == null) continue;
         if (disabled.includes(skill.skillId)) continue;
-        // ★ สกิลที่ต้องมีเป้า (targeted/ground ไม่ใช่ self) — ไม่มี target ข้าม
-        const needsTarget = (skill.targeted || skill.ground) && !skill.selfCast;
+        // ★ สกิลที่ต้องมีเป้า (targeted/ground ไม่ใช่ self/ally) — ไม่มี target ข้าม
+        //   ally = ใช้กับ "ตัวเอง" ผ่าน targetId ของเรา (Heal/Blessing เป็น Ally-target ตาม Skills.toml)
+        const needsTarget = (skill.targeted || skill.ground) && !skill.selfCast && !skill.ally;
         if (needsTarget && !target) continue;
+        // ★ ally ต้องรู้ playerId ของตัวเองก่อน (จะส่ง targetId = เรา)
+        if (skill.ally && playerId == null) continue;
         const lastUse = lastSkillUse.get(skill.skillId) || 0;
         // ★ timer mode (intervalMin > 0) — self-cast buff
         const intervalMin = Number(skill.intervalMin) || 0;
@@ -4895,7 +4907,8 @@
           if (used >= maxUses) continue;
         }
         // ★ ผ่านเงื่อนไข → ใช้สกิล!
-        const skillTarget = (skill.targeted && !skill.selfCast && !skill.ground) ? target.id : null;
+        //   ally → targetId = ตัวเราเอง (สกิล Ally ใช้กับตัวเอง: Heal/Blessing/Kyrie ฯลฯ)
+        const skillTarget = skill.ally ? playerId : ((skill.targeted && !skill.selfCast && !skill.ground) ? target.id : null);
         // ★ ground-targeted (Arrow Shower): ส่งพิกัดของมอนเป้าหมาย
         let groundX = null, groundY = null;
         if (skill.ground && target) {
@@ -4905,13 +4918,13 @@
         if (sendSkill(skill.skillId, skill.level || 1, skillTarget, groundX, groundY)) {
           lastSkillUse.set(skill.skillId, now);
           saveSkillTimesDebounced();
-          if (skill.targeted && !skill.selfCast) {
+          if (skill.targeted && !skill.selfCast && !skill.ally) {
             const tu = skillUsesOnTarget.get(skill.skillId) || new Map();
             tu.set(target.id, (tu.get(target.id) || 0) + 1);
             skillUsesOnTarget.set(skill.skillId, tu);
           }
           const spInfo = curSP != null ? (curSPmax ? ` ${curSP}/${curSPmax}` : ` ${curSP}`) : ' ?';
-          const modeTag = skill.selfCast ? ' (self)' : (skill.targeted ? '' : ' (AoE)');
+          const modeTag = skill.ally ? ' (ally→ตัวเอง)' : (skill.selfCast ? ' (self)' : (skill.targeted ? '' : ' (AoE)'));
           log('✨ ใช้สกิล', skill.name || ('id=' + skill.skillId), modeTag, '(sp' + spInfo + ' mob=' + mobCount + ')');
           break;   // ทีละสกิลต่อ tick
         }
@@ -6312,13 +6325,13 @@
     { name: "Spear Stab", skillId: 37, level: 10, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 9, cooldownMs: 2000, job: "Knight", desc: "โจมตี · SP 9 · ยังไม่ทดสอบ" },
     { name: "Brandish Spear", skillId: 38, level: 10, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 12, cooldownMs: 2000, job: "Knight", desc: "โจมตี · SP 12/12/12/12/12/12/12/12/12/12 · ยังไม่ทดสอบ" },
     { name: "Spear Boomerang", skillId: 39, level: 5, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 10, cooldownMs: 2000, job: "Knight", desc: "โจมตี · SP 10 · ยังไม่ทดสอบ" },
-    { name: "Heal", skillId: 41, level: 10, selfCast: true, intervalMin: 4, spMin: 40, cooldownMs: 2000, job: "Acolyte", desc: "บัพตัวเอง · SP 13/16/19/22/25/28/31/34/37/40 · ปรับเลเวลได้ · ยังไม่ทดสอบ" },
-    { name: "Increase Agility", skillId: 42, level: 10, selfCast: true, intervalMin: 4, spMin: 45, cooldownMs: 2000, job: "Acolyte", desc: "บัพตัวเอง · SP 18/21/24/27/30/33/36/39/42/45 · ปรับเลเวลได้ · ยังไม่ทดสอบ" },
+    { name: "Heal", skillId: 41, level: 10, ally: true, hpBelowPct: 50, spMin: 40, cooldownMs: 2500, job: "Acolyte", desc: "Ally→ใช้กับตัวเอง · ใช้เมื่อ HP<50% · SP 13/16/19/22/25/28/31/34/37/40 · ปรับเลเวลได้ · ยังไม่ทดสอบ" },
+    { name: "Increase Agility", skillId: 42, level: 10, ally: true, intervalMin: 4, spMin: 45, cooldownMs: 2000, job: "Acolyte", desc: "Ally→ใช้กับตัวเอง · SP 18/21/24/27/30/33/36/39/42/45 · ปรับเลเวลได้ · ยังไม่ทดสอบ" },
     { name: "Decrease Agility", skillId: 43, level: 10, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 33, cooldownMs: 2000, job: "Acolyte", desc: "โจมตี · SP 15/17/19/21/23/25/27/29/31/33 · ยังไม่ทดสอบ" },
-    { name: "Blessing", skillId: 44, level: 10, selfCast: true, intervalMin: 4, spMin: 64, cooldownMs: 2000, job: "Acolyte", desc: "บัพตัวเอง · SP 28/32/36/40/44/48/52/56/60/64 · ปรับเลเวลได้ · ยังไม่ทดสอบ" },
+    { name: "Blessing", skillId: 44, level: 10, ally: true, intervalMin: 4, spMin: 64, cooldownMs: 2000, job: "Acolyte", desc: "Ally→ใช้กับตัวเอง · SP 28/32/36/40/44/48/52/56/60/64 · ปรับเลเวลได้ · ยังไม่ทดสอบ" },
     { name: "Angelus", skillId: 47, level: 10, selfCast: true, intervalMin: 4, spMin: 50, cooldownMs: 2000, job: "Acolyte", desc: "ตัวเอง · SP 23/26/29/32/35/38/41/44/47/50 · ยังไม่ทดสอบ" },
     { name: "Signum Crusis", skillId: 48, level: 10, selfCast: true, intervalMin: 4, spMin: 35, cooldownMs: 2000, job: "Acolyte", desc: "ตัวเอง · SP 35/35/35/35/35/35/35/35/35/35 · ยังไม่ทดสอบ" },
-    { name: "Cure", skillId: 49, level: 1, selfCast: true, intervalMin: 4, spMin: 15, cooldownMs: 2000, job: "Acolyte", desc: "บัพตัวเอง · SP 15 · ยังไม่ทดสอบ" },
+    { name: "Cure", skillId: 49, level: 1, ally: true, intervalMin: 4, spMin: 15, cooldownMs: 2000, job: "Acolyte", desc: "Ally→ใช้กับตัวเอง · SP 15 · ยังไม่ทดสอบ" },
     { name: "Aqua Benedicta", skillId: 50, level: 1, selfCast: true, intervalMin: 4, spMin: 10, cooldownMs: 2000, job: "Acolyte", desc: "ตัวเอง · SP 10 · ยังไม่ทดสอบ" },
     { name: "Pneuma", skillId: 51, level: 1, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 10, cooldownMs: 2000, job: "Acolyte", desc: "AoEพื้น · SP 10 · ยังไม่ทดสอบ" },
     { name: "Ruwach", skillId: 52, level: 1, selfCast: true, intervalMin: 4, spMin: 10, cooldownMs: 2000, job: "Acolyte", desc: "ตัวเอง · SP 10 · ยังไม่ทดสอบ" },
@@ -6327,7 +6340,7 @@
     { name: "Warp Portal", skillId: 55, level: 4, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 35, cooldownMs: 2000, job: "Acolyte", desc: "AoEพื้น · SP 35/32/29/26 · ยังไม่ทดสอบ" },
     { name: "Holy Light", skillId: 56, level: 1, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 15, cooldownMs: 2000, job: "Acolyte", desc: "โจมตี · SP 15 · ยังไม่ทดสอบ" },
     { name: "Envenom", skillId: 58, level: 10, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 12, cooldownMs: 2000, job: "Thief", desc: "โจมตี · SP 12/12/12/12/12/12/12/12/12/12 · ยังไม่ทดสอบ" },
-    { name: "Detoxify", skillId: 59, level: 1, selfCast: true, intervalMin: 4, spMin: 10, cooldownMs: 2000, job: "Thief", desc: "บัพตัวเอง · SP 10 · ยังไม่ทดสอบ" },
+    { name: "Detoxify", skillId: 59, level: 1, ally: true, intervalMin: 4, spMin: 10, cooldownMs: 2000, job: "Thief", desc: "Ally→ใช้กับตัวเอง · SP 10 · ยังไม่ทดสอบ" },
     { name: "Back Slide", skillId: 60, level: 1, selfCast: true, intervalMin: 4, spMin: 5, cooldownMs: 2000, job: "Thief", desc: "ตัวเอง · SP 5 · ยังไม่ทดสอบ" },
     { name: "Sand Attack", skillId: 62, level: 1, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 9, cooldownMs: 2000, job: "Thief", desc: "โจมตี · SP 9 · ยังไม่ทดสอบ" },
     { name: "Stone Fling", skillId: 63, level: 1, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 2, cooldownMs: 2000, job: "Thief", desc: "โจมตี · SP 2 · ยังไม่ทดสอบ" },
@@ -6337,19 +6350,19 @@
     { name: "Mammonite", skillId: 72, level: 10, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 5, cooldownMs: 2000, job: "Merchant", desc: "โจมตี · SP 5/5/5/5/5/5/5/5/5/5 · ปรับเลเวลได้ · ยังไม่ทดสอบ" },
     { name: "Crazy Uproar", skillId: 74, level: 1, selfCast: true, intervalMin: 4, spMin: 8, cooldownMs: 2000, job: "Merchant", desc: "ตัวเอง · SP 8 · ยังไม่ทดสอบ" },
     { name: "Cart Revolution", skillId: 75, level: 1, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 12, cooldownMs: 2000, job: "Merchant", desc: "โจมตี · SP 12 · ยังไม่ทดสอบ" },
-    { name: "Aspersio", skillId: 76, level: 5, selfCast: true, intervalMin: 4, spMin: 20, cooldownMs: 2000, job: "Priest", desc: "บัพตัวเอง · SP 12/14/16/18/20 · ยังไม่ทดสอบ" },
-    { name: "Benedictio Sanctissimi Sacramenti", skillId: 77, level: 5, selfCast: true, intervalMin: 4, spMin: 20, cooldownMs: 2000, job: "Priest", desc: "บัพตัวเอง · SP 20/20/20/20/20 · ยังไม่ทดสอบ" },
+    { name: "Aspersio", skillId: 76, level: 5, ally: true, intervalMin: 4, spMin: 20, cooldownMs: 2000, job: "Priest", desc: "Ally→ใช้กับตัวเอง · SP 12/14/16/18/20 · ยังไม่ทดสอบ" },
+    { name: "Benedictio Sanctissimi Sacramenti", skillId: 77, level: 5, ally: true, intervalMin: 4, spMin: 20, cooldownMs: 2000, job: "Priest", desc: "Ally→ใช้กับตัวเอง · SP 20/20/20/20/20 · ยังไม่ทดสอบ" },
     { name: "Sanctuary", skillId: 78, level: 10, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 42, cooldownMs: 2000, job: "Priest", desc: "AoEพื้น · SP 15/18/21/24/27/30/33/36/39/42 · ปรับเลเวลได้ · ยังไม่ทดสอบ" },
     { name: "Gloria", skillId: 79, level: 5, selfCast: true, intervalMin: 4, spMin: 20, cooldownMs: 2000, job: "Priest", desc: "ตัวเอง · SP 20/20/20/20/20 · ยังไม่ทดสอบ" },
     { name: "Magnificat", skillId: 80, level: 5, selfCast: true, intervalMin: 4, spMin: 40, cooldownMs: 2000, job: "Priest", desc: "ตัวเอง · SP 40/40/40/40/40 · ยังไม่ทดสอบ" },
-    { name: "Impositio Manus", skillId: 81, level: 5, selfCast: true, intervalMin: 4, spMin: 24, cooldownMs: 2000, job: "Priest", desc: "บัพตัวเอง · SP 13/16/19/21/24 · ยังไม่ทดสอบ" },
-    { name: "Kyrie Eleison", skillId: 82, level: 10, selfCast: true, intervalMin: 4, spMin: 35, cooldownMs: 2000, job: "Priest", desc: "บัพตัวเอง · SP 20/20/20/25/25/25/30/30/30/35 · ยังไม่ทดสอบ" },
+    { name: "Impositio Manus", skillId: 81, level: 5, ally: true, intervalMin: 4, spMin: 24, cooldownMs: 2000, job: "Priest", desc: "Ally→ใช้กับตัวเอง · SP 13/16/19/21/24 · ยังไม่ทดสอบ" },
+    { name: "Kyrie Eleison", skillId: 82, level: 10, ally: true, intervalMin: 4, spMin: 35, cooldownMs: 2000, job: "Priest", desc: "Ally→ใช้กับตัวเอง · SP 20/20/20/25/25/25/30/30/30/35 · ยังไม่ทดสอบ" },
     { name: "Lex Aeterna", skillId: 83, level: 1, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 10, cooldownMs: 2000, job: "Priest", desc: "โจมตี · SP 10 · ยังไม่ทดสอบ" },
     { name: "Lex Divina", skillId: 84, level: 5, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 20, cooldownMs: 2000, job: "Priest", desc: "โจมตี · SP 20/20/20/20/20/18/16/14/12/10 · ยังไม่ทดสอบ" },
     { name: "Magnus Exorcismus", skillId: 85, level: 10, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 58, cooldownMs: 2000, job: "Priest", desc: "AoEพื้น · SP 40/42/44/46/48/50/52/54/56/58 · ยังไม่ทดสอบ" },
-    { name: "Resurrection", skillId: 86, level: 4, selfCast: true, intervalMin: 4, spMin: 60, cooldownMs: 2000, job: "Priest", desc: "บัพตัวเอง · SP 60/60/60/60 · ยังไม่ทดสอบ" },
-    { name: "Status Recovery", skillId: 87, level: 1, selfCast: true, intervalMin: 4, spMin: 5, cooldownMs: 2000, job: "Priest", desc: "บัพตัวเอง · SP 5 · ยังไม่ทดสอบ" },
-    { name: "Suffragium", skillId: 88, level: 3, selfCast: true, intervalMin: 4, spMin: 8, cooldownMs: 2000, job: "Priest", desc: "บัพตัวเอง · SP 8 · ยังไม่ทดสอบ" },
+    { name: "Resurrection", skillId: 86, level: 4, ally: true, intervalMin: 4, spMin: 60, cooldownMs: 2000, job: "Priest", desc: "Ally→ใช้กับตัวเอง · SP 60/60/60/60 · ยังไม่ทดสอบ" },
+    { name: "Status Recovery", skillId: 87, level: 1, ally: true, intervalMin: 4, spMin: 5, cooldownMs: 2000, job: "Priest", desc: "Ally→ใช้กับตัวเอง · SP 5 · ยังไม่ทดสอบ" },
+    { name: "Suffragium", skillId: 88, level: 3, ally: true, intervalMin: 4, spMin: 8, cooldownMs: 2000, job: "Priest", desc: "Ally→ใช้กับตัวเอง · SP 8 · ยังไม่ทดสอบ" },
     { name: "Turn Undead", skillId: 89, level: 10, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 20, cooldownMs: 2000, job: "Priest", desc: "โจมตี · SP 20/20/20/20/20/20/20/20/20/20 · ยังไม่ทดสอบ" },
     { name: "Earth Spike", skillId: 91, level: 5, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 20, cooldownMs: 2000, job: "Wizard", desc: "โจมตี · SP 12/14/16/18/20 · ปรับเลเวลได้ · ยังไม่ทดสอบ" },
     { name: "Heaven's Drive", skillId: 92, level: 5, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 44, cooldownMs: 2000, job: "Wizard", desc: "AoEพื้น · SP 28/32/36/40/44 · ปรับเลเวลได้ · ยังไม่ทดสอบ" },
@@ -6381,7 +6394,7 @@
     { name: "Phantasmic Arrow", skillId: 121, level: 1, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 10, cooldownMs: 2000, job: "Hunter", desc: "โจมตี · SP 10 · ยังไม่ทดสอบ" },
     { name: "Grimtooth", skillId: 125, level: 5, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 3, cooldownMs: 2000, job: "Assassin", desc: "โจมตี · SP 3/3/3/3/3 · ยังไม่ทดสอบ" },
     { name: "Cloaking", skillId: 127, level: 10, selfCast: true, intervalMin: 4, spMin: 15, cooldownMs: 2000, job: "Assassin", desc: "ตัวเอง · SP 15/15/15/15/15/15/15/15/15/15 · ยังไม่ทดสอบ" },
-    { name: "Enchant Poison", skillId: 128, level: 10, selfCast: true, intervalMin: 4, spMin: 20, cooldownMs: 2000, job: "Assassin", desc: "บัพตัวเอง · SP 20/20/20/20/20/20/20/20/20/20 · ยังไม่ทดสอบ" },
+    { name: "Enchant Poison", skillId: 128, level: 10, ally: true, intervalMin: 4, spMin: 20, cooldownMs: 2000, job: "Assassin", desc: "Ally→ใช้กับตัวเอง · SP 20/20/20/20/20/20/20/20/20/20 · ยังไม่ทดสอบ" },
     { name: "Poison React", skillId: 129, level: 10, selfCast: true, intervalMin: 4, spMin: 60, cooldownMs: 2000, job: "Assassin", desc: "ตัวเอง · SP 25/30/35/40/45/50/55/60/45/45 · ยังไม่ทดสอบ" },
     { name: "Venom Dust", skillId: 130, level: 10, ground: true, maxDistance: 9, mobCountMin: 2, maxUsesPerTarget: 1, spMin: 20, cooldownMs: 2000, job: "Assassin", desc: "AoEพื้น · SP 20/20/20/20/20/20/20/20/20/20 · ยังไม่ทดสอบ" },
     { name: "Venom Splasher", skillId: 131, level: 10, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 30, cooldownMs: 2000, job: "Assassin", desc: "โจมตี · SP 12/14/16/18/20/22/24/26/28/30 · ยังไม่ทดสอบ" },
@@ -6530,8 +6543,8 @@
       let html = '';
       html += `<div style="padding:6px 8px;color:#8ab4f8;font-size:11px;font-weight:600;border-bottom:1px solid #2a2d35">🔮 skill list (${skills.length})</div>`;
       html += skills.length ? skills.map((s, i) => {
-        const mode = s.selfCast ? 'self' : (s.targeted ? 'target' : 'AoE');
-        const modeColor = s.selfCast ? '#27ae60' : (s.targeted ? '#e67e22' : '#8e44ad');
+        const mode = s.selfCast ? 'self' : (s.ally ? 'ally' : (s.targeted ? 'target' : 'AoE'));
+        const modeColor = s.ally ? '#29b6f6' : (s.selfCast ? '#27ae60' : (s.targeted ? '#e67e22' : '#8e44ad'));
         const spStr = s.spMin ? ` SP≥${s.spMin}` : '';
         const cdStr = s.intervalMin > 0 ? ` ทุก${s.intervalMin}นาที` : (s.cooldownMs ? ` cd${(s.cooldownMs/1000).toFixed(0)}s` : '');
         const distStr = s.maxDistance ? ` ≤${s.maxDistance}ช่อง` : '';
@@ -6546,7 +6559,7 @@
           </div>`;
         // ★ ฟอร์มแก้ไข (แสดงเมื่อกด ✎)
         if (editingSkillIdx === i) {
-          const modeVal = s.selfCast ? 'self' : (s.ground ? 'ground' : (s.targeted ? 'targeted' : 'aoe'));
+          const modeVal = s.selfCast ? 'self' : (s.ally ? 'ally' : (s.ground ? 'ground' : (s.targeted ? 'targeted' : 'aoe')));
           const fld = (label, inner, title) => `<label style="display:flex;flex-direction:column;gap:1px;font-size:9px;color:#9aa0a6" title="${title}">${label}${inner}</label>`;
           const inp = (key, val, w) => `<input data-edit="${key}" type="number" value="${val}" style="width:${w};background:#15171c;border:1px solid #3a3f4b;border-radius:4px;color:#e8e8e8;padding:4px 6px;font-size:10px;font-family:inherit">`;
           row += `<div style="padding:8px;background:rgba(0,0,0,.2);border-radius:4px;margin-top:4px">
@@ -6561,7 +6574,8 @@
                 <option value="ground"${modeVal==='ground'?' selected':''}>ground — เลือกพื้นที่ (Arrow Shower)</option>
                 <option value="aoe"${modeVal==='aoe'?' selected':''}>AoE — รอบตัว (Magnum Break)</option>
                 <option value="self"${modeVal==='self'?' selected':''}>self-cast — ใช้กับตัวเอง (Quicken, Blessing)</option>
-              </select>`, 'targeted=ต้องมีมอนเป้าหมาย, AoE=ใช้รอบตัว, self=ใช้กับตัวเอง')}
+                <option value="ally"${modeVal==='ally'?' selected':''}>ally — สกิล Ally ใช้กับตัวเอง (Heal, Kyrie)</option>
+              </select>`, 'targeted=ต้องมีมอนเป้าหมาย, AoE=ใช้รอบตัว, self=สกิล Self แท้, ally=สกิล Ally (Skills.toml) ใช้กับตัวเองผ่าน targetId')}
             </div>
             <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap">
               ${fld('SP ขั้นต่ำ', inp('spMin', s.spMin||0, '55px'), 'SP ต้องมากกว่าหรือเท่ากับค่านี้ถึงจะใช้')}
@@ -6615,6 +6629,7 @@
           <option value="ground">ground (Arrow Shower — เลือกพื้นที่)</option>
           <option value="aoe">AoE (Magnum Break — รอบตัว)</option>
           <option value="self">self-cast (Quicken — บัพตัวเอง)</option>
+          <option value="ally">ally (Heal/Kyrie — สกิล Ally ใช้กับตัวเอง)</option>
         </select>
         <div style="display:flex;gap:4px;margin-bottom:4px">
           <input id="__assist_skill_sp" type="number" placeholder="spMin" value="0" style="flex:1;background:#15171c;border:1px solid #3a3f4b;border-radius:5px;color:#e8e8e8;padding:5px 7px;font-size:11px;font-family:inherit">
@@ -6679,6 +6694,7 @@
           s.targeted = mode === 'targeted';
           s.ground = mode === 'ground';
           s.selfCast = mode === 'self';
+          s.ally = mode === 'ally';
           s.spMin = parseInt(getVal('spMin'), 10) || 0;
           const cdSec = parseFloat(getVal('cooldownSec'));
           s.cooldownMs = isNaN(cdSec) ? (s.cooldownMs || 2000) : Math.round(cdSec * 1000);
@@ -6709,10 +6725,11 @@
           const p = SKILL_PRESETS[idx];
           ASSIST.addSkill({
             name: p.name, skillId: p.skillId, level: p.level,
-            targeted: !!p.targeted, selfCast: !!p.selfCast,
+            targeted: !!p.targeted, selfCast: !!p.selfCast, ally: !!p.ally,
             intervalMin: p.intervalMin || 0, mobCountMin: p.mobCountMin || 0,
             maxUsesPerTarget: p.maxUsesPerTarget || 1, maxDistance: p.maxDistance || 0,
             minDistance: p.minDistance || 0, spMin: p.spMin || 0, cooldownMs: p.cooldownMs || 2000,
+            hpBelowPct: p.hpBelowPct || 0,
           });
           saveConfigDebounced();
           log('⚡ เพิ่ม preset:', p.name, '(#' + p.skillId + ')');
@@ -6739,6 +6756,7 @@
             targeted: mode === 'targeted',
             ground: mode === 'ground',
             selfCast: mode === 'self',
+            ally: mode === 'ally',
             intervalMin, mobCountMin, maxUsesPerTarget, maxDistance, minDistance, spMin, cooldownMs,
             hpBelowPct: Math.max(0, Math.min(100, hpBelowPct)),
           });
