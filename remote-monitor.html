@@ -77,11 +77,18 @@
   .cd-ready { color: #4caf50; font-size: 10px; }
   .cd-wait { color: #fa0; font-size: 10px; }
 
-  /* inventory */
+  /* inventory — ของที่เก็บได้ (session) + ปุ่ม action */
   .inv-item { display: flex; align-items: center; gap: 6px; padding: 3px 0; border-bottom: 1px solid #1a1a2a; font-size: 11px; }
   .inv-item img { width: 18px; height: 18px; border-radius: 2px; flex-shrink: 0; }
   .inv-item .nm { flex: 1; color: #ccc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .inv-item .ct { color: #4f4; font-weight: bold; }
+  .inv-act { border: none; border-radius: 4px; padding: 1px 8px; font-size: 10px; cursor: pointer; font-family: inherit; color: #fff; flex-shrink: 0; }
+  /* inventory modal (เหมือน popup ในเกม) */
+  .invm-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; align-content: start; }
+  .invm-slot { position: relative; aspect-ratio: 1; border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; overflow: visible; }
+  .invm-slot img { max-width: 80%; max-height: 80%; image-rendering: pixelated; }
+  .invm-tab { writing-mode: vertical-rl; text-orientation: mixed; padding: 10px 6px; font-size: 12px; cursor: pointer; border: none; border-radius: 6px; background: #333; color: #aaa; min-height: 110px; font-family: inherit; }
+  .invm-tab.on { background: #4a3a1a; color: #ffd54f; }
 
   /* aggro cards (monster images) */
   .aggro-wrap { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
@@ -218,7 +225,7 @@
         <div class="cd-grid" id="cd-list"></div>
       </div>
       <div class="panel flex-scroll">
-        <div class="panel-title">🎒 Inventory</div>
+        <div class="panel-title" style="display:flex;justify-content:space-between;align-items:center">🎒 ของที่เก็บได้ (session)<button id="inv-open-modal" style="background:#3a2a1a;color:#ffb74d;border:1px solid #7a4a1e;border-radius:6px;padding:2px 8px;font-size:10px;cursor:pointer;font-family:inherit">📦 Inventory</button></div>
         <div id="inv-list"></div>
       </div>
     </div>
@@ -845,17 +852,103 @@ function renderCooldowns(d) {
   }).join('');
 }
 
+let lastBotData = null;   // ★ เก็บข้อมูลล่าสุดไว้ใช้กับ popup Inventory
 function renderInventory(d) {
+  lastBotData = d;
   const el = document.getElementById('inv-list');
-  const inv = d.inventory || [];
-  if (inv.length === 0) { el.innerHTML = '<div class="empty">(ว่าง)</div>'; return; }
-  el.innerHTML = inv.map(it => {
-    return `<div class="inv-item">
-      <img src="${itemIconUrl(it.itemId, it.name)}" onerror="this.style.display='none'">
-      <span class="nm">${escapeHtml(it.name || ('id=' + it.itemId))}</span>
-      <span class="ct">×${it.count}</span>
+  // ★★ แสดง "ของที่เก็บได้ใน session นี้" (เหมือนแท็บสถิติใน UI) + ปุ่มวน เก็บ→ขาย→ฝาก
+  const loot = d.sessionLoot || [];
+  if (loot.length === 0) { el.innerHTML = '<div class="empty">(ยังไม่เก็บอะไรใน session นี้)</div>'; }
+  else {
+    el.innerHTML = loot.map(it => {
+      const act = it.action || 'keep';
+      const actLabel = act === 'sell' ? 'ขาย' : (act === 'deposit' ? 'ฝาก' : 'เก็บ');
+      const actColor = act === 'sell' ? '#e67e22' : (act === 'deposit' ? '#27ae60' : '#6b7280');
+      const actBg = act === 'sell' ? 'rgba(230,126,34,.12)' : (act === 'deposit' ? 'rgba(39,174,96,.12)' : 'transparent');
+      return `<div class="inv-item" style="background:${actBg};border-radius:3px;padding:2px 4px">
+        <img src="${itemIconUrl(it.id, it.name)}" onerror="this.style.display='none'">
+        <span class="nm">${escapeHtml(it.name || ('id=' + it.id))}</span>
+        <span class="ct">×${it.count}</span>
+        <button class="inv-act" style="background:${actColor}" onclick="sendItemAction(${it.id})">${actLabel}</button>
+      </div>`;
+    }).join('');
+  }
+  // ★ popup เปิดอยู่ → refresh ทันที (คง scroll)
+  const grid = document.getElementById('invm-grid');
+  if (grid) { const st = grid.scrollTop; renderInvModalTab(); grid.scrollTop = st; }
+}
+
+// ★ ส่งคำสั่งวน action ของ (เก็บ→ขาย→ฝาก) ไปที่บอท
+function sendItemAction(itemId) {
+  if (!ws || ws.readyState !== 1) return;
+  ws.send(JSON.stringify({ type: 'command', playerId: playerId, system: 'item', itemId: itemId }));
+  console.log('[monitor] item action:', itemId);
+}
+
+// ★★ popup Inventory 3 แท็บ — เหมือนใน UI script (คลิกช่อง = วน เก็บ→ขาย→ฝาก)
+let invModalTab = 'usable';
+function openInvModal() {
+  const old = document.getElementById('invm-overlay');
+  if (old) { old.remove(); return; }
+  const ov = document.createElement('div');
+  ov.id = 'invm-overlay';
+  ov.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center';
+  ov.innerHTML = `
+    <div style="background:#1a1a2e;color:#e8e8e8;border-radius:12px;padding:14px;width:660px;max-width:92vw;max-height:82vh;display:flex;flex-direction:column;font-family:sans-serif;box-shadow:0 8px 32px rgba(0,0,0,.5)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <span style="font-size:15px;font-weight:700;color:#ffb74d">🎒 Inventory <span id="invm-count" style="font-size:11px;color:#888"></span></span>
+        <span>
+          <button id="invm-sellnow" style="background:#4a2c14;color:#ffb74d;border:1px solid #7a4a1e;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;font-family:inherit">💰 ขายเดี๋ยวนี้</button>
+          <button id="invm-depositnow" style="background:#14324a;color:#81c784;border:1px solid #1e5a7a;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;font-family:inherit;margin-left:4px">🏦 ฝากเดี๋ยวนี้</button>
+          <button id="invm-close" style="background:none;border:none;color:#888;font-size:18px;cursor:pointer;margin-left:4px">✕</button>
+        </span>
+      </div>
+      <div style="display:flex;gap:8px;flex:1;min-height:0">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <button class="invm-tab on" data-tab="usable">Item</button>
+          <button class="invm-tab" data-tab="equip">Equip</button>
+          <button class="invm-tab" data-tab="etc">Etc.</button>
+        </div>
+        <div id="invm-grid" class="invm-grid" style="flex:1;overflow-y:auto;padding-right:4px"></div>
+      </div>
+      <div style="font-size:9px;color:#666;margin-top:6px">★ คลิกช่อง: เก็บ→ขาย→ฝาก · ข้อมูลจากบอทอัปเดตสดทุก 1s</div>
     </div>`;
-  }).join('');
+  document.body.appendChild(ov);
+  ov.querySelectorAll('.invm-tab').forEach(btn => {
+    btn.onclick = () => {
+      invModalTab = btn.dataset.tab;
+      ov.querySelectorAll('.invm-tab').forEach(b => b.classList.remove('on'));
+      btn.classList.add('on');
+      renderInvModalTab();
+    };
+  });
+  ov.querySelector('#invm-close').onclick = () => ov.remove();
+  ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
+  ov.querySelector('#invm-sellnow').onclick = () => { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'command', playerId: playerId, system: 'sell', action: 'now' })); };
+  ov.querySelector('#invm-depositnow').onclick = () => { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'command', playerId: playerId, system: 'deposit', action: 'now' })); };
+  renderInvModalTab();
+}
+function renderInvModalTab() {
+  const grid = document.getElementById('invm-grid');
+  const cntEl = document.getElementById('invm-count');
+  if (!grid || !lastBotData) return;
+  const all = lastBotData.invAll || [];
+  let items = all.filter(x => x.cat === invModalTab);
+  if (invModalTab !== 'equip') items = items.slice().sort((a, b) => a.id - b.id);
+  if (cntEl) {
+    const eqN = all.filter(x => x.cat === 'equip').length;
+    cntEl.textContent = invModalTab === 'equip' ? 'ในถุง ' + items.length + ' ชิ้น' : items.length + ' ชนิด · ' + items.reduce((s, x) => s + x.c, 0) + ' ชิ้น';
+  }
+  grid.innerHTML = items.map(x => {
+    const act = x.a || 'keep';
+    const bg = act === 'sell' ? 'rgba(230,126,34,.35)' : (act === 'deposit' ? 'rgba(39,174,96,.35)' : '#23262e');
+    const bd = act === 'sell' ? '#e67e22' : (act === 'deposit' ? '#27ae60' : '#3a3f4b');
+    return `<div class="invm-slot" style="background:${bg};border:1px solid ${bd}" title="${escapeHtml(x.n || '')}" onclick="sendItemAction(${x.id})">
+      <img src="${itemIconUrl(x.id, x.n)}" onerror="this.style.display='none'">
+      ${act !== 'keep' ? `<span style="position:absolute;top:0;left:0;font-size:8px;background:#000;color:#fff;padding:0 3px;border-radius:3px 0 3px 0;font-weight:bold">${act === 'sell' ? 'ขาย' : 'ฝาก'}</span>` : ''}
+      <span style="position:absolute;bottom:0;right:2px;font-size:9px;color:#fff;text-shadow:0 0 2px #000,0 0 2px #000;font-weight:bold">${invModalTab === 'equip' ? (x.r ? '+' + x.r : '') : (x.c > 999 ? Math.floor(x.c / 1000) + 'k' : x.c)}</span>
+    </div>`;
+  }).join('') || '<div style="grid-column:1/-1;color:#666;font-size:11px;padding:20px;text-align:center">(ว่างเปล่า)</div>';
 }
 
 function renderChat(d) {
@@ -1083,6 +1176,8 @@ document.getElementById('btn-sell-now').onclick = () => {
   ws.send(JSON.stringify({ type: 'command', playerId: playerId, system: 'sell', action: 'now' }));
   console.log('[monitor] command: sell now');
 };
+// ★ ปุ่มเปิด popup Inventory 3 แท็บ (เหมือนใน UI script)
+document.getElementById('inv-open-modal').onclick = openInvModal;
 document.getElementById('chat-send').onclick = sendChatMessage;
 document.getElementById('chat-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') sendChatMessage();

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.160.2
+// @version      4.161.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,16 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.160.2';
+  const VERSION = '4.161.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.161.0', d: '2026-08-20', items: [
+      '🖥️ Remote Monitor: การ์ด Inventory → "ของที่เก็บได้ (session)" เหมือนแท็บสถิติใน UI',
+      '   + ปุ่มวน เก็บ→ขาย→ฝาก กดจาก monitor ได้ทันที (คำสั่งใหม่ system:item)',
+      '📦 ปุ่ม "Inventory" ในการ์ด → popup 3 แท็บ (Item/Etc/Equip) เหมือนในเกม:',
+      '   ไอคอน + จำนวน/+refine + ป้าย ขาย/ฝาก + คลิกวน action ได้ + ปุ่ม ขาย/ฝากเดี๋ยวนี้',
+      '   ข้อมูลอัปเดตสดทุก 1s เหมือน UI (เปิดค้างไว้ดูได้)',
+    ]},
     { v: '4.160.2', d: '2026-08-20', items: [
       '🔓 แก้ deadlock ค้างหลังกด "ฝากเดี๋ยวนี้" — sellLoop/storageLoop บล็อกกันเอง',
       '   (sell รอ storage จบ / storage รอ sell จบ) จน watchdog ทั้งคู่ตาย ค้างถาวร',
@@ -8579,8 +8586,27 @@ return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" d
       })(),
       buffs: cds.map(b => ({ name: b.name, remainingMs: b.remainingMs, itemId: b.itemId })),
       skills: skCds.map(sk => ({ name: sk.name, remainingMs: sk.remainingMs })),
-      // ★ inventory — สำหรับแสดงรูป item + ชื่อ + จำนวนใน monitor
+      // ★ inventory — สำหรับแสดงรูป item + ชื่อ + จำนวนใน monitor (เดิม — เก็บไว้กัน compat)
       inventory: [...inventory.entries()].filter(([id, c]) => c > 0).sort((a, b) => b[1] - a[1]).slice(0, 30).map(([id, count]) => ({ itemId: Number(id), name: itemDisplayName(Number(id)), count })),
+      // ★★ sessionLoot — ของที่เก็บได้ใน session นี้ (ล่าสุดก่อน) + action เหมือนแท็บสถิติใน UI
+      sessionLoot: [...sessionPickups.entries()]
+        .map(([id, at]) => ({ id: Number(id), at, count: inventory.get(Number(id)) || 0 }))
+        .filter(x => x.count > 0).sort((a, b) => b.at - a.at).slice(0, 40)
+        .map(x => ({ id: x.id, name: itemDisplayName(x.id), count: x.count, action: getItemAction(x.id) })),
+      // ★★ invAll — ข้อมูลครบสำหรับ popup 3 แท็บใน monitor (Item/Etc/Equip + action + refine)
+      invAll: (() => {
+        const out = [];
+        for (const [id, c] of inventory.entries()) {
+          if (c <= 0) continue;
+          const nid = Number(id);
+          out.push({ id: nid, n: itemDisplayName(nid), c, a: getItemAction(nid), cat: itemDB.cats[String(nid)] || 'etc' });
+        }
+        for (const x of equipmentList) {
+          if (x.worn) continue;   // แสดงเฉพาะของในถุง (เหมือน UI)
+          out.push({ id: x.id, n: equipDisplayName(x), c: 1, a: getItemAction(x.id), cat: 'equip', r: x.refine || 0 });
+        }
+        return out.slice(0, 400);
+      })(),
       isDead: isDead, isResting: isResting,
       sellState: sellState, storageState: storageState,
       // ★ relay server status (ส่งไปแสดงใน remote monitor ด้วย)
@@ -8780,6 +8806,15 @@ return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" d
             log('⚠️ Remote attack: ไม่พบมอน ID', m.targetId);
           }
           try { relayWs.send(JSON.stringify({ type: 'commandAck', system: 'attack', action: 'target', ok: !!m2 })); } catch (_) {}
+        }
+        // ★★ itemAction จาก remote monitor → วน toggle เก็บ→ขาย→ฝาก ของชิ้นนั้น (เหมือนคลิกใน UI)
+        else if (m.type === 'command' && m.system === 'item' && m.itemId != null) {
+          const iid = Number(m.itemId);
+          if (iid > 0) {
+            const newAct = cycleItemAction(iid);
+            log('🎮 Remote item action:', nameOf(iid), '→', newAct);
+            try { relayWs.send(JSON.stringify({ type: 'commandAck', system: 'item', action: newAct, ok: true })); } catch (_) {}
+          }
         }
         // ★ command จาก remote monitor → toggle on/off หรือ action (sellNow, depositNow)
         else if (m.type === 'command' && m.system && m.action) {
