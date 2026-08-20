@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.159.0
+// @version      4.159.1
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,15 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.159.0';
+  const VERSION = '4.159.1';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.159.1', d: '2026-08-20', items: [
+      '🐛 แก้ Jobs ยังแสดงเป็นรหัสกลุ่ม (SwordUser) — ไฟล์ EquipmentGroups.csv',
+      '   ไม่เคยถูก push ขึ้น GitHub (userscript ดึงจาก GitHub → 404 → groupInfo ว่าง)',
+      '   → push ไฟล์แล้ว + cache ที่ groupInfo ว่างบังคับรีโหลดอัตโนมัติ',
+      '   + log แจ้งชัดเจนถ้าโหลดไฟล์กลุ่มไม่ได้',
+    ]},
     { v: '4.159.0', d: '2026-08-20', items: [
       '🐛 แก้ฝาก equipment ไม่ได้ + "Cannot store while equipped":',
       '   ของที่สวมอยู่ก็ยังถือ bag slot ของตัวเอง! สูตรเดิม (ข้ามชิ้นสวมตอนนับ slot) ทำให้เลขเลื่อน',
@@ -864,7 +870,7 @@
       const cached = localStorage.getItem(ITEMDB_CACHE_KEY);
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (parsed.v === 6 && parsed.names) {
+        if (parsed.v === 6 && parsed.names && Object.keys(parsed.groupInfo || {}).length > 0) {   // ★ groupInfo ว่าง = โหลดตอนไฟล์ groups ยังไม่ขึ้น GitHub → บังคับรีโหลด
           itemDB.names = parsed.names; itemDB.prices = parsed.prices || {};
           itemDB.cats = parsed.cats || {}; itemDB.slots = parsed.slots || {}; itemDB.descs = parsed.descs || {}; itemDB.weights = parsed.weights || {};
           itemDB.cardPrefix = parsed.cardPrefix || {}; itemDB.cardPostfix = parsed.cardPostfix || {};
@@ -905,6 +911,9 @@
           const disp = (cells[1] || '').trim().replace(/^"|"$/g, '');
           itemDB.groupInfo[key] = { display: disp && disp !== '<Auto>' ? disp : null, members: cells.slice(2).map(s => s.trim()).filter(Boolean) };
         }
+        log('👥 โหลดกลุ่มอาชีพ ' + Object.keys(itemDB.groupInfo).length + ' กลุ่ม (EquipmentGroups.csv)');
+      } else {
+        log('⚠️ โหลด EquipmentGroups.csv ไม่ได้ — Jobs จะแสดงเป็นรหัสกลุ่มแทนรายชื่ออาชีพ');
       }
       let n = 0;
       for (let fi = 0; fi < files.length; fi++) {
