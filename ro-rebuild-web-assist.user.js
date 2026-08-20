@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.170.1
+// @version      4.170.2
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,14 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.170.1';
+  const VERSION = '4.170.2';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.170.2', d: '2026-08-21', items: [
+      '🐛 แก้ "Heal ตัวเองรัว ๆ ทั้งที่ HP เต็ม" (buff + รวมตัวเอง + HPเป้า<90%) —',
+      '   บล็อก self ใน v4.170.1 ไม่สน targetHpBelowPct (ยิงตามรอบ delay อย่างเดียว)',
+      '   → ตอนนี้ HP เป้าหมาย < % คุมทั้งคนอื่นและตัวเอง · HP ตัวเองเต็ม/ไม่รู้ค่า = ข้าม',
+    ]},
     { v: '4.170.1', d: '2026-08-21', items: [
       '🐛 แก้ "บัพตัวเอง (รวมตัวเอง) ไม่ทำงานถ้าไม่มีใครเข้ามา" —',
       '   บล็อก self ถูกวางไว้หลัง if (!best) continue = ไม่เจอผู้เล่นคนอื่น → ข้ามทั้งสกิล',
@@ -1717,12 +1722,20 @@
       let best = null, bestD = Infinity;
       // ★★ รวมตัวเองเป็นผู้สมัครก่อนค้นคนอื่น — แก้ "บัพตัวเองไม่ทำงานถ้าไม่มีใครเข้ามา":
       //   เดิมบล็อกนี้อยู่หลัง if (!best) continue = ไม่เจอใคร → ข้ามทั้งสกิล → ตัวเองไม่ได้บัพ
-      //   (รอบ delay ซ้ำใช้ร่วมกับคนอื่น · ไม่สน targetHpBelowPct — HP ตัวเองใช้โหมด ally + HP<% แยก)
+      //   ★★ targetHpBelowPct คุมตัวเองด้วย — แก้ "Heal ตัวเองรัว ๆ ทั้งที่ HP เต็ม"
+      //   (เดิม self ไม่สน HP เป้าหมาย = ยิงตามรอบ delay อย่างเดียว · HP เต็ม/ไม่รู้ค่า = ข้าม)
       if (skill.buffIncludeSelf) {
-        const perSkill2 = buffTargetUse.get(skill.skillId);
-        const lastSelf = perSkill2 ? (perSkill2.get(playerId) || 0) : 0;
-        const repeatMs2 = (Number(skill.repeatSec) > 0 ? Number(skill.repeatSec) : 300) * 1000;
-        if (!(lastSelf > 0 && now - lastSelf < repeatMs2)) { best = { id: playerId, name: '(ตัวเอง)', x: player.x, y: player.y }; bestD = 0; }
+        let selfHpOk = true;
+        if (tgtHpBelow > 0) {
+          const spct = hpPct();
+          selfHpOk = spct != null && spct < tgtHpBelow;
+        }
+        if (selfHpOk) {
+          const perSkill2 = buffTargetUse.get(skill.skillId);
+          const lastSelf = perSkill2 ? (perSkill2.get(playerId) || 0) : 0;
+          const repeatMs2 = (Number(skill.repeatSec) > 0 ? Number(skill.repeatSec) : 300) * 1000;
+          if (!(lastSelf > 0 && now - lastSelf < repeatMs2)) { best = { id: playerId, name: '(ตัวเอง)', x: player.x, y: player.y }; bestD = 0; }
+        }
       }
       if (knowPos) {
       for (const e of entities.values()) {
@@ -6818,7 +6831,7 @@
               <input data-edit="buffNames" value="${(Array.isArray(s.buffNames)?s.buffNames:[]).join(',')}" placeholder="รายชื่อผู้เล่น (คั่นจุลภาค)" style="flex:2;background:#15171c;border:1px solid #3a3f4b;border-radius:4px;color:#e8e8e8;padding:4px 6px;font-size:10px;font-family:inherit" title="เช่น superogira0,testmage — ใช้เมื่อเลือก 'เฉพาะรายชื่อ'">
               ${fld('delay ซ้ำ/คน (วิ)', inp('repeatSec', s.repeatSec||300, '60px'), 'รออย่างน้อย N วินาทีก่อนบัพซ้ำคนเดิม (กันสแปม) — default 300 = 5 นาที')}
               ${fld('รวมตัวเอง', `<select data-edit="buffIncludeSelf" style="width:55px;background:#15171c;border:1px solid #3a3f4b;border-radius:4px;color:#e8e8e8;padding:4px 3px;font-size:10px;font-family:inherit"><option value="1"${s.buffIncludeSelf?' selected':''}>ใช่</option><option value="0"${!s.buffIncludeSelf?' selected':''}>ไม่</option></select>`, 'บัพตัวเองด้วยสกิลนี้ตามรอบ delay ซ้ำ (แยกจากโหมด ally/self-cast ที่ใช้ HP% หรือ interval)')}
-              ${fld('HP เป้า < %', inp('targetHpBelowPct', s.targetHpBelowPct||0, '60px'), 'Heal ให้คนอื่นเฉพาะเมื่อ HP คนนั้นต่ำกว่าค่านี้ (0 = ไม่สน — เหมาะกับบัพ Blessing ที่ให้ได้ตลอด) · ไม่รู้ HP คนนั้น = ข้าม')}
+              ${fld('HP เป้า < %', inp('targetHpBelowPct', s.targetHpBelowPct||0, '60px'), 'ใช้สกิลเฉพาะเมื่อ HP ของเป้าหมายต่ำกว่าค่านี้ — คุมทั้งคนอื่นและตัวเอง (ถ้ารวมตัวเอง) · 0 = ไม่สน (บัพได้ตลอด) · ไม่รู้ HP = ข้าม')}
             </div>
             <div style="display:flex;gap:4px">
               <button data-saveedit="${i}" style="flex:1;background:#1b5e20;border:1px solid #2e7d32;border-radius:4px;color:#a5d6a7;cursor:pointer;font-size:10px;padding:5px;font-family:inherit">✓ บันทึก</button>
@@ -6888,7 +6901,7 @@
             <option value="0">เฉพาะคนอื่น</option>
             <option value="1">รวมตัวเอง</option>
           </select>
-          <input id="__assist_skill_tgthp" type="number" placeholder="HPเป้า<%" value="0" min="0" max="100" title="Heal/บัพเฉพาะเมื่อ HP คนนั้นต่ำกว่าค่านี้ (0=ไม่สน)" style="width:75px;background:#15171c;border:1px solid #3a3f4b;border-radius:5px;color:#e8e8e8;padding:5px 7px;font-size:11px;font-family:inherit">
+          <input id="__assist_skill_tgthp" type="number" placeholder="HPเป้า<%" value="0" min="0" max="100" title="ใช้เฉพาะเมื่อ HP ของเป้าหมายต่ำกว่าค่านี้ (คุมทั้งคนอื่นและตัวเองถ้ารวม · 0=ไม่สน)" style="width:75px;background:#15171c;border:1px solid #3a3f4b;border-radius:5px;color:#e8e8e8;padding:5px 7px;font-size:11px;font-family:inherit">
         </div>
         <button id="__assist_skill_addbtn" style="width:100%;background:#1b5e20;border:1px solid #2e7d32;border-radius:5px;color:#a5d6a7;cursor:pointer;font-size:11px;padding:6px;font-family:inherit">+ เพิ่ม skill</button>
       </div>`;
