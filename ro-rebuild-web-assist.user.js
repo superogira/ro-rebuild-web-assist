@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.154.1
+// @version      4.155.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,15 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.154.1';
+  const VERSION = '4.155.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.155.0', d: '2026-08-20', items: [
+      '🔀 ย้ายการตั้งค่า Warp Dance ไปไว้ล่างสุดของ Sub-tab Combat (เดิมคั่นกลางระหว่าง blacklist กับค่าอื่น)',
+      '⚙️ เพิ่มช่องตั้ง attackPendingMax ใน Combat (abandon ถ้า server เงียบครบ N ครั้ง)',
+      '⚙️ เพิ่มช่องตั้ง maxAttempts ใน Loot (เก็บไม่ได้ครบ N ครั้ง → ปล่อย/วาร์ปไปเก็บ)',
+      '   ทั้งคู่บันทึกถาวรผ่าน PERSIST_KEYS แล้ว',
+    ]},
     { v: '4.154.1', d: '2026-08-20', items: [
       '💰 หัวข้อ "ของที่เก็บได้ (session นี้)" แสดงยอดรวมเงินจากของที่เก็บได้',
       '   — นับเฉพาะของที่ตั้งค่าให้ "ขาย" (อัปเดตสด ลดตามที่ขายไปแล้ว)',
@@ -690,10 +696,10 @@
     'healEnabled', 'healAtPercent', 'healItems', 'healMode', 'healDelayMs', 'healAtMax',
     'buffEnabled', 'buffItems', 'buffRebuffDelayMs', 'autoClearConsoleMin', 'monitorServerEnabled', 'monitorServerUrl', 'monitorSendIntervalMs',
     'skillEnabled', 'skills', 'disabledSkillIds',
-    'lootEnabled', 'lootDelayAfterDropMs', 'lootUseKillPos', 'pickRadiusKill', 'lootRespectOthers', 'filter', 'sendThrottleMs',
+    'lootEnabled', 'lootDelayAfterDropMs', 'lootUseKillPos', 'pickRadiusKill', 'lootRespectOthers', 'filter', 'sendThrottleMs', 'maxAttempts',
     'warpLootEnabled',
     'combatEnabled', 'targetWhitelist', 'targetBlacklist', 'fightBackBlacklisted', 'warpDanceEnabled', 'warpDanceMode', 'warpDanceDistance', 'warpDanceThrottleMs', 'autoLoginEnabled', 'autoLoginUser', 'autoLoginPass', 'autoLoginSlot', 'autoRefreshEnabled', 'autoRefreshStallSec', 'attackRange', 'rangedAttackRange',
-    'maxAcquireDistance', 'searchRadii', 'maxChaseDistance', 'antiKS', 'avoidOtherPlayers', 'targetLowestHpFirst',
+    'maxAcquireDistance', 'searchRadii', 'maxChaseDistance', 'attackPendingMax', 'antiKS', 'avoidOtherPlayers', 'targetLowestHpFirst',
     'fleeOnMobCount', 'fleeOnAggroCount', 'fleeOnProximityCount', 'fleeOnProximityRadius', 'fleeMonsters', 'fleeMonsterRadius', 'maxEngageSec', 'maxEngageSecSlow', 'slowMonsterSubIds',
     'wanderEnabled', 'warpFindEnabled', 'warpToMonster', 'stuckWarpOnAbandon', 'stepAsideOnAbandon', 'warpToBoss', 'warpToMiniBoss', 'bossAlertRadius', 'noMonsterWarpSec',
     'restEnabled', 'restHpPercent', 'restUntilPercent', 'restMaxSec', 'restDelayMs', 'postCombatDelayMs', 'autoRespawnEnabled', 'autoRespawnDelayMs', 'telegramAlertCard', 'telegramAlertFlee', 'telegramAlertBotMention', 'telegramAlertNearby', 'telegramAlertWhisper', 'telegramBotToken', 'telegramChatId',
@@ -6620,18 +6626,11 @@
             <div class="field"><label>มอนที่จะตี — whitelist (ชื่อหรือ sprite id, คั่นจุลภาค) — ว่าง = ตีทุกมอน</label><input type="text" id="__assist_whitelist" placeholder="เช่น Poring,Lunatic หรือ 4000,1010"></div>
             <div class="field"><label>มอนที่จะไม่ตี — blacklist</label><input type="text" id="__assist_blacklist" placeholder="เช่น MVP,Boss"></div>
             <div class="btns"><button id="__assist_t_fightbackbl" class="on">🛡️ ตีกลับมอน blacklist ที่ตีเรา</button></div>
-            <h4 style="margin-top:14px;">🌀 Warp Dance — ตี 1 ครั้งแล้ววาร์ปรอบตัวมอน</h4>
-            <div class="btns"><button id="__assist_t_warpdance" class="off">🌀 Warp Dance: ?</button></div>
-            <div class="field"><label>โหมดวาร์ป — cycle = เรียงวน 8 ทิศ / random = สุ่มทิศ</label><select id="__assist_wdmode" style="width:100%;background:#23262e;color:#e8e8e8;border:1px solid #3a3f4b;border-radius:6px;padding:6px;font-family:inherit"><option value="cycle">cycle — เรียงวน 8 ทิศ</option><option value="random">random — สุ่มทิศ</option></select></div>
-            <div class="field"><label>ระยะห่างจากมอนหลังวาร์ป (ช่อง 1-10 — ควร ≤ ระยะโจมตีของคุณ)</label><input type="number" id="__assist_wddist" min="1" max="10" step="1"></div>
-            <div class="field"><label>Throttle ระหว่างวาร์ป (ms 200-5000) — ขั้นต่ำที่ต้องเว้นก่อนวาร์ปถัดไป</label><input type="number" id="__assist_wdthrottle" min="200" max="5000" step="100"></div>
-            <div class="field"><label>จังหวะตี+วาร์ปต่อรอบ (ms) — คือ attackReIssueMs: ตีครั้งใหม่เมื่อพ้นเวลานี้นับจากตีครั้งก่อน</label><input type="number" id="__assist_wdreissue" min="500" max="10000" step="100"></div>
-            <div class="btns"><button id="__assist_applywd">💾 ใช้ค่า warp dance</button></div>
-            <div style="font-size:10px;color:#9aa0a6;margin-top:6px;">★ เหมาะกับนักเวท/นักธนู — ตีแล้ววาร์ปหลบทันที มอนจะงงหาเราไม่เจอ → เราตีฝ่ายเดียว · ระยะที่ตั้งเกินระยะโจมตีจะทำให้ตีไม่โดน (เดินกลับเข้าไปเอง)</div>
             <div class="btns"><button id="__assist_applywhitelist">ตั้ง whitelist</button><button id="__assist_applyblacklist">ตั้ง blacklist</button></div>
             <div class="field"><label>ระยะโจมตี (ช่อง) — นักธนูตั้ง >2 เพื่อตีไกล</label><input type="number" id="__assist_attackrange" min="0" max="15"></div>
             <div class="field"><label>รัศมีค้นหามอน (ช่อง) — เลือกมอนในระยะนี้เท่านั้น (เล็ก=ไม่เดินไกล)</label><input type="number" id="__assist_maxacq" min="1" max="50" placeholder="30"></div>
             <div class="field"><label>ไล่ตามมอนสูงสุด (ช่อง) — ไกลกว่านี้ abandon</label><input type="number" id="__assist_maxchase" min="5" max="100" placeholder="40"></div>
+            <div class="field"><label>abandon มอนถ้าตีแล้ว server เงียบครบ N ครั้ง (attackPendingMax 1-10)</label><input type="number" id="__assist_pendmax" min="1" max="10" step="1"></div>
             <div class="btns">
               <button id="__assist_t_antiks" class="on">antiKS</button>
               <button id="__assist_t_avoidp" class="on">avoidPlayers</button>
@@ -6652,6 +6651,14 @@
               <button id="__assist_t_warptominiboss" class="off">👹 วาร์ปไปสู้ Mini Boss</button>
             </div>
             <div class="btns"><button id="__assist_applycombat">ใช้ค่า combat</button></div>
+            <h4 style="margin-top:14px;">🌀 Warp Dance — ตี 1 ครั้งแล้ววาร์ปรอบตัวมอน</h4>
+            <div class="btns"><button id="__assist_t_warpdance" class="off">🌀 Warp Dance: ?</button></div>
+            <div class="field"><label>โหมดวาร์ป — cycle = เรียงวน 8 ทิศ / random = สุ่มทิศ</label><select id="__assist_wdmode" style="width:100%;background:#23262e;color:#e8e8e8;border:1px solid #3a3f4b;border-radius:6px;padding:6px;font-family:inherit"><option value="cycle">cycle — เรียงวน 8 ทิศ</option><option value="random">random — สุ่มทิศ</option></select></div>
+            <div class="field"><label>ระยะห่างจากมอนหลังวาร์ป (ช่อง 1-10 — ควร ≤ ระยะโจมตีของคุณ)</label><input type="number" id="__assist_wddist" min="1" max="10" step="1"></div>
+            <div class="field"><label>Throttle ระหว่างวาร์ป (ms 200-5000) — ขั้นต่ำที่ต้องเว้นก่อนวาร์ปถัดไป</label><input type="number" id="__assist_wdthrottle" min="200" max="5000" step="100"></div>
+            <div class="field"><label>จังหวะตี+วาร์ปต่อรอบ (ms) — คือ attackReIssueMs: ตีครั้งใหม่เมื่อพ้นเวลานี้นับจากตีครั้งก่อน</label><input type="number" id="__assist_wdreissue" min="500" max="10000" step="100"></div>
+            <div class="btns"><button id="__assist_applywd">💾 ใช้ค่า warp dance</button></div>
+            <div style="font-size:10px;color:#9aa0a6;margin-top:6px;">★ เหมาะกับนักเวท/นักธนู — ตีแล้ววาร์ปหลบทันที มอนจะงงหาเราไม่เจอ → เราตีฝ่ายเดียว · ระยะที่ตั้งเกินระยะโจมตีจะทำให้ตีไม่โดน (เดินกลับเข้าไปเอง)</div>
           </div>
           <!-- 📦 Loot -->
           <div class="__assist_subpage active" data-sub="loot">
@@ -6666,6 +6673,7 @@
             <div class="field"><label>ดีเลย์ก่อนเก็บ (ms หลังของตก) — 0 = เก็บทันที</label><input type="number" id="__assist_lootdelay" min="0" step="100"></div>
             <div class="field"><label>ดีเลย์ระหว่างเก็บชิ้นต่อไป (ms) — ห่างระหว่าง pickup แต่ละครั้ง</label><input type="number" id="__assist_lootthrottle" min="100" step="100"></div>
             <div class="field"><label>เช็คของใกล้พิกัดมอนที่ฆ่า (ช่อง) — นักธนูยิงไกล → ของตกที่มอน</label><input type="number" id="__assist_pickradiuskill" min="1" max="20" placeholder="5"></div>
+            <div class="field"><label>เก็บไม่ได้ครบ N ครั้ง → ปล่อย/วาร์ปไปเก็บ (maxAttempts 1-10)</label><input type="number" id="__assist_maxattempts" min="1" max="10" step="1"></div>
             <div class="btns"><button id="__assist_applylootdelay">ตั้งดีเลย์</button><button id="__assist_t_lootkillpos" class="on">เช็คพิกัดมอนที่ฆ่า</button></div>
             <h4>🌀 Warp-to-Loot (วาร์ปไปเก็บของที่ติดกำแพง)</h4>
             <div class="btns"><button id="__assist_warpbtn" class="off">วาร์ปไปเก็บของ: ?</button></div>
@@ -7126,7 +7134,12 @@
       if (!isNaN(th) && th >= 100) { CFG.sendThrottleMs = th; log('📦 ดีเลย์ระหว่างเก็บ =', th, 'ms'); }
       const rk = parseInt(root.querySelector('#__assist_pickradiuskill').value, 10);
       if (!isNaN(rk)) { CFG.pickRadiusKill = rk; log('📦 ระยะเช็คพิกัดมอน =', rk, 'ช่อง'); }
+      // ★ maxAttempts — เก็บไม่ได้ครบ N ครั้ง → ปล่อย/วาร์ปไปเก็บ
+      const matt = parseInt(root.querySelector('#__assist_maxattempts')?.value, 10);
+      if (!isNaN(matt) && matt >= 1 && matt <= 10) { CFG.maxAttempts = matt; log('📦 เก็บสูงสุด', matt, 'ครั้ง/ชิ้น'); saveConfigDebounced(); }
     });
+    // ★ populate maxAttempts ครั้งเดียว
+    const _matt = root.querySelector('#__assist_maxattempts'); if (_matt) _matt.value = CFG.maxAttempts;
     root.querySelector('#__assist_t_lootkillpos').addEventListener('click', () => {
       CFG.lootUseKillPos = !CFG.lootUseKillPos;
       log('📦 เช็คพิกัดมอนที่ฆ่า =', CFG.lootUseKillPos);
@@ -7158,10 +7171,14 @@
       if (!isNaN(maq) && maq > 0) { CFG.maxAcquireDistance = maq; log('🎯 รัศมีค้นหามอน =', maq, 'ช่อง'); }
       const mch = parseInt(root.querySelector('#__assist_maxchase')?.value, 10);
       if (!isNaN(mch) && mch > 0) { CFG.maxChaseDistance = mch; log('🏃 ไล่มอนสูงสุด =', mch, 'ช่อง'); }
+      // ★ attackPendingMax — abandon มอนถ้าตีแล้ว server เงียบครบ N ครั้ง
+      const apm = parseInt(root.querySelector('#__assist_pendmax')?.value, 10);
+      if (!isNaN(apm) && apm >= 1 && apm <= 10) { CFG.attackPendingMax = apm; log('⚔️ abandon ถ้า pending ≥', apm); saveConfigDebounced(); }
     });
     // ★ populate inputs ครั้งเดียว
     const _maq = root.querySelector('#__assist_maxacq'); if (_maq) _maq.value = CFG.maxAcquireDistance;
     const _mch = root.querySelector('#__assist_maxchase'); if (_mch) _mch.value = CFG.maxChaseDistance;
+    const _apm = root.querySelector('#__assist_pendmax'); if (_apm) _apm.value = CFG.attackPendingMax;
     const _es = root.querySelector('#__assist_engagesec'); if (_es) _es.value = CFG.maxEngageSec;
     const _esl = root.querySelector('#__assist_engageslow'); if (_esl) _esl.value = CFG.maxEngageSecSlow;
     // ★ populate noMonsterWarpSec ครั้งเดียว
