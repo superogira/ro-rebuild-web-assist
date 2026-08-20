@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.151.0
+// @version      4.152.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,20 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.151.0';
+  const VERSION = '4.152.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.152.0', d: '2026-08-20', items: [
+      '👕 Equip: แยก "สวมอยู่" กับ "ในถุง" ได้แล้ว! — decode record 44B ครบ (ยืนยัน 22/22 จาก ground truth)',
+      '   u8@11>>2 = refine (+7/+8) · u32@28>>2 = card id ในชิ้น · u32@28&3: 1=ในถุง อื่น=สวมอยู่',
+      '   (ถอดกลับ v4.151.0 ที่เข้าใจผิดว่า @28 = slot id — จริง ๆ คือข้อมูลการ์ด)',
+      '🏷️ ชื่อ equipment แสดงเหมือนในเกม: "+7 Anti-Magic Helm [1]" / "Brooch of Counter"',
+      '   prefix/postfix จาก ItemsCards.csv (cache v5 โหลดใหม่อัตโนมัติ)',
+      '🎨 Equip tab: ของสวมอยู่ก่อน (ขอบฟ้า+ป้าย สวม+เรืองแสง) → ของในถุงตามหลัง',
+      '   + มุมขวาล่างโชว์ +refine · หัวไฟล์ "สวม X · ถุง Y ชิ้น"',
+      '🛡️ ฝาก/ขาย: ข้าม equipment ที่ไม่รู้ slot id (ของมาตั้งแต่ login) + บอกสาเหตุ',
+      '   — กันส่งผิดฟอร์แมตแล้ว server ปฏิเสธทั้งก้อนเหมือนเดิม',
+    ]},
     { v: '4.151.0', d: '2026-08-20', items: [
       '⚔️ Equip: ถอด bag slot id จาก login block (@28 ค่า ≥1000) — ของที่มาตั้งแต่ login',
       '   ตอนนี้มี slot id ให้ฝาก/ขายได้แล้ว (เดิมไม่มี → ส่งเป็น stackable → server ปฏิเสธเงียบ',
@@ -740,11 +751,11 @@
   // ============================================================
   const DB_BASE = GITHUB_RAW.replace('/ro-rebuild-web-assist.user.js', '/db/Item/');
   const ITEMS_ICON_URL = GITHUB_RAW.replace('/ro-rebuild-web-assist.user.js', '/items/small/');
-  const ITEMDB_CACHE_KEY = 'roAssistItemDB_v4';   // v4 = fix desc regex (equip/weapon/card/ammo)   // v3 = +weights   // ★ v2 = จาก db/Item ของ RagnarokRebuildTcp
+  const ITEMDB_CACHE_KEY = 'roAssistItemDB_v5';   // v5 = +cardPrefix/Postfix   // v4 = fix desc regex (equip/weapon/card/ammo)   // v3 = +weights   // ★ v2 = จาก db/Item ของ RagnarokRebuildTcp
   // ★★ itemDB v2 — 6 CSV ของ RagnarokRebuildTcp (2584 รายการ แทน items.csv เดิม 1016)
   //   cats: usable / equip (มี slot จาก Position) / etc (Ammo+Cards+Regular)
   //   + desc จาก ItemDescriptions/*.txt (format ::Code //Id + Unity <color> tags)
-  const itemDB = { names: {}, prices: {}, cats: {}, slots: {}, descs: {}, weights: {}, loaded: false };
+  const itemDB = { names: {}, prices: {}, cats: {}, slots: {}, descs: {}, weights: {}, cardPrefix: {}, cardPostfix: {}, loaded: false };
   const EQUIP_SLOT_ORDER = ['MainHand','Shield','Headgear','Armor','Garment','Boots','Accessory',
     '2HSword','2HAxe','2HSpear','2HRod','Sword','Axe','Spear','Rod','Dagger','Bow','Mace','Knuckle',
     'Katar','Book','Instrument','Whip','Handgun','Rifle','Shotgun','GatlingGun','Grenade','Shuriken'];
@@ -783,9 +794,10 @@
       const cached = localStorage.getItem(ITEMDB_CACHE_KEY);
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (parsed.v === 4 && parsed.names) {
+        if (parsed.v === 5 && parsed.names) {
           itemDB.names = parsed.names; itemDB.prices = parsed.prices || {};
-          itemDB.cats = parsed.cats || {}; itemDB.slots = parsed.slots || {}; itemDB.descs = parsed.descs || {}; itemDB.weights = parsed.weights || {}; itemDB.weights = parsed.weights || {};
+          itemDB.cats = parsed.cats || {}; itemDB.slots = parsed.slots || {}; itemDB.descs = parsed.descs || {}; itemDB.weights = parsed.weights || {};
+          itemDB.cardPrefix = parsed.cardPrefix || {}; itemDB.cardPostfix = parsed.cardPostfix || {};
           itemDB.loaded = true;
           log('🗃️ โหลด item DB v2 จาก cache (' + Object.keys(parsed.names).length + ' รายการ)');
           return;
@@ -816,6 +828,7 @@
         const idIdx = head.indexOf('Id'), nameIdx = head.indexOf('Name'), priceIdx = head.indexOf('Price');
         const slotIdx = slotCol ? head.indexOf(slotCol) : -1;
         const weightIdx = head.indexOf('Weight');
+        const prefixIdx = head.indexOf('Prefix'), postfixIdx = head.indexOf('Postfix');   // ★ ItemsCards.csv
         for (const r of rows) {
           const id = (r[idIdx] || '').trim();
           if (!id) continue;
@@ -824,6 +837,9 @@
           if (priceIdx >= 0 && r[priceIdx]) itemDB.prices[id] = parseInt(r[priceIdx], 10) || 0;
           if (weightIdx >= 0 && r[weightIdx]) itemDB.weights[id] = (parseFloat(r[weightIdx]) || 0) / 10;   // ★ CSV = หน่วย ×10 (Bird Feather 10=1, Apple 20=2, Orange Potion 100=10)
           if (slotIdx >= 0 && r[slotIdx]) itemDB.slots[id] = r[slotIdx].trim();
+          // ★ card prefix/postfix — เช่น Grand Peco → prefix "Anti-Magic" (+7 Anti-Magic Helm[1]) · Kobold → postfix "of Counter" (Brooch of Counter)
+          if (prefixIdx >= 0 && (r[prefixIdx] || '').trim()) itemDB.cardPrefix[id] = (r[prefixIdx] || '').trim();
+          if (postfixIdx >= 0 && (r[postfixIdx] || '').trim()) itemDB.cardPostfix[id] = (r[postfixIdx] || '').trim();
           n++;
         }
       }
@@ -833,7 +849,7 @@
         Object.assign(itemDB.descs, parseDescs(text));
       }
       itemDB.loaded = true;
-      try { localStorage.setItem(ITEMDB_CACHE_KEY, JSON.stringify({ v: 4, names: itemDB.names, prices: itemDB.prices, cats: itemDB.cats, slots: itemDB.slots, descs: itemDB.descs, weights: itemDB.weights })); } catch (e) {}
+      try { localStorage.setItem(ITEMDB_CACHE_KEY, JSON.stringify({ v: 5, names: itemDB.names, prices: itemDB.prices, cats: itemDB.cats, slots: itemDB.slots, descs: itemDB.descs, weights: itemDB.weights, cardPrefix: itemDB.cardPrefix, cardPostfix: itemDB.cardPostfix })); } catch (e) {}
       log('🗃️ โหลด item DB v2 สำเร็จ: ' + n + ' รายการ + ' + Object.keys(itemDB.descs).length + ' descriptions');
     } catch (e) {
       log('⚠️ โหลด item DB v2 ล้มเหลว (' + e.message + ') — ใช้ชื่อเริ่มต้น');
@@ -1156,6 +1172,18 @@
     const db = itemDisplayName(id);
     return db !== 'item_' + id ? `${db}(${id})` : (CFG.itemNames[id] ? `${CFG.itemNames[id]}(${id})` : `item_${id}`);
   };
+  // ★★ ชื่อแสดงผลของ equipment ชิ้นจริง — "+7 Anti-Magic Helm[1]" / "Brooch of Counter"
+  //   refine + card prefix/postfix ตามที่เกมแสดง (prefix/postfix จาก ItemsCards.csv)
+  function equipDisplayName(rec) {
+    const k = String(rec.id);
+    let n = itemDB.names[k] || ('item_' + rec.id);
+    const sl = itemDB.slots[k];
+    if (sl) n += ' [' + sl + ']';
+    const ck = rec.card ? String(rec.card) : '';
+    const pre = ck && itemDB.cardPrefix[ck] ? itemDB.cardPrefix[ck] + ' ' : '';
+    const post = ck && itemDB.cardPostfix[ck] ? ' ' + itemDB.cardPostfix[ck] : '';
+    return (rec.refine ? '+' + rec.refine + ' ' : '') + pre + n + post;
+  }
 
   // ★ per-item action: 'keep' | 'sell' | 'deposit' (เก็บ/ขาย/ฝาก — เลือกได้อย่างเดียว)
   //   เก็บไว้ใน sellItemIds/depositItemIds ที่มีอยู่แล้ว (deposit สำคัญกว่า sell ถ้าซ้ำ)
@@ -1983,7 +2011,7 @@
           inventory.set(itemId, (inventory.get(itemId) || 0) + 1);
           // ★★ เพิ่มเข้า equipmentList ทันที (ถอดจากคาฟรา / เก็บ equipment จากพื้น)
           //   ยืนยันจาก capture: ถอด Chain(1520)/Boots(2405) จากคาฟรา → 0x56 ตอบ itemId ตามด้วย 0x32-05
-          equipmentList.push(itemId);
+          equipmentList.push({ id: itemId, worn: false, card: 0, refine: 0 });
           invDataVer++;
           // ★ track slot id ของแต่ละชิ้น (mirror world.js:773-777)
           if (slotId > 0) {
@@ -2011,7 +2039,7 @@
                 else inventory.delete(itemId);
                 if (slots.length === 0) equipmentSlots.delete(itemId);
                 // ★★ ลบออกจาก equipmentList 1 ชิ้น (ฝากเข้าคาฟรา/ขาย/ทิ้ง — เฉพาะชิ้นที่ server ยืนยัน)
-                const eqIdx = equipmentList.indexOf(itemId);
+                const eqIdx = equipmentList.findIndex(x => x.id === itemId);
                 if (eqIdx >= 0) equipmentList.splice(eqIdx, 1);
                 invDataVer++;
                 inventoryFull = false;   // ★ server ยืนยันมีของออกจริง = slot ว่างแน่นอน
@@ -2189,19 +2217,26 @@
               if (idE2 === 0 || idE2 % 4 !== 0) break;
               const eqId = idE2 >>> 2;
               if (eqId <= 0 || eqId > 12000) break;
-              equipmentList.push(eqId);
-              // ★★ @28 = bag slot id ของชิ้นที่ "ไม่ได้สวม" (ค่า ≥1000 — เช่น 16126-16647)
-              //   scale เดียวกับ sub=5 (20xxx) — id โตตามอายุไอเทม
-              //   → ลงทะเบียนให้ equipmentSlots = ฝาก/ขายของที่มาตั้งแต่ login ได้
-              //   (เดิม: ของ login ไม่มี slot id → ถูกส่งเป็น stackable → server ปฏิเสธเงียบ)
-              //   ค่าเล็ก 0/1/2 = ชิ้นที่กำลังสวมอยู่ (slot id ไม่ถูกส่ง) → ข้าม
-              const bagSlotE = u32(u, ep + 28);
-              if (bagSlotE >= 1000 && bagSlotE < 100000) {
-                const slots2 = equipmentSlots.get(eqId) || [];
-                if (!slots2.includes(bagSlotE)) slots2.push(bagSlotE);
-                equipmentSlots.set(eqId, slots2);
-              }
+              // ★★★ decode record 44B (ยืนยันจาก capture + ground truth ผู้เล่น 13/13 ชิ้น):
+              //   u8@11  >> 2 = refine (0x1C>>2=+7 Manteau/Boots[1]/Helm · 0x20>>2=+8 Masamune/Full Plate)
+              //   u32@28 >> 2 = card id ในชิ้น (16647>>2=4161 Grand Peco ✓ · 16367>>2=4091 Kobold ✓
+              //                 16411>>2=4102 Whisper · 16155>>2=4038 Zombie · 16126>>2=4031 Peco Peco ✓)
+              //   u32@28 &  3 = 1 = อยู่ในถุง / 0,2,3 = สวมอยู่ (ยืนยัน 9 สวม + 4 ถุง ครบ)
+              //   (เดิมเคยเข้าใจว่า @28 = bag slot id — ผิด! มันคือข้อมูลการ์ด อย่าใช้เป็น slot id เด็ดขาด)
+              const f28 = u32(u, ep + 28);
+              const cardId = f28 >> 2;
+              const refineE = u[ep + 11] >> 2;
+              equipmentList.push({
+                id: eqId,
+                worn: (f28 & 3) !== 1,
+                card: (cardId >= 4001 && cardId <= 4600) ? cardId : 0,
+                refine: refineE > 1 ? refineE : 0,   // encode พิเศษของชิ้นไร้ refine → ไม่แสดง
+              });
               ep += 44;
+            }
+            if (equipmentList.length > 0) {
+              const wornN = equipmentList.filter(x => x.worn).length;
+              dbg('⚔️ equipment: ' + equipmentList.length + ' ชิ้น (สวม ' + wornN + ' · ถุง ' + (equipmentList.length - wornN) + ') — ' + equipmentList.slice(0, 6).map(x => equipDisplayName(x)).join(', '));
             }
           }
           if (equipmentList.length > 0) dbg('⚔️ equipment: ' + equipmentList.length + ' ชิ้น — ' + equipmentList.slice(0, 6).map(id => nameOf(id)).join(', '));
@@ -2354,6 +2389,7 @@
       //   เคสจริงจาก log: ปนกันใน packet เดียว → server ปฏิเสธทั้งก้อน ("could not complete sale")
       //   3 ครั้งติด ของไม่ถูกขายเลย — แยกแล้ว stackable ยังขายได้แม้ equipment จะ fail
       const stackItems = [], eqItems = [];
+      let noSlotSkipped = 0;
       for (const id of CFG.sellItemIds) {
         const stock = inventory.get(id) || 0;
         if (stock <= 0) continue;
@@ -2362,11 +2398,15 @@
           // ★ equipment — ขายจาก slot สูง→ต่ำ (กัน index shift เหมือน storage)
           const sorted = [...eqSlots].sort((a, b) => b - a);
           for (const slotId of sorted) eqItems.push({ itemId: slotId, realId: id, count: 1 });
+        } else if (equipmentList.some(x => x.id === id)) {
+          // ★★ equipment ที่ไม่รู้ slot id — ส่งเป็น stackable = ผิดฟอร์แมต ต้องข้าม
+          noSlotSkipped++;
         } else {
           // ★ stackable — itemId + count จริง (server ปฏิเสธถ้า count ไม่ตรง)
           stackItems.push({ itemId: id, count: stock });
         }
       }
+      if (noSlotSkipped > 0) log('⚠️ ข้าม equipment', noSlotSkipped, 'ชนิดจากการขาย (ไม่รู้ slot id)');
       if (stackItems.length === 0 && eqItems.length === 0) {
         log('⚠️ ไม่มีของที่จะขาย (sellItemIds ว่าง หรือ inventory ไม่มี)');
         sendSellClose();   // ★★ ปิด sell dialog ก่อน warp (กัน warp ไม่ไป)
@@ -2377,7 +2417,11 @@
         // ★ มีแต่ equipment (ไม่มี stackable) → ส่งรอบเดียวจบ ห้ามส่งซ้ำรอบสอง
         if (stackItems.length === 0) sellEquipRoundSent = true;
         log('💰 ขายของ', first.length, 'รายการ' + (stackItems.length > 0 && eqItems.length > 0 ? ' (+' + eqItems.length + ' equipment รอบถัดไป)' : '') + ':',
-            first.map(i => nameOf(i.realId != null ? i.realId : i.itemId) + (i.realId != null ? ' (slot ' + i.itemId + ')' : '') + '×' + i.count).join(', '));
+            first.map(i => {
+              if (i.realId == null) return nameOf(i.itemId) + '×' + i.count;
+              const rec = equipmentList.find(x => x.id === i.realId);
+              return (rec ? equipDisplayName(rec) : nameOf(i.realId)) + ' (slot ' + i.itemId + ')';
+            }).join(', '));
         sendSellItems(first);
         sellState = 'SELL'; sellStateAt = nowMs();
       }
@@ -2404,7 +2448,7 @@
             if (slots.length === 0) equipmentSlots.delete(eq.realId);
           }
           // ★ ลบจาก equipmentList ด้วย (server ส่ง 0x32 removal ยืนยัน แต่กัน race)
-          const ei = equipmentList.indexOf(eq.realId);
+          const ei = equipmentList.findIndex(x => x.id === eq.realId);
           if (ei >= 0) equipmentList.splice(ei, 1);
         }
         invDataVer++;
@@ -3256,20 +3300,26 @@
   // ★ สร้าง queue ของที่จะฝาก — แยก equipment vs stackable (mirror bot.js:1947-1987)
   function buildDepositQueue() {
     const queue = [];
+    let noSlotSkipped = 0;
     for (const itemId of CFG.depositItemIds) {
       const stock = inventory.get(itemId) || 0;
       if (stock <= 0) continue;
       const eqSlots = equipmentSlots.get(itemId);
       if (eqSlots && eqSlots.length > 0) {
         // ★★ equipment — ฝากจาก slot สูง→ต่ำ (กัน index shift) ทีละชิ้น amount=1
-        //   verified=false (slot id จาก login block) → ไม่ optimistic ลบ รอ server ยืนยัน
+        //   verified=false (slot id จาก sub=5 เท่านั้นที่ verified) → ไม่ optimistic ลบ รอ server ยืนยัน
         const sorted = [...eqSlots].sort((a, b) => b - a);
         for (const slotId of sorted) queue.push({ itemId, amount: 1, invId: slotId, isEquipment: true, verified: verifiedEquipSlots.has(slotId) });
+      } else if (equipmentList.some(x => x.id === itemId)) {
+        // ★★ equipment ที่ไม่รู้ slot id (มาตั้งแต่ login) — ส่งเป็น stackable = ผิดฟอร์แมต ต้องข้าม
+        //   (slot id ได้เฉพาะจาก 0x32 sub=5 — เช่น ถอดออกจากคาฟรา/เก็บจากพื้น แล้วจะฝากได้เอง)
+        noSlotSkipped++;
       } else {
         // ★ stackable — ทั้งกองทีเดียว (moveId = itemId)
         queue.push({ itemId, amount: stock, invId: itemId, isEquipment: false });
       }
     }
+    if (noSlotSkipped > 0) log('⚠️ ข้าม equipment', noSlotSkipped, 'ชนิด (ไม่รู้ slot id — ยังไม่เคยผ่านคาฟรา/เก็บใน session นี้)');
     return queue;
   }
   const storageLoop = setInterval(() => {
@@ -3393,7 +3443,7 @@
         if (cur > 1) inventory.set(item.itemId, cur - 1);
         else inventory.delete(item.itemId);
         // ★★ ลบจาก equipmentList ด้วย — removal ของ server จะหา slot ไม่เจอแล้ว (เราลบก่อน)
-        const eqIdx = equipmentList.indexOf(item.itemId);
+        const eqIdx = equipmentList.findIndex(x => x.id === item.itemId);
         if (eqIdx >= 0) equipmentList.splice(eqIdx, 1);
         invDataVer++;
       } else {
@@ -3433,10 +3483,11 @@
 
   // ---------- AUTO-SELL + AUTO-STORAGE state + inventory ----------
   const inventory = new Map();
-  // ★★ equipmentList — อาวุธ/ชุดแยกเป็นชิ้นตามลำดับใน packet (ก้อน 0x13880 = ลำดับ slot เกม)
-  const equipmentList = [];    // itemId -> count (authoritative from 0x32, mirror world.js:34)
-  const equipmentSlots = new Map(); // ★ itemId -> [slotId, slotId, ...] (mirror world.js:773-777)
-  const verifiedEquipSlots = new Set(); // ★ slotId ที่ยืนยันแน่ (จาก 0x32 sub=5) — ต่างจากของ login block (@28)
+  // ★★ equipmentList — ชิ้น equipment แยกเป็น record {id, worn, card, refine}
+  //   ลำดับตาม login block (ก้อน 0x13880) · worn/card/refine decode จาก record 44B
+  const equipmentList = [];
+  const equipmentSlots = new Map(); // ★ itemId -> [slotId, slotId, ...] — ได้จาก 0x32 sub=5 เท่านั้น
+  const verifiedEquipSlots = new Set(); // ★ slotId ที่ยืนยันแน่ (จาก 0x32 sub=5)
   let invDataVer = 0;          // ★ version ของ inventory/equipment — bump ทุกครั้งที่ข้อมูลเปลี่ยน (modal live-refresh)
   let lastOutEquip = null;     // ★ OUT 0x30 ล่าสุด {idx, action, at} — ให้ IN 0x30 รู้ทิศทาง สวมใส่/ถอด
   let inventoryFull = false;      // true เมื่อ server ส่ง "too full" (0x20)
@@ -7903,7 +7954,7 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
           </div>
           <div id="__assist_inv_grid" style="flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(10,1fr);gap:4px;align-content:start;padding-right:4px"></div>
         </div>
-        <div id="__assist_inv_hint" style="font-size:9px;color:#666;margin-top:6px">★ Equip: ลำดับตอนเข้าเกม + ของใหม่ (ถอดคาฟรา/เก็บ) ต่อท้าย อัปเดตสด · คลิกช่อง: เก็บ→ขาย→ฝาก · hover ดูรายละเอียด</div>
+        <div id="__assist_inv_hint" style="font-size:9px;color:#666;margin-top:6px">★ Equip: สวมอยู่ (ขอบฟ้า+ป้าย สวม) ก่อน แล้วของในถุง · ชื่อแสดง +refine/การ์ด · อัปเดตตอนเข้าเกม · คลิก: เก็บ→ขาย→ฝาก · hover ดูรายละเอียด</div>
       </div>`;
     document.body.appendChild(overlay);
     const grid = overlay.querySelector('#__assist_inv_grid');
@@ -7913,32 +7964,41 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
     let invCurTab = 'usable';
     function render(tab) {
       invCurTab = tab;
-      // ★ Equip: แยกชิ้นตามลำดับ packet (= ลำดับ slot เกม) · อื่น ๆ จาก inventory ตามหมวด
+      // ★★ Equip: สวมอยู่ก่อน (ป้าย 'สวม') → ของในถุงต่อ — คงลำดับเกมในแต่ละกลุ่ม
+      //   worn/card/refine มาจาก login block (refresh ทุกครั้งที่เข้าเกมใหม่)
       let items;
       if (tab === 'equip') {
-        items = equipmentList.map(id => ({ id, c: 1 }));
+        items = [...equipmentList.filter(x => x.worn), ...equipmentList.filter(x => !x.worn)]
+          .map(x => ({ id: x.id, c: 1, worn: !!x.worn, card: x.card || 0, refine: x.refine || 0 }));
       } else {
         items = [...inventory.entries()]
           .filter(([id, c]) => c > 0 && itemDB.cats[String(id)] === tab)
           .map(([id, c]) => ({ id, c }));
       }
-      // ★ Equip คงลำดับจาก packet (= ลำดับ slot เกม) · อื่น ๆ เรียง id
       if (tab !== 'equip') items.sort((a, b) => a.id - b.id);
       const total = items.reduce((s, x) => s + x.c, 0);
-      cntEl.textContent = items.length + ' ชนิด · ' + total.toLocaleString() + ' ชิ้น' + (playerWeight != null ? ' · ' + Math.round(playerWeight) + '/' + playerMaxWeight : '');
+      const wornN = tab === 'equip' ? items.filter(x => x.worn).length : 0;
+      cntEl.textContent = (tab === 'equip'
+        ? 'สวม ' + wornN + ' · ถุง ' + (items.length - wornN) + ' ชิ้น'
+        : items.length + ' ชนิด · ' + total.toLocaleString() + ' ชิ้น')
+        + (playerWeight != null ? ' · ' + Math.round(playerWeight) + '/' + playerMaxWeight : '');
       grid.innerHTML = items.map(x => {
         const k = String(x.id);
         const name = itemDB.names[k] || ('item_' + x.id);
         const slot = itemDB.slots[k];
         const desc = itemDB.descs[k] || '';
-        const nameBar = name + (slot ? ' [' + slot + ']' : '') + (x.id >= 4001 && x.id <= 4520 ? ' [Card]' : '');
+        // ★ equip tab: ชื่อเต็มตามเกม (+refine +prefix/postfix การ์ด) เช่น "+7 Anti-Magic Helm [1]"
+        const nameBar = tab === 'equip'
+          ? equipDisplayName(x) + (x.worn ? ' — สวมอยู่' : '')
+          : name + (slot ? ' [' + slot + ']' : '') + (x.id >= 4001 && x.id <= 4520 ? ' [Card]' : '');
                 const action = getItemAction(x.id);
         const actionBg = action === 'sell' ? 'rgba(230,126,34,.35)' : (action === 'deposit' ? 'rgba(39,174,96,.35)' : '#23262e');
-        const actionBorder = action === 'sell' ? '#e67e22' : (action === 'deposit' ? '#27ae60' : '#3a3f4b');
-return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" data-desc="${esc(desc || '(ไม่มีคำอธิบาย)')}" style="position:relative;aspect-ratio:1;background:${actionBg};border:1px solid ${actionBorder};border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:visible" title="คลิก: เก็บ→ขาย→ฝาก">
+        const actionBorder = x.worn ? '#64b5f6' : (action === 'sell' ? '#e67e22' : (action === 'deposit' ? '#27ae60' : '#3a3f4b'));
+return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" data-desc="${esc(desc || '(ไม่มีคำอธิบาย)')}" style="position:relative;aspect-ratio:1;background:${actionBg};border:1px solid ${actionBorder};border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:visible${x.worn ? ';box-shadow:0 0 4px rgba(100,181,246,.7)' : ''}" title="คลิก: เก็บ→ขาย→ฝาก">
           <img src="${itemIconUrl(x.id)}" style="max-width:80%;max-height:80%;image-rendering:pixelated" onerror="this.style.display='none'">
+          ${x.worn ? `<span style="position:absolute;top:0;right:0;font-size:8px;background:#1565c0;color:#fff;padding:0 3px;border-radius:0 6px 0 3px;font-weight:bold">สวม</span>` : ''}
           ${action !== 'keep' ? `<span class="__inv_action" style="position:absolute;top:0;left:0;font-size:8px;background:#000;color:#fff;padding:0 3px;border-radius:3px 0 3px 0;font-weight:bold">${action === 'sell' ? 'ขาย' : 'ฝาก'}</span>` : ''}
-          <span style="position:absolute;bottom:0;right:2px;font-size:9px;color:#fff;text-shadow:0 0 2px #000,0 0 2px #000;font-weight:bold">${x.c > 999 ? Math.floor(x.c / 1000) + 'k' : x.c}</span>
+          <span style="position:absolute;bottom:0;right:2px;font-size:9px;color:#fff;text-shadow:0 0 2px #000,0 0 2px #000;font-weight:bold">${x.refine ? '+' + x.refine : (x.c > 999 ? Math.floor(x.c / 1000) + 'k' : (tab === 'equip' ? '' : x.c))}</span>
         </div>`;
       }).join('') || '<div style="grid-column:1/-1;color:#666;font-size:11px;padding:20px;text-align:center">(ว่างเปล่า)</div>';
     }
