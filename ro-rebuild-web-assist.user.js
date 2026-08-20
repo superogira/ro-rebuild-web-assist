@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.168.0
+// @version      4.168.1
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,15 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.168.0';
+  const VERSION = '4.168.1';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.168.1', d: '2026-08-21', items: [
+      '🐛 แก้สกิลบัพประเภทพื้นที่ (Sanctuary/Pneuma/Safety Wall) ให้คนอื่น —',
+      '   เดิมส่ง targeted [1d][01]+playerId เสมอ = ground skill พัง (server คงปฏิเสธเงียบ)',
+      '   → ตรวจ skill.ground: ส่ง [1d][04] + พิกัด x,y ของผู้เล่นเป้าหมายแทน',
+      '   (รวมตัวเองด้วย = วางที่ตำแหน่งยืนเรา) + log แยก "@ พื้น(x,y)"',
+    ]},
     { v: '4.168.0', d: '2026-08-21', items: [
       '❤️ buff เพิ่มเงื่อนไข "HP เป้าหมาย < %" — Heal ให้คนอื่นเฉพาะเมื่อเลือดคนนั้นต่ำกว่าเกณฑ์',
       '   (เดิมไม่เช็คเลย = Heal คนเลือดเต็มเปลือง SP ฟรี) · 0/ว่าง = ไม่สน (บัพ Blessing ได้ตลอด)',
@@ -1710,13 +1716,22 @@
         if (sendStand()) { log('🪑 ลุกยืน: มี ' + (best.name || 'ผู้เล่น') + ' รอบัพ — บัพก่อนแล้วค่อยพักต่อ'); }
         isResting = false;
       }
-      // ★ ส่งสกิลให้ผู้เล่น — format [1d][01][playerId:4][skillId:1][level:1]
-      if (sendSkill(skill.skillId, skill.level || 1, best.id, null, null)) {
+      // ★ ส่งสกิลให้ผู้เล่น — เลือก format ตามชนิดสกิล:
+      //   ปกติ (Heal/Blessing): [1d][01][playerId:4][skillId:1][level:1] — ยืนยันจาก capture จริง
+      //   สกิลพื้นที่ (Sanctuary/Pneuma/Safety Wall): [1d][04][x:2][y:2][skillId:1][level:1]
+      //     ★★ ต้องส่ง "พิกัดของผู้เล่นเป้าหมาย" ไม่ใช่ playerId (เดิมส่ง targeted เสมอ = ground skill พัง)
+      const isGroundBuff = !!skill.ground;
+      if (sendSkill(skill.skillId, skill.level || 1,
+                    isGroundBuff ? null : best.id,
+                    isGroundBuff ? Math.round(best.x) : null,
+                    isGroundBuff ? Math.round(best.y) : null)) {
         lastSkillUse.set(skill.skillId, now);
         saveSkillTimesDebounced();
         if (!buffTargetUse.has(skill.skillId)) buffTargetUse.set(skill.skillId, new Map());
         buffTargetUse.get(skill.skillId).set(best.id, now);
-        log('🤝 บัพให้', best.name + ':', skill.name || ('id=' + skill.skillId), 'Lv' + (skill.level || 1), '@ dist', bestD.toFixed(1), '(sp', (sp.cur != null ? sp.cur : '?') + ')');
+        log('🤝 บัพให้', best.name + ':', skill.name || ('id=' + skill.skillId), 'Lv' + (skill.level || 1),
+            isGroundBuff ? ('@ พื้น(' + Math.round(best.x) + ',' + Math.round(best.y) + ')') : ('@ dist ' + bestD.toFixed(1)),
+            '(sp ' + (sp.cur != null ? sp.cur : '?') + ')');
         break;   // ทีละสกิลต่อ tick
       }
     }
