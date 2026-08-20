@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.157.0
+// @version      4.158.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,17 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.157.0';
+  const VERSION = '4.158.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.158.0', d: '2026-08-20', items: [
+      '🏷️ ชื่ออุปกรณ์แสดงจำนวนช่องการ์ดจริง เช่น "Sword[3]" / "+7 Helm[1]" (ไม่มีช่อง = ไม่แสดง)',
+      '📊 Tooltip อุปกรณ์แสดงสเตตัสก่อนคำอธิบาย:',
+      '   ⚔️ Attack (อาวุธ) · 🛡️ Defense/M.Def (เสื้อผ้า) · ⚖️ Weight · 🔧 Weapon Level · 📏 Required Level',
+      '   👤 Jobs — แปลง EquipGroup ผ่าน EquipmentGroups.csv (ไฟล์ใหม่)',
+      '   เช่น Sword[3] → Jobs: Novice, Swordsman, Merchant, Thief · Guard → All Jobs',
+      '🗃️ itemDB cache v6 (โหลดใหม่อัตโนมัติครั้งแรก — รวมสเตตัส + กลุ่มอาชีพ)',
+    ]},
     { v: '4.157.0', d: '2026-08-20', items: [
       '🔓 ตัวชี้ "สวมอยู่" ตัวจริง! — หางท้ายก้อน equipment มีรายการ inst ของชิ้นที่สวมอยู่',
       '   (0 = ช่องว่าง เช่น ช่องโล่ตอนถือดาบ 2 มือ) — ยืนยัน 4/4 captures:',
@@ -797,11 +805,12 @@
   // ============================================================
   const DB_BASE = GITHUB_RAW.replace('/ro-rebuild-web-assist.user.js', '/db/Item/');
   const ITEMS_ICON_URL = GITHUB_RAW.replace('/ro-rebuild-web-assist.user.js', '/items/small/');
-  const ITEMDB_CACHE_KEY = 'roAssistItemDB_v5';   // v5 = +cardPrefix/Postfix   // v4 = fix desc regex (equip/weapon/card/ammo)   // v3 = +weights   // ★ v2 = จาก db/Item ของ RagnarokRebuildTcp
+  const ITEMDB_CACHE_KEY = 'roAssistItemDB_v6';   // v6 = +slotCount/attack/def/wLevel/reqLevel/equipGroup/jobs   // v5 = +cardPrefix/Postfix   // ★ v2 = จาก db/Item ของ RagnarokRebuildTcp
   // ★★ itemDB v2 — 6 CSV ของ RagnarokRebuildTcp (2584 รายการ แทน items.csv เดิม 1016)
   //   cats: usable / equip (มี slot จาก Position) / etc (Ammo+Cards+Regular)
   //   + desc จาก ItemDescriptions/*.txt (format ::Code //Id + Unity <color> tags)
-  const itemDB = { names: {}, prices: {}, cats: {}, slots: {}, descs: {}, weights: {}, cardPrefix: {}, cardPostfix: {}, loaded: false };
+  const itemDB = { names: {}, prices: {}, cats: {}, slots: {}, descs: {}, weights: {}, cardPrefix: {}, cardPostfix: {},
+    slotCounts: {}, attacks: {}, defenses: {}, magicDefs: {}, wLevels: {}, reqLevels: {}, equipGroups: {}, groupInfo: {}, loaded: false };
   const EQUIP_SLOT_ORDER = ['MainHand','Shield','Headgear','Armor','Garment','Boots','Accessory',
     '2HSword','2HAxe','2HSpear','2HRod','Sword','Axe','Spear','Rod','Dagger','Bow','Mace','Knuckle',
     'Katar','Book','Instrument','Whip','Handgun','Rifle','Shotgun','GatlingGun','Grenade','Shuriken'];
@@ -840,10 +849,14 @@
       const cached = localStorage.getItem(ITEMDB_CACHE_KEY);
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (parsed.v === 5 && parsed.names) {
+        if (parsed.v === 6 && parsed.names) {
           itemDB.names = parsed.names; itemDB.prices = parsed.prices || {};
           itemDB.cats = parsed.cats || {}; itemDB.slots = parsed.slots || {}; itemDB.descs = parsed.descs || {}; itemDB.weights = parsed.weights || {};
           itemDB.cardPrefix = parsed.cardPrefix || {}; itemDB.cardPostfix = parsed.cardPostfix || {};
+          itemDB.slotCounts = parsed.slotCounts || {}; itemDB.attacks = parsed.attacks || {};
+          itemDB.defenses = parsed.defenses || {}; itemDB.magicDefs = parsed.magicDefs || {};
+          itemDB.wLevels = parsed.wLevels || {}; itemDB.reqLevels = parsed.reqLevels || {};
+          itemDB.equipGroups = parsed.equipGroups || {}; itemDB.groupInfo = parsed.groupInfo || {};
           itemDB.loaded = true;
           log('🗃️ โหลด item DB v2 จาก cache (' + Object.keys(parsed.names).length + ' รายการ)');
           return;
@@ -864,7 +877,20 @@
       const texts = await Promise.all([
         ...files.map(x => fetch(DB_BASE + x[0]).then(r => r.ok ? r.text() : null).catch(() => null)),
         ...descsFiles.map(x => fetch(DB_BASE + 'ItemDescriptions/' + x).then(r => r.ok ? r.text() : null).catch(() => null)),
+        // ★ EquipmentGroups.csv — map EquipGroup → อาชีพที่ใช้ได้ (ไม่มี header: key,"display",job1,job2,...)
+        fetch(DB_BASE + 'EquipmentGroups.csv').then(r => r.ok ? r.text() : null).catch(() => null),
       ]);
+      // ★★ อ่านกลุ่มอาชีพก่อน (สำหรับแปลง EquipGroup → ชื่ออาชีพ)
+      const gtext = texts[descsFiles.length + files.length];
+      if (gtext) {
+        for (const line of gtext.split(/\r?\n/)) {
+          if (!line.trim()) continue;
+          const cells = line.split(',');
+          const key = (cells[0] || '').trim(); if (!key) continue;
+          const disp = (cells[1] || '').trim().replace(/^"|"$/g, '');
+          itemDB.groupInfo[key] = { display: disp && disp !== '<Auto>' ? disp : null, members: cells.slice(2).map(s => s.trim()).filter(Boolean) };
+        }
+      }
       let n = 0;
       for (let fi = 0; fi < files.length; fi++) {
         const text = texts[fi];
@@ -875,6 +901,11 @@
         const slotIdx = slotCol ? head.indexOf(slotCol) : -1;
         const weightIdx = head.indexOf('Weight');
         const prefixIdx = head.indexOf('Prefix'), postfixIdx = head.indexOf('Postfix');   // ★ ItemsCards.csv
+        // ★★ สเตตัสอุปกรณ์: Slot(จำนวนช่องการ์ด) · Attack(อาวุธ) · Defense/MagicDef(เสื้อผ้า) ·
+        //   Rank(=Weapon Level อาวุธ) · MinLvl(=Required Level) · EquipGroup(→อาชีพที่ใช้ได้)
+        const slotCntIdx = head.indexOf('Slot'), atkIdx = head.indexOf('Attack');
+        const defIdx = head.indexOf('Defense'), mdefIdx = head.indexOf('MagicDef');
+        const rankIdx = head.indexOf('Rank'), minLvlIdx = head.indexOf('MinLvl'), egIdx = head.indexOf('EquipGroup');
         for (const r of rows) {
           const id = (r[idIdx] || '').trim();
           if (!id) continue;
@@ -886,6 +917,13 @@
           // ★ card prefix/postfix — เช่น Grand Peco → prefix "Anti-Magic" (+7 Anti-Magic Helm[1]) · Kobold → postfix "of Counter" (Brooch of Counter)
           if (prefixIdx >= 0 && (r[prefixIdx] || '').trim()) itemDB.cardPrefix[id] = (r[prefixIdx] || '').trim();
           if (postfixIdx >= 0 && (r[postfixIdx] || '').trim()) itemDB.cardPostfix[id] = (r[postfixIdx] || '').trim();
+          if (slotCntIdx >= 0 && r[slotCntIdx] !== undefined && r[slotCntIdx] !== '') itemDB.slotCounts[id] = parseInt(r[slotCntIdx], 10) || 0;
+          if (atkIdx >= 0 && r[atkIdx]) itemDB.attacks[id] = parseInt(r[atkIdx], 10) || 0;
+          if (defIdx >= 0 && r[defIdx]) itemDB.defenses[id] = parseInt(r[defIdx], 10) || 0;
+          if (mdefIdx >= 0 && r[mdefIdx]) itemDB.magicDefs[id] = parseInt(r[mdefIdx], 10) || 0;
+          if (rankIdx >= 0 && r[rankIdx]) itemDB.wLevels[id] = parseInt(r[rankIdx], 10) || 0;
+          if (minLvlIdx >= 0 && r[minLvlIdx] !== undefined && r[minLvlIdx] !== '') itemDB.reqLevels[id] = parseInt(r[minLvlIdx], 10) || 0;
+          if (egIdx >= 0 && r[egIdx]) itemDB.equipGroups[id] = (r[egIdx] || '').trim();
           n++;
         }
       }
@@ -895,7 +933,7 @@
         Object.assign(itemDB.descs, parseDescs(text));
       }
       itemDB.loaded = true;
-      try { localStorage.setItem(ITEMDB_CACHE_KEY, JSON.stringify({ v: 5, names: itemDB.names, prices: itemDB.prices, cats: itemDB.cats, slots: itemDB.slots, descs: itemDB.descs, weights: itemDB.weights, cardPrefix: itemDB.cardPrefix, cardPostfix: itemDB.cardPostfix })); } catch (e) {}
+      try { localStorage.setItem(ITEMDB_CACHE_KEY, JSON.stringify({ v: 6, names: itemDB.names, prices: itemDB.prices, cats: itemDB.cats, slots: itemDB.slots, descs: itemDB.descs, weights: itemDB.weights, cardPrefix: itemDB.cardPrefix, cardPostfix: itemDB.cardPostfix, slotCounts: itemDB.slotCounts, attacks: itemDB.attacks, defenses: itemDB.defenses, magicDefs: itemDB.magicDefs, wLevels: itemDB.wLevels, reqLevels: itemDB.reqLevels, equipGroups: itemDB.equipGroups, groupInfo: itemDB.groupInfo })); } catch (e) {}
       log('🗃️ โหลด item DB v2 สำเร็จ: ' + n + ' รายการ + ' + Object.keys(itemDB.descs).length + ' descriptions');
     } catch (e) {
       log('⚠️ โหลด item DB v2 ล้มเหลว (' + e.message + ') — ใช้ชื่อเริ่มต้น');
@@ -1220,15 +1258,39 @@
   };
   // ★★ ชื่อแสดงผลของ equipment ชิ้นจริง — "+7 Anti-Magic Helm[1]" / "Brooch of Counter"
   //   refine + card prefix/postfix ตามที่เกมแสดง (prefix/postfix จาก ItemsCards.csv)
+  //   [N] ต่อท้าย = จำนวนช่องการ์ด (จากคอลัมน์ Slot) — ไม่มีช่อง (0) ไม่แสดง
   function equipDisplayName(rec) {
     const k = String(rec.id);
     let n = itemDB.names[k] || ('item_' + rec.id);
-    const sl = itemDB.slots[k];
-    if (sl) n += ' [' + sl + ']';
+    const slc = itemDB.slotCounts[k];
+    if (slc > 0) n += '[' + slc + ']';
     const ck = rec.card ? String(rec.card) : '';
     const pre = ck && itemDB.cardPrefix[ck] ? itemDB.cardPrefix[ck] + ' ' : '';
     const post = ck && itemDB.cardPostfix[ck] ? ' ' + itemDB.cardPostfix[ck] : '';
     return (rec.refine ? '+' + rec.refine + ' ' : '') + pre + n + post;
+  }
+  // ★★ สรุปสเตตัสอุปกรณ์สำหรับ tooltip — Attack/Defense/Weight/Weapon Level/Required Level/Jobs
+  //   (อาชีพจาก EquipGroup → EquipmentGroups.csv: ใช้ display name ถ้ามี ไม่งั้นรวมรายชื่อ members)
+  function equipStatDesc(id) {
+    const k = String(id);
+    const lines = [];
+    const atk = itemDB.attacks[k];
+    if (atk != null && itemDB.attacks[k] !== undefined) lines.push('⚔️ Attack: ' + atk);
+    const df = itemDB.defenses[k], md = itemDB.magicDefs[k];
+    if (df > 0 || md > 0) lines.push('🛡️ Defense: ' + (df || 0) + (md > 0 ? ' / M.Def ' + md : ''));
+    const w = itemDB.weights[k];
+    if (w) lines.push('⚖️ Weight: ' + w);
+    const wl = itemDB.wLevels[k];
+    if (wl > 0) lines.push('🔧 Weapon Level: ' + wl);
+    const rl = itemDB.reqLevels[k];
+    if (rl > 0) lines.push('📏 Required Level: ' + rl);
+    const eg = itemDB.equipGroups[k];
+    if (eg) {
+      const gi = itemDB.groupInfo[eg];
+      const jobs = gi ? (gi.display || gi.members.join(', ')) : eg;
+      lines.push('👤 Jobs: ' + jobs);
+    }
+    return lines.join('\n');
   }
 
   // ★ per-item action: 'keep' | 'sell' | 'deposit' (เก็บ/ขาย/ฝาก — เลือกได้อย่างเดียว)
@@ -8085,14 +8147,15 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
         const name = itemDB.names[k] || ('item_' + x.id);
         const slot = itemDB.slots[k];
         const desc = itemDB.descs[k] || '';
-        // ★ equip tab: ชื่อเต็มตามเกม (+refine +prefix/postfix การ์ด) เช่น "+7 Anti-Magic Helm [1]"
+        // ★ equip tab: ชื่อเต็มตามเกม + tooltip นำหน้าด้วยสเตตัส (Attack/Weight/Level/Jobs)
         const nameBar = tab === 'equip'
           ? equipDisplayName(x)
           : name + (slot ? ' [' + slot + ']' : '') + (x.id >= 4001 && x.id <= 4520 ? ' [Card]' : '');
+        const descFull = tab === 'equip' ? ((equipStatDesc(x.id) ? equipStatDesc(x.id) + '\n\n' : '') + (desc || '')) : desc;
                 const action = getItemAction(x.id);
         const actionBg = action === 'sell' ? 'rgba(230,126,34,.35)' : (action === 'deposit' ? 'rgba(39,174,96,.35)' : '#23262e');
         const actionBorder = action === 'sell' ? '#e67e22' : (action === 'deposit' ? '#27ae60' : '#3a3f4b');
-return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" data-desc="${esc(desc || '(ไม่มีคำอธิบาย)')}" style="position:relative;aspect-ratio:1;background:${actionBg};border:1px solid ${actionBorder};border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:visible" title="คลิก: เก็บ→ขาย→ฝาก">
+return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" data-desc="${esc(descFull || '(ไม่มีคำอธิบาย)')}" style="position:relative;aspect-ratio:1;background:${actionBg};border:1px solid ${actionBorder};border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:visible" title="คลิก: เก็บ→ขาย→ฝาก">
           <img src="${itemIconUrl(x.id)}" style="max-width:80%;max-height:80%;image-rendering:pixelated" onerror="this.style.display='none'">
           ${action !== 'keep' ? `<span class="__inv_action" style="position:absolute;top:0;left:0;font-size:8px;background:#000;color:#fff;padding:0 3px;border-radius:3px 0 3px 0;font-weight:bold">${action === 'sell' ? 'ขาย' : 'ฝาก'}</span>` : ''}
           <span style="position:absolute;bottom:0;right:2px;font-size:9px;color:#fff;text-shadow:0 0 2px #000,0 0 2px #000;font-weight:bold">${tab === 'equip' ? (x.refine ? '+' + x.refine : '') : (x.c > 999 ? Math.floor(x.c / 1000) + 'k' : x.c)}</span>
