@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.149.0
+// @version      4.150.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,24 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.149.0';
+  const VERSION = '4.150.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.150.0', d: '2026-08-20', items: [
+      '🌀 TELEPORT SERIALIZER — server รับ 0x40 ห่างกัน ~3s ยิงถี่ ตัวหลังถูกดรอปเงียบ!',
+      '   เคสจริง: วาร์ปกลับฟาร์ม+เริ่มฝาก+วาร์ปสุ่ม ใน 3 วิ → warp หาย → "ประกาศวาร์ปแต่ไม่ไปไหน"',
+      '   → ตอนนี้เก็บ intent ล่าสุด (last-wins) แล้ว flush อัตโนมัติเมื่อครบ 3s',
+      '🛑 ห้าม combat/wander/loot/warp-loot ตีกับ routine — เพิ่ม gate sell/storage ≠ IDLE',
+      '   เคสจริง: สุ่มเดินแย่งทาง NPC / ตี+สกิลมอนข้ามแมป / farm-guard warp สู้ routine',
+      '   จนลูป "ยังอยู่แมปผิด" ยาวเป็นนาที',
+      '💰 แยกขาย 2 รอบ: stackable ก่อน → equipment ทีหลัง (คนละ packet)',
+      '   เคสจริง: ปนกัน → server ปฏิเสธทั้งก้อน 3 ครั้งติด ของไม่ถูกขายเลย',
+      '   + แสดงชื่อจริงของ equipment (เดิมโชว์ item_20063 = slot id)',
+      '📍 อยู่แมป NPC/Kafra แล้ว+ใกล้พอ (≤40 ช่อง) → ไม่วาร์ปซ้ำ + หา NPC ได้เลยไม่ต้องรอ 5s',
+      '🔁 warp ไม่ถึงแมปเป้าหมายใน 10s → ยิงซ้ำอัตโนมัติ (สูงสุด 2 ครั้ง) แทน abort',
+      '🎒 inventoryFull คลายเมื่อ slot ว่างจริง: ฝากครบ / 0x32 removal ยืนยัน (เดิมค้างตลอดกาล)',
+      '🐛 แก้ sellState._lastMove เก็บบน string = no-op → throttle เดินเข้า NPC ไม่ทำงาน',
+    ]},
     { v: '4.149.0', d: '2026-08-19', items: [
       '🖱️ Popup Inventory ลากย้ายอิสระได้ — จับที่แถบหัวเรื่องกดค้างลาก',
       '   กันลากหลุดจอ (เหลือให้เห็นอย่างน้อย 80×40 px) · ลากแล้วคลิกพื้นหลังปิดได้เหมือนเดิม',
@@ -1498,9 +1513,15 @@
   }
   // ★ ส่งคำสั่งวาร์ป: packet 0x40, [40][len:2 LE][mapname UTF-8][x:i16 LE][y:i16 LE][00]
   //   x/y เป็น signed int16 (-999 = random) — format ยืนยันจากบอทหลักแล้ว
-  function sendTeleport(mapName, x, y) {
+  // ★★ TELEPORT SERIALIZER — server รับ 0x40 ห่างกันอย่างน้อย ~3s (ยิงถี่ ตัวหลังถูกดรอปเงียบ!)
+  //   เคสจริงจาก log: วาร์ปกลับฟาร์ม + เริ่มฝากวาร์ป + วาร์ปสุ่ม ภายใน 3 วิ → ตัวที่ 2-3 หาย
+  //   → routine ค้าง "ไม่พบ NPC" เป็นนาที และ "ประกาศวาร์ปแต่ไม่ไปไหน"
+  //   แก้: ยิงจริงทันทีถ้าห่างพอ ไม่งั้นเก็บ intent ล่าสุด (last-wins) แล้ว flush เมื่อครบ gap
+  let lastTeleportSentAt = 0;
+  let pendingTeleport = null;        // {mapName, x, y} — intent ล่าสุดที่รอส่ง
+  const TELEPORT_MIN_GAP_MS = 3000;
+  function actuallySendTeleport(mapName, x, y) {
     if (!activeWS || activeWS.readyState !== 1) return false;
-    if (!mapName) return false;
     const mapBytes = new TextEncoder().encode(mapName);
     const b = new Uint8Array(1 + 2 + mapBytes.length + 2 + 2 + 1);
     let p = 0;
@@ -1511,7 +1532,8 @@
     writeI16LE(b, p, Math.round(y)); p += 2;
     b[p] = 0x00;
     activeWS.send(b);
-    // ★★★ อัปเดต player.x/y หลังวาร์ป — กันตำแหน่งค้างตลอดกาล
+    lastTeleportSentAt = nowMs();
+    // ★★★ อัปเดต player.x/y หลังวาร์ป — กันตำแหน่งค้างตลอดกาล (ทำเมื่อ "ส่งจริง" เท่านั้น)
     //   กรณี 1: วาร์ปไปพิกัดเฉพาะ (x,y ≠ -999) → อัปเดตทันที (เรารู้ปลายทาง)
     //   กรณี 2: วาร์ปสุ่ม (-999) → null ตำแหน่ง (ไม่รู้ปลายทาง → รอ server ส่ง pos ใหม่)
     if (x !== -999 && y !== -999 && x >= -500 && x <= 1000 && y >= -500 && y <= 1000) {
@@ -1527,6 +1549,23 @@
     }
     return true;
   }
+  function sendTeleport(mapName, x, y) {
+    if (!activeWS || activeWS.readyState !== 1) return false;
+    if (!mapName) return false;
+    if (nowMs() - lastTeleportSentAt < TELEPORT_MIN_GAP_MS) {
+      pendingTeleport = { mapName, x, y };   // ★ intent ล่าสุดชนะ — รอ flush (ไม่ทิ้งเงียบ ๆ แบบ server)
+      dbg('🌀 teleport คิวไว้ก่อน (ห่างล่าสุดไม่ถึง 3s) →', mapName);
+      return true;
+    }
+    return actuallySendTeleport(mapName, x, y);
+  }
+  const teleportFlusher = setInterval(() => {
+    if (!pendingTeleport) return;
+    if (!activeWS || activeWS.readyState !== 1) { pendingTeleport = null; return; }
+    if (nowMs() - lastTeleportSentAt < TELEPORT_MIN_GAP_MS) return;
+    const t = pendingTeleport; pendingTeleport = null;
+    if (actuallySendTeleport(t.mapName, t.x, t.y)) dbg('🌀 flush teleport ที่ค้าง →', t.mapName);
+  }, 500);
 
   function tryClaim(d) {
     if (queue.has(d.dropId)) return;
@@ -1966,6 +2005,7 @@
                 const eqIdx = equipmentList.indexOf(itemId);
                 if (eqIdx >= 0) equipmentList.splice(eqIdx, 1);
                 invDataVer++;
+                inventoryFull = false;   // ★ server ยืนยันมีของออกจริง = slot ว่างแน่นอน
                 break;
               }
             }
@@ -2288,38 +2328,65 @@
       // ★ สร้างรายการขาย — แยก equipment vs stackable (mirror bot.js _buildSellItems:1141-1171)
       //   equipment: ส่ง slot ID (20000+) count=1 ทีละชิ้น — เหมือน storageMove
       //   stackable: ส่ง itemId + count ปกติ
-      const items = [];
-      let eqCount = 0;
+      // ★★ แยกเป็น 2 packet: stackable ก่อน → equipment ทีหลัง
+      //   เคสจริงจาก log: ปนกันใน packet เดียว → server ปฏิเสธทั้งก้อน ("could not complete sale")
+      //   3 ครั้งติด ของไม่ถูกขายเลย — แยกแล้ว stackable ยังขายได้แม้ equipment จะ fail
+      const stackItems = [], eqItems = [];
       for (const id of CFG.sellItemIds) {
         const stock = inventory.get(id) || 0;
         if (stock <= 0) continue;
         const eqSlots = equipmentSlots.get(id);
         if (eqSlots && eqSlots.length > 0) {
-          // ★ equipment — ฝากจาก slot สูง→ต่ำ (กัน index shift เหมือน storage)
+          // ★ equipment — ขายจาก slot สูง→ต่ำ (กัน index shift เหมือน storage)
           const sorted = [...eqSlots].sort((a, b) => b - a);
-          for (const slotId of sorted) { items.push({ itemId: slotId, count: 1 }); eqCount++; }
+          for (const slotId of sorted) eqItems.push({ itemId: slotId, realId: id, count: 1 });
         } else {
           // ★ stackable — itemId + count จริง (server ปฏิเสธถ้า count ไม่ตรง)
-          items.push({ itemId: id, count: stock });
+          stackItems.push({ itemId: id, count: stock });
         }
       }
-      if (items.length === 0) {
+      if (stackItems.length === 0 && eqItems.length === 0) {
         log('⚠️ ไม่มีของที่จะขาย (sellItemIds ว่าง หรือ inventory ไม่มี)');
         sendSellClose();   // ★★ ปิด sell dialog ก่อน warp (กัน warp ไม่ไป)
         sellState = 'WARP_BACK'; sellStateAt = nowMs();
       } else {
-        log('💰 ขายของ', items.length, 'รายการ' + (eqCount ? ' (' + eqCount + ' equipment)' : '') + ':',
-            items.map(i => nameOf(i.itemId) + '×' + i.count).join(', '));
-        sendSellItems(items);
+        pendingSellEquip = eqItems;
+        const first = stackItems.length > 0 ? stackItems : eqItems;
+        // ★ มีแต่ equipment (ไม่มี stackable) → ส่งรอบเดียวจบ ห้ามส่งซ้ำรอบสอง
+        if (stackItems.length === 0) sellEquipRoundSent = true;
+        log('💰 ขายของ', first.length, 'รายการ' + (stackItems.length > 0 && eqItems.length > 0 ? ' (+' + eqItems.length + ' equipment รอบถัดไป)' : '') + ':',
+            first.map(i => nameOf(i.realId != null ? i.realId : i.itemId) + (i.realId != null ? ' (slot ' + i.itemId + ')' : '') + '×' + i.count).join(', '));
+        sendSellItems(first);
         sellState = 'SELL'; sellStateAt = nowMs();
       }
     }
     // 0x5b SELL_RESULT: [5b][flag:1] flag>0 = success
     else if (op === 0x5b && u.length >= 2 && sellState === 'SELL') {
       if (u[1] > 0) {
-        log('✅ ขายของสำเร็จ!');
+        // ★★ รอบ stackable สำเร็จ + มี equipment ค้าง → ส่งรอบสอง (แยก packet)
+        if (pendingSellEquip.length > 0 && !sellEquipRoundSent) {
+          log('✅ ขาย stackable สำเร็จ! → ขาย equipment ต่อ', pendingSellEquip.length, 'ชิ้น');
+          sellEquipRoundSent = true;
+          sendSellItems(pendingSellEquip.map(i => ({ itemId: i.itemId, count: 1 })));
+          sellState = 'SELL'; sellStateAt = nowMs();   // รอ 0x5b รอบสอง
+          return;
+        }
+        log('✅ ขายของสำเร็จ!' + (sellEquipRoundSent ? ' (รวม equipment)' : ''));
         // ล้าง inventory tracking ของ sold items (mirror bot.js:1767)
         for (const id of CFG.sellItemIds) inventory.delete(id);
+        for (const eq of pendingSellEquip) {
+          const slots = equipmentSlots.get(eq.realId);
+          if (slots) {
+            const si = slots.indexOf(eq.itemId);
+            if (si >= 0) slots.splice(si, 1);
+            if (slots.length === 0) equipmentSlots.delete(eq.realId);
+          }
+          // ★ ลบจาก equipmentList ด้วย (server ส่ง 0x32 removal ยืนยัน แต่กัน race)
+          const ei = equipmentList.indexOf(eq.realId);
+          if (ei >= 0) equipmentList.splice(ei, 1);
+        }
+        invDataVer++;
+        pendingSellEquip = []; sellEquipRoundSent = false;
         inventoryFull = false;
         lastSellAt = nowMs();
         // ★ chain → storage: ถ้าเปิด depositAfterSell และมีของฝาก → ฝากต่อ (mirror bot.js:1773-1781)
@@ -2335,7 +2402,8 @@
           }
         }
       } else {
-        log('⚠️ ขายของล้มเหลว (SELL_RESULT flag=0)');
+        log('⚠️ ขายของล้มเหลว (SELL_RESULT flag=0)' + (sellEquipRoundSent ? ' — รอบ equipment (stackable ขายไปแล้ว)' : ''));
+        pendingSellEquip = []; sellEquipRoundSent = false;
         sendSellClose();   // ★★ ปิด dialog ก่อน warp
       }
       sellState = 'WARP_BACK'; sellStateAt = nowMs();
@@ -2886,6 +2954,8 @@
   // ---------- loop เก็บของ ----------
   const lootLoop = setInterval(() => {
     if (!CFG.lootEnabled) return;
+    // ★ ห้ามเก็บของตอนขาย/ฝาก — อยู่คนละแมป (คิวเก็บ cross-map พังตำแหน่ง + ยิง pickup พลาด)
+    if (typeof sellState !== 'undefined' && (sellState !== 'IDLE' || storageState !== 'IDLE')) return;
     const now = Date.now();
     for (const [id, it] of queue) {
       if (now - it.addedAt > CFG.itemMaxAgeMs) { queue.delete(id); log('⌛ หมดอายุ drop', id); }
@@ -2937,6 +3007,8 @@
   const warpLoop = setInterval(() => {
     if (!CFG.warpLootEnabled) return;
     if (!currentMap) return;                          // ไม่รู้แมป → ไม่วาร์ป (กัน packet ผิด)
+    // ★ ห้ามวาร์ปไปเก็บของตอนขาย/ฝาก (warp ตีกับ warp ของ routine — server ดรอปตัวหลัง)
+    if (typeof sellState !== 'undefined' && (sellState !== 'IDLE' || storageState !== 'IDLE')) return;
     const now = Date.now();
 
     for (const [id, wit] of warpQueue) {
@@ -2994,6 +3066,11 @@
     return null;
   }
   function setSellState(s) { sellState = s; sellStateAt = nowMs(); }
+  let sellWarped = false;        // true = ไม่ต้องรอ 5s หลังวาร์ป (อยู่ใกล้ NPC แล้ว)
+  let sellWarpRetries = 0;       // วาร์ปไม่ถึงแมป NPC → ยิงซ้ำได้ max 2
+  let sellMoveLastAt = 0;        // throttle เดินเข้าหา NPC (เดิมเก็บบน string = no-op!)
+  let pendingSellEquip = [];     // ★ equipment รอขายรอบสอง (แยก packet กัน server ปฏิเสธทั้งก้อน)
+  let sellEquipRoundSent = false;
   function abortSell(reason) {
     log('⚠️ ยกเลิกขาย:', reason);
     sellState = 'IDLE'; sellStateAt = 0;
@@ -3021,8 +3098,17 @@
       }
       if (shouldSell && currentMap && player.x != null) {
         sellReturnTo = { map: currentMap, x: Math.round(player.x), y: Math.round(player.y) };
-        log('💰 เริ่มขายของ (' + reason + ') → วาร์ปไป', CFG.sellNpcMap, '@(', CFG.sellNpcX, CFG.sellNpcY + ')');
-        sendTeleport(CFG.sellNpcMap, CFG.sellNpcX, CFG.sellNpcY);
+        sellWarpRetries = 0; pendingSellEquip = []; sellEquipRoundSent = false;
+        // ★★ อยู่แมป NPC แล้ว + ใกล้พอ → ไม่วาร์ป (วาร์ปซ้ำโดน server ดรอป + log "วาร์ปไป" ทั้งที่ไม่ไปไหน)
+        const dNpc = Math.hypot(player.x - CFG.sellNpcX, player.y - CFG.sellNpcY);
+        if (currentMap === CFG.sellNpcMap && dNpc <= 40) {
+          log('💰 เริ่มขายของ (' + reason + ') — อยู่ใกล้ NPC แล้ว ไม่ต้องวาร์ป');
+          sellWarped = true;
+        } else {
+          log('💰 เริ่มขายของ (' + reason + ') → วาร์ปไป', CFG.sellNpcMap, '@(', CFG.sellNpcX, CFG.sellNpcY + ')');
+          sendTeleport(CFG.sellNpcMap, CFG.sellNpcX, CFG.sellNpcY);
+          sellWarped = false;
+        }
         setSellState('WARP_TO_NPC');
       }
       return;
@@ -3033,10 +3119,20 @@
 
     // === state machine ===
     if (sellState === 'WARP_TO_NPC') {
-      // ★★ รอ 5s หลังวาร์ป ให้ entities โหลด → หา NPC (NPC โหลดช้าได้ถึง 5s)
-      if (now - sellStateAt > 5000) {
+      // ★★ รอ 5s หลังวาร์ปจริง ให้ entities โหลด (ถ้า warp ยังค้างในคิว → รอก่อน)
+      //   sellWarped=true = อยู่ใกล้ NPC แล้ว → หาได้เลยไม่ต้องรอ
+      const warpSettled = sellWarped || pendingTeleport == null;
+      if (warpSettled && now - sellStateAt > (sellWarped ? 500 : 5000)) {
         const npc = findSellNpc();
         if (npc) { sellNpcId = npc.id; setSellState('MOVE_TO_NPC'); log('💰 พบ', npc.name, '@(', npc.x, npc.y + ')'); }
+        else if (now - sellStateAt > 10000 && currentMap !== CFG.sellNpcMap && sellWarpRetries < 2) {
+          // ★★ warp ไม่ถึงแมป NPC (โดนดรอป/ตีกับอย่างอื่น) → ยิงซ้ำ (สูงสุด 2)
+          sellWarpRetries++;
+          log('💰 ยังไม่ถึง', CFG.sellNpcMap, '(อยู่ ' + currentMap + ') → วาร์ปซ้ำ ครั้ง', sellWarpRetries + '/2');
+          sendTeleport(CFG.sellNpcMap, CFG.sellNpcX, CFG.sellNpcY);
+          setSellState('WARP_TO_NPC');   // reset นาฬิกา
+          return;
+        }
         else if (now - sellStateAt > 15000) { abortSell('ไม่พบ NPC ' + CFG.sellNpcName + ' (หลังรอ 15s)'); return; }
         // else: ยังไม่เจอ → รอต่อ (entities ยังโหลดไม่ครบ)
       }
@@ -3061,8 +3157,8 @@
           // ใกล้แล้ว → คุย NPC
           if (now - sellStateAt > 1500) { sendNpcTalk(sellNpcId); setSellState('TALK'); log('💰 คุย NPC', npc.name); }
         } else {
-          // เดินไปหา (throttle 1s)
-          if (now - (sellState._lastMove || 0) > 1000) { sellState._lastMove = now; sendMove(npc.x, npc.y); }
+          // เดินไปหา (throttle 1s — ★ เดิมเก็บบน sellState._lastMove = no-op บน string)
+          if (now - sellMoveLastAt > 1000) { sellMoveLastAt = now; sendMove(npc.x, npc.y); }
         }
       }
       return;
@@ -3116,12 +3212,23 @@
     storageReturnTo = null;
   }
   // ★ เริ่มฝากของ — จด returnTo แล้ววาร์ปไปแมป Kafra
+  let storageWarped = false;     // true = อยู่ใกล้ Kafra แล้ว ไม่ต้องวาร์ป
+  let storageWarpRetries = 0;
   function startStorage(reason, returnTo) {
     const kx = (CFG.kafraMapX && CFG.kafraMapX > 0) ? CFG.kafraMapX : CFG.sellNpcX;
     const ky = (CFG.kafraMapY && CFG.kafraMapY > 0) ? CFG.kafraMapY : CFG.sellNpcY;
     storageReturnTo = returnTo || { map: currentMap, x: Math.round(player.x), y: Math.round(player.y) };
-    log('🏦 เริ่มฝากของ (' + reason + ') → วาร์ปไป', CFG.kafraMap, '@(', kx, ky + ')');
-    sendTeleport(CFG.kafraMap, kx, ky);
+    storageWarpRetries = 0;
+    // ★★ อยู่แมป Kafra แล้ว + ใกล้พอ → ไม่วาร์ป (วาร์ปซ้ำโดน server ดรอป)
+    const dKafra = (player.x != null) ? Math.hypot(player.x - kx, player.y - ky) : Infinity;
+    if (currentMap === CFG.kafraMap && dKafra <= 40) {
+      log('🏦 เริ่มฝากของ (' + reason + ') — อยู่ใกล้ Kafra แล้ว ไม่ต้องวาร์ป');
+      storageWarped = true;
+    } else {
+      log('🏦 เริ่มฝากของ (' + reason + ') → วาร์ปไป', CFG.kafraMap, '@(', kx, ky + ')');
+      sendTeleport(CFG.kafraMap, kx, ky);
+      storageWarped = false;
+    }
     setStorageState('WARP_TO_KAFRA');
   }
   // ★ สร้าง queue ของที่จะฝาก — แยก equipment vs stackable (mirror bot.js:1947-1987)
@@ -3163,10 +3270,21 @@
     if (now - storageStateAt > 60000) { abortStorage('timeout (' + storageState + ' 60s)'); return; }
 
     if (storageState === 'WARP_TO_KAFRA') {
-      // ★★ รอ 5s หลังวาร์ป ให้ entities โหลด → หา Kafra (NPC โหลดช้าได้ถึง 5s)
-      if (now - storageStateAt > 5000) {
+      // ★★ รอ 5s หลังวาร์ปจริง ให้ entities โหลด (warp ค้างคิว → รอก่อน / อยู่ใกล้แล้ว → หาได้เลย)
+      const warpSettled = storageWarped || pendingTeleport == null;
+      if (warpSettled && now - storageStateAt > (storageWarped ? 500 : 5000)) {
         const npc = findKafraNpc();
         if (npc) { storageNpcId = npc.id; setStorageState('MOVE_TO_KAFRA'); log('🏦 พบ', npc.name, '@(', npc.x, npc.y + ')'); }
+        else if (now - storageStateAt > 10000 && currentMap !== CFG.kafraMap && storageWarpRetries < 2) {
+          // ★★ warp ไม่ถึงแมป Kafra → ยิงซ้ำ (สูงสุด 2)
+          storageWarpRetries++;
+          const kx2 = (CFG.kafraMapX && CFG.kafraMapX > 0) ? CFG.kafraMapX : CFG.sellNpcX;
+          const ky2 = (CFG.kafraMapY && CFG.kafraMapY > 0) ? CFG.kafraMapY : CFG.sellNpcY;
+          log('🏦 ยังไม่ถึง', CFG.kafraMap, '(อยู่ ' + currentMap + ') → วาร์ปซ้ำ ครั้ง', storageWarpRetries + '/2');
+          sendTeleport(CFG.kafraMap, kx2, ky2);
+          setStorageState('WARP_TO_KAFRA');
+          return;
+        }
         else if (now - storageStateAt > 15000) { abortStorage('ไม่พบ Kafra ' + CFG.kafraName + ' (หลังรอ 15s)'); return; }
         // else: ยังไม่เจอ → รอต่อ (entities ยังโหลดไม่ครบ)
       }
@@ -3260,10 +3378,14 @@
     }
     if (storageState === 'CLOSE_STORAGE') {
       // รอ 1.5s หลัง close แล้ววาร์ปกลับ
-      if (now - storageStateAt > 1500 && storageReturnTo) {
-        sendTeleport(storageReturnTo.map, storageReturnTo.x, storageReturnTo.y);
-        log('🏦 วาร์ปกลับ', storageReturnTo.map);
-        storageReturnTo = null;
+      if (now - storageStateAt > 1500) {
+        // ★ ฝากครบ = slot ว่างแน่นอน → คลายสถานะของเต็ม (กัน trigger วนตลอดกาล)
+        if (inventoryFull) { inventoryFull = false; log('🎒 คลายสถานะของเต็ม (ฝากของเรียบร้อย)'); }
+        if (storageReturnTo) {
+          sendTeleport(storageReturnTo.map, storageReturnTo.x, storageReturnTo.y);
+          log('🏦 วาร์ปกลับ', storageReturnTo.map);
+          storageReturnTo = null;
+        }
         setStorageState('IDLE');
       }
       return;
@@ -3866,6 +3988,11 @@
   }, 10000);
   const combatLoop = setInterval(() => {
     const now = nowMs();
+    // ★★ กำลังขาย/ฝากของ → routine เป็นเจ้าของตัวละคร — หยุด combatLoop ทั้งก้อน
+    //   (เคสจริงจาก log: สุ่มเดินแย่งทาย NPC / ตี+สกิลมอนข้ามแมปจากพิกัด optimistic /
+    //    farm-guard ส่ง warp กลับฟาร์มสู้กับ warp ของ routine จนลูป "ยังอยู่แมปผิด" นาที)
+    if (typeof sellState !== 'undefined' && sellState !== 'IDLE') return;
+    if (typeof storageState !== 'undefined' && storageState !== 'IDLE') return;
     // ★★ Flee from players — ทำงานไม่สน combat on/off (priority สูงสุด)
     //   ★★ ยกเว้นตอนกำลังขายของ/ฝากของ (ในเมืองมีผู้เล่นเยอะ → ห้ามวาร์ปหนี!)
     const _inSellRoutine = typeof sellState !== 'undefined' && sellState !== 'IDLE';
@@ -5561,7 +5688,7 @@
     getImportantLogs() { return importantLogBuf.slice(); },
     clearImportantLogs() { importantLogBuf.length = 0; log('🧹 ล้าง log สำคัญ'); },
     stopAll() {
-      clearInterval(healLoop); clearInterval(lootLoop); clearInterval(warpLoop); clearInterval(combatLoop); clearInterval(sellLoop); clearInterval(storageLoop); clearInterval(buffLoop); clearInterval(consoleClearLoop); clearInterval(remoteWalkLoop);
+      clearInterval(healLoop); clearInterval(lootLoop); clearInterval(warpLoop); clearInterval(combatLoop); clearInterval(sellLoop); clearInterval(storageLoop); clearInterval(buffLoop); clearInterval(consoleClearLoop); clearInterval(remoteWalkLoop); clearInterval(teleportFlusher);
       if (typeof uiLoop !== 'undefined') clearInterval(uiLoop);
       log('⏹ หยุดระบบทั้งหมดแล้ว');
     },
