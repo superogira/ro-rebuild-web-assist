@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.153.0
+// @version      4.154.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,17 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.153.0';
+  const VERSION = '4.154.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.154.0', d: '2026-08-20', items: [
+      '📊 สถิติ "ของที่เก็บได้" = เฉพาะของที่เก็บใน session นี้ (เดิมโชว์ของทั้งหมดใน inventory)',
+      '   เรียงจากเก็บล่าสุด → เก่า · จำนวน = ของจริงที่มีอยู่ (ลดตามใช้/ขาย/ฝากสำเร็จ หมดแล้วหายเอง)',
+      '   ปุ่ม "ล้างรายการของ" ล้างลิสต์นี้ด้วย',
+      '🐛 คืนการแสดงจำนวนในแท็บ Item/Etc ของ popup (v4.153 หลุดตอนแก้ Equip · Equip ไม่ต้องมี=แยกชิ้นอยู่แล้ว)',
+      'ℹ️ ขาย/ฝาก: ใช้ของจริงใน inventory ตามที่ตั้งไว้ ไม่ผูกกับ "เก็บใน session" —',
+      '   equipment ที่ไม่รู้ slot id ข้ามไปก่อน (ชิ้นที่ผ่านคาฟรา/เก็บใน session ใช้ได้ปกติ)',
+    ]},
     { v: '4.153.0', d: '2026-08-20', items: [
       '🎒 Equip tab = เฉพาะของในถุงเท่านั้น (ตัดของที่สวมอยู่ออก — ตามที่ผู้ใช้ต้องการ)',
       '   เดิมแสดงรวมสวม+ถุง ทำให้รายการดูไม่ตรงกับหน้าต่าง Equip ในเกม',
@@ -2005,8 +2013,11 @@
         const countEnc = u16(u, 16);
         const count = countEnc >>> 1;
         if (itemId > 0 && itemId < 50000) {
-          applyWeightDelta(itemId, inventory.get(itemId) || 0, count);
+          const prevCnt = inventory.get(itemId);
+          applyWeightDelta(itemId, prevCnt || 0, count);
           inventory.set(itemId, count);   // SET ตรงจาก server (แม่นยำเสมอ)
+          // ★ จดว่า "เก็บได้ใน session นี้" เมื่อจำนวนเพิ่มขึ้น (หรือเห็นครั้งแรก) — สำหรับแท็บสถิติ
+          if (prevCnt == null || count > prevCnt) sessionPickups.set(itemId, Date.now());
         }
       } else if (sub === 5 && u.length >= 15) {
         // ★ equipment add (sub=5): itemId @ offset 12 (2B LE) bit-packed >>> 1
@@ -2020,6 +2031,7 @@
           //   ยืนยันจาก capture: ถอด Chain(1520)/Boots(2405) จากคาฟรา → 0x56 ตอบ itemId ตามด้วย 0x32-05
           equipmentList.push({ id: itemId, worn: false, card: 0, refine: 0 });
           invDataVer++;
+          sessionPickups.set(itemId, Date.now());   // ★ เก็บ/ได้มาใน session นี้
           // ★ track slot id ของแต่ละชิ้น (mirror world.js:773-777)
           if (slotId > 0) {
             const slots = equipmentSlots.get(itemId) || [];
@@ -3513,6 +3525,7 @@
   const equipmentList = [];
   const equipmentSlots = new Map(); // ★ itemId -> [slotId, slotId, ...] — ได้จาก 0x32 sub=5 เท่านั้น
   const verifiedEquipSlots = new Set(); // ★ slotId ที่ยืนยันแน่ (จาก 0x32 sub=5)
+  const sessionPickups = new Map();   // ★ itemId -> เวลาที่เก็บได้ล่าสุด (เฉพาะของที่เก็บใน session นี้ — แท็บสถิติ)
   let invDataVer = 0;          // ★ version ของ inventory/equipment — bump ทุกครั้งที่ข้อมูลเปลี่ยน (modal live-refresh)
   let lastOutEquip = null;     // ★ OUT 0x30 ล่าสุด {idx, action, at} — ให้ IN 0x30 รู้ทิศทาง สวมใส่/ถอด
   let inventoryFull = false;      // true เมื่อ server ส่ง "too full" (0x20)
@@ -6566,7 +6579,7 @@
           <div class="row"><span class="k">🎒 Inventory</span><span class="v" data-inventory>?</span></div>
           <div class="row"><span class="k">💰 Sell</span><span class="v" data-sellstate>OFF</span></div>
           <div class="row"><span class="k">🏦 Storage</span><span class="v" data-storagestate>OFF</span></div>
-          <h4>ของที่เก็บได้ (ล่าสุด)</h4>
+          <h4>ของที่เก็บได้ (session นี้)</h4>
           <div data-items style="font-size:11px;color:#9aa0a6">(ยังไม่มี)</div>
           <div class="btns"><button class="primary" id="__assist_sellnow2">💰 ไปขายของ</button><button class="danger" id="__assist_clearinv">ล้างรายการของ</button><button class="danger" id="__assist_resetstats">รีเซ็ตสถิติ</button></div>
         </div>
@@ -7437,7 +7450,7 @@
     root.querySelector('#__assist_resetstats').addEventListener('click', () => ASSIST.resetStats());
     root.querySelector('#__assist_sellnow2').addEventListener('click', () => ASSIST.sellNow());
     root.querySelector('#__assist_clearinv').addEventListener('click', () => {
-      inventory.clear(); equipmentSlots.clear(); equipmentList.length = 0; invDataVer++;
+      inventory.clear(); equipmentSlots.clear(); equipmentList.length = 0; sessionPickups.clear(); invDataVer++;
       log('🎒 ล้างรายการของที่เก็บได้แล้ว');
     });
     root.querySelector('#__assist_exportall').addEventListener('click', () => ASSIST.exportAll());
@@ -8020,7 +8033,7 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
 return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" data-desc="${esc(desc || '(ไม่มีคำอธิบาย)')}" style="position:relative;aspect-ratio:1;background:${actionBg};border:1px solid ${actionBorder};border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:visible" title="คลิก: เก็บ→ขาย→ฝาก">
           <img src="${itemIconUrl(x.id)}" style="max-width:80%;max-height:80%;image-rendering:pixelated" onerror="this.style.display='none'">
           ${action !== 'keep' ? `<span class="__inv_action" style="position:absolute;top:0;left:0;font-size:8px;background:#000;color:#fff;padding:0 3px;border-radius:3px 0 3px 0;font-weight:bold">${action === 'sell' ? 'ขาย' : 'ฝาก'}</span>` : ''}
-          <span style="position:absolute;bottom:0;right:2px;font-size:9px;color:#fff;text-shadow:0 0 2px #000,0 0 2px #000;font-weight:bold">${x.refine ? '+' + x.refine : ''}</span>
+          <span style="position:absolute;bottom:0;right:2px;font-size:9px;color:#fff;text-shadow:0 0 2px #000,0 0 2px #000;font-weight:bold">${tab === 'equip' ? (x.refine ? '+' + x.refine : '') : (x.c > 999 ? Math.floor(x.c / 1000) + 'k' : x.c)}</span>
         </div>`;
       }).join('') || '<div style="grid-column:1/-1;color:#666;font-size:11px;padding:20px;text-align:center">(ว่างเปล่า)</div>';
     }
@@ -8714,10 +8727,15 @@ return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" d
     set('[data-zeny]', sessionZeny().toLocaleString() + 'z');
     const itemsEl = root.querySelector('[data-items]');
     if (itemsEl) {
-      // ★ แสดงจาก inventory จริง (ลดตอนใช้/ขาย) เรียงจากจำนวนมาก → น้อย
-      const invTop = [...inventory.entries()].filter(([id, c]) => c > 0).sort((a, b) => b[1] - a[1]);
-      itemsEl.innerHTML = invTop.length ? invTop.map(([id, count]) => {
-        const numId = Number(id);
+      // ★★ แสดงเฉพาะของที่ "เก็บได้ใน session นี้" เรียงจากเก็บล่าสุด → เก่า
+      //   จำนวน = ของจริงที่มีอยู่ตอนนี้ (ลดตามใช้/ขาย/ฝากสำเร็จ — หมดแล้วหายจากลิสต์เอง)
+      const invTop = [...sessionPickups.entries()]
+        .map(([id, at]) => ({ id: Number(id), at, count: inventory.get(Number(id)) || 0 }))
+        .filter(x => x.count > 0)
+        .sort((a, b) => b.at - a.at);
+      itemsEl.innerHTML = invTop.length ? invTop.map(x => {
+        const numId = x.id;
+        const count = x.count;
         const price = itemPrice(numId);
         const zeny = price ? ` <span style="color:#f1c40f">${(price * count).toLocaleString()}z</span>` : '';
         const icon = itemDB.loaded ? `<img src="${itemIconUrl(numId)}" style="width:16px;height:16px;vertical-align:middle" onerror="this.style.display='none'"> ` : '';
@@ -8727,7 +8745,7 @@ return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" d
         const actionColor = action === 'sell' ? '#e67e22' : (action === 'deposit' ? '#27ae60' : '#6b7280');
         const bgColor = action === 'sell' ? 'rgba(230,126,34,.12)' : (action === 'deposit' ? 'rgba(39,174,96,.12)' : 'transparent');
         return `<div style="background:${bgColor};border-radius:3px;padding:2px 4px">${icon}${itemDisplayName(numId)} ×${count}${zeny} <button data-itemaction="${numId}" style="float:right;font-size:10px;color:#fff;background:${actionColor};border:none;border-radius:3px;padding:1px 6px;cursor:pointer;font-family:inherit">${actionLabel}</button></div>`;
-      }).join('') : '(ยังไม่มี)';
+      }).join('') : '(ยังไม่เก็บอะไรใน session นี้)';
       // wire toggle buttons (วน keep→sell→deposit→keep)
       itemsEl.querySelectorAll('button[data-itemaction]').forEach(btn => {
         btn.onclick = () => { const id = parseInt(btn.getAttribute('data-itemaction'), 10); cycleItemAction(id); };
