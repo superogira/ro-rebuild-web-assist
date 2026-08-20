@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.156.0
+// @version      4.156.1
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,13 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.156.0';
+  const VERSION = '4.156.1';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.156.1', d: '2026-08-20', items: [
+      '🖱️ ห้องแชทลากย้ายอิสระได้ — จับที่แถบหัวเรื่อง "🗨️ ห้องแชท" กดค้างลาก (เหมือน popup Inventory)',
+      '   กันลากหลุดจอ · คลิกพื้นหลัง/Esc ปิดได้เหมือนเดิม · ช่องพิมพ์/ปุ่มใช้งานได้ปกติ',
+    ]},
     { v: '4.156.0', d: '2026-08-20', items: [
       '🔓 ปริศนาครบ! ก้อน equipment ตอน login = "ของในถุงเท่านั้น" ไม่รวมที่สวมอยู่',
       '   (ยืนยัน: deposit ทำกับของในก้อนได้ตรง ๆ — ทฤษฎี @28&3=สวม/ถุง เมื่อวานเป็นเรื่องบังเอิญ ถอดทิ้งแล้ว)',
@@ -8231,7 +8235,7 @@ return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" d
     overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:999999;display:flex;align-items:center;justify-content:flex-end;padding-right:10px';
     overlay.innerHTML = `
       <div style="background:#1e1e2e;color:#e8e8e8;border-radius:12px;padding:16px;width:480px;max-width:90vw;height:500px;max-height:85vh;display:flex;flex-direction:column;font-family:sans-serif;box-shadow:0 8px 32px rgba(0,0,0,.5)">
-        <div style="font-size:15px;font-weight:700;margin-bottom:8px;color:#4fc3f7">🗨️ ห้องแชท</div>
+        <div id="__assist_chatroom_hdr" style="font-size:15px;font-weight:700;margin-bottom:8px;color:#4fc3f7;cursor:move;user-select:none;touch-action:none">🗨️ ห้องแชท</div>
         <div id="__assist_chatroom_msgs" style="flex:1;overflow-y:auto;background:#15151f;border-radius:8px;padding:10px;font-size:12px;line-height:1.5;margin-bottom:8px"></div>
         <div style="display:flex;gap:6px;margin-bottom:6px">
           <input id="__assist_chatroom_name" type="text" value="${savedName.replace(/"/g,'&quot;')}" placeholder="ชื่อที่จะใช้คุย" style="flex:0 0 130px;background:#2a2d35;color:#e8e8e8;border:1px solid #444;border-radius:6px;padding:8px;font-size:12px;box-sizing:border-box" maxlength="30">
@@ -8243,6 +8247,38 @@ return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" d
       </div>`;
     document.body.appendChild(overlay);
     renderChatRoomMessages(overlay);
+    // ★★ ลากหน้าต่างย้ายอิสระ — จับที่แถบหัวเรื่อง (เหมือน popup Inventory)
+    {
+      const win = overlay.firstElementChild;
+      const hdr = overlay.querySelector('#__assist_chatroom_hdr');
+      let dragSt = null;
+      hdr.addEventListener('pointerdown', (e) => {
+        if (e.target.closest('button, input')) return;
+        // ★ ตรึงตำแหน่งปัจจุบันก่อนลากครั้งแรก (ถอดจาก flex ชิดขวาของ overlay)
+        if (win.style.position !== 'fixed') {
+          const r0 = win.getBoundingClientRect();
+          overlay.style.display = 'block';
+          overlay.style.paddingRight = '0';
+          win.style.position = 'fixed';
+          win.style.left = r0.left + 'px';
+          win.style.top = r0.top + 'px';
+          win.style.margin = '0';
+        }
+        const r = win.getBoundingClientRect();
+        dragSt = { dx: e.clientX - r.left, dy: e.clientY - r.top };
+        try { hdr.setPointerCapture(e.pointerId); } catch (_) {}
+        e.preventDefault();
+      });
+      hdr.addEventListener('pointermove', (e) => {
+        if (!dragSt) return;
+        // กันลากหลุดจอ — เหลือให้เห็นอย่างน้อย 80×40 px
+        const nx = Math.max(-win.offsetWidth + 80, Math.min(e.clientX - dragSt.dx, innerWidth - 80));
+        const ny = Math.max(0, Math.min(e.clientY - dragSt.dy, innerHeight - 40));
+        win.style.left = nx + 'px'; win.style.top = ny + 'px';
+      });
+      hdr.addEventListener('pointerup', () => { dragSt = null; });
+      hdr.addEventListener('pointercancel', () => { dragSt = null; });
+    }
     // ★ focus message input (ถ้ามีชื่อแล้ว) หรือ name input (ถ้ายังไม่มีชื่อ)
     setTimeout(() => { try { (savedName ? overlay.querySelector('#__assist_chatroom_msg') : overlay.querySelector('#__assist_chatroom_name')).focus(); } catch (_) {} }, 0);
     const close = () => overlay.remove();
