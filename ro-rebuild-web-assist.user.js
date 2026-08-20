@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.152.0
+// @version      4.153.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,16 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.152.0';
+  const VERSION = '4.153.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.153.0', d: '2026-08-20', items: [
+      '🎒 Equip tab = เฉพาะของในถุงเท่านั้น (ตัดของที่สวมอยู่ออก — ตามที่ผู้ใช้ต้องการ)',
+      '   เดิมแสดงรวมสวม+ถุง ทำให้รายการดูไม่ตรงกับหน้าต่าง Equip ในเกม',
+      '🔄 สวม/ถอด mid-session อัปเดตสด: invIdx ใน 0x30 = bag slot id & 0xFF',
+      '   (ยืนยันจาก capture: Chain 20011→0x2B · Boots 20012→0x2C) — พลิก worn ของชิ้นที่รู้ slot id',
+      '   สวม → หายจากถุง · ถอด → กลับมาในถุง · ชิ้นที่ไม่รู้ slot id รอ refresh ตอนเข้าเกม',
+    ]},
     { v: '4.152.0', d: '2026-08-20', items: [
       '👕 Equip: แยก "สวมอยู่" กับ "ในถุง" ได้แล้ว! — decode record 44B ครบ (ยืนยัน 22/22 จาก ground truth)',
       '   u8@11>>2 = refine (+7/+8) · u32@28>>2 = card id ในชิ้น · u32@28&3: 1=ในถุง อื่น=สวมอยู่',
@@ -2059,11 +2066,29 @@
       const invIdx = u[1], eqSlot = u[5];
       const slotName = ({ 0: 'เสื้อ', 1: 'หมวก', 2: 'หมวกกลาง', 3: 'หมวกล่าง', 4: 'อาวุธ', 5: 'โล่', 6: 'ผ้าคลุม', 7: 'รองเท้า', 8: 'แหวน', 9: 'แหวน 2' })[eqSlot] || ('slot ' + eqSlot);
       const o = lastOutEquip;
+      const recentOut = o && Date.now() - o.at < 3000;
       // ★ จับคู่ด้วย idx — การสวมใส่ "แทนที่" มาเป็นคู่ (ชิ้นเก่าถอด idx อื่น + ชิ้นใหม่ใส่ idx ตรงกับ OUT)
-      if (o && o.idx === invIdx && Date.now() - o.at < 3000) {
+      const matchOut = recentOut && o.idx === invIdx;
+      // ★★ อัปเดตรายการถุง real-time — invIdx = bag slot id & 0xFF
+      //   (ยืนยันจาก capture: Chain 20011=0x4E2B → idx 0x2B=43 ✓ · Boots 20012 → 44 ✓)
+      //   สวม → หายจากถุง · ถอด → กลับมาในถุง (เฉพาะชิ้นที่รู้ slot id จาก sub=5)
+      let wantWorn = null;
+      if (matchOut) wantWorn = (o.action === 1);
+      else if (recentOut && o.action === 1) wantWorn = false;   // ข้อความคู่ของ swap = ชิ้นเก่าถูกถอดออก
+      if (wantWorn !== null) {
+        let hitId = null;
+        for (const [iid, slots] of equipmentSlots) {
+          if (slots.some(s => (s & 0xff) === invIdx)) { hitId = iid; break; }
+        }
+        if (hitId != null) {
+          const rec = equipmentList.find(x => x.id === hitId && x.worn !== wantWorn) || equipmentList.find(x => x.id === hitId);
+          if (rec && rec.worn !== wantWorn) { rec.worn = wantWorn; invDataVer++; }
+        }
+      }
+      if (matchOut) {
         log(o.action === 1 ? ('⚔️ สวมใส่ → ' + slotName) : ('🧤 ถอด ' + slotName), '(inv#' + invIdx + ')');
         lastOutEquip = null;
-      } else {
+      } else if (!recentOut) {
         dbg('⚔️ equip-change slot ' + eqSlot + ' (inv#' + invIdx + ')');
       }
     }
@@ -7954,7 +7979,7 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
           </div>
           <div id="__assist_inv_grid" style="flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(10,1fr);gap:4px;align-content:start;padding-right:4px"></div>
         </div>
-        <div id="__assist_inv_hint" style="font-size:9px;color:#666;margin-top:6px">★ Equip: สวมอยู่ (ขอบฟ้า+ป้าย สวม) ก่อน แล้วของในถุง · ชื่อแสดง +refine/การ์ด · อัปเดตตอนเข้าเกม · คลิก: เก็บ→ขาย→ฝาก · hover ดูรายละเอียด</div>
+        <div id="__assist_inv_hint" style="font-size:9px;color:#666;margin-top:6px">★ Equip: เฉพาะของในถุง (ไม่รวมที่สวมอยู่) · ชื่อ +refine/การ์ด · ถอด/สวม/ฝาก/เก็บ อัปเดตสด · refresh เต็มตอนเข้าเกม · คลิก: เก็บ→ขาย→ฝาก</div>
       </div>`;
     document.body.appendChild(overlay);
     const grid = overlay.querySelector('#__assist_inv_grid');
@@ -7964,12 +7989,11 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
     let invCurTab = 'usable';
     function render(tab) {
       invCurTab = tab;
-      // ★★ Equip: สวมอยู่ก่อน (ป้าย 'สวม') → ของในถุงต่อ — คงลำดับเกมในแต่ละกลุ่ม
-      //   worn/card/refine มาจาก login block (refresh ทุกครั้งที่เข้าเกมใหม่)
+      // ★★ Equip: แสดง "เฉพาะของในถุง" เท่านั้น (ไม่รวมที่สวมอยู่ — ตามผู้ใช้งานต้องการ)
+      //   worn จาก login block · สวม/ถอด mid-session อัปเดตผ่าน 0x30 (ชิ้นที่รู้ slot id)
       let items;
       if (tab === 'equip') {
-        items = [...equipmentList.filter(x => x.worn), ...equipmentList.filter(x => !x.worn)]
-          .map(x => ({ id: x.id, c: 1, worn: !!x.worn, card: x.card || 0, refine: x.refine || 0 }));
+        items = equipmentList.filter(x => !x.worn).map(x => ({ id: x.id, c: 1, card: x.card || 0, refine: x.refine || 0 }));
       } else {
         items = [...inventory.entries()]
           .filter(([id, c]) => c > 0 && itemDB.cats[String(id)] === tab)
@@ -7977,9 +8001,8 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
       }
       if (tab !== 'equip') items.sort((a, b) => a.id - b.id);
       const total = items.reduce((s, x) => s + x.c, 0);
-      const wornN = tab === 'equip' ? items.filter(x => x.worn).length : 0;
       cntEl.textContent = (tab === 'equip'
-        ? 'สวม ' + wornN + ' · ถุง ' + (items.length - wornN) + ' ชิ้น'
+        ? 'ในถุง ' + items.length + ' ชิ้น'
         : items.length + ' ชนิด · ' + total.toLocaleString() + ' ชิ้น')
         + (playerWeight != null ? ' · ' + Math.round(playerWeight) + '/' + playerMaxWeight : '');
       grid.innerHTML = items.map(x => {
@@ -7989,16 +8012,15 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
         const desc = itemDB.descs[k] || '';
         // ★ equip tab: ชื่อเต็มตามเกม (+refine +prefix/postfix การ์ด) เช่น "+7 Anti-Magic Helm [1]"
         const nameBar = tab === 'equip'
-          ? equipDisplayName(x) + (x.worn ? ' — สวมอยู่' : '')
+          ? equipDisplayName(x)
           : name + (slot ? ' [' + slot + ']' : '') + (x.id >= 4001 && x.id <= 4520 ? ' [Card]' : '');
                 const action = getItemAction(x.id);
         const actionBg = action === 'sell' ? 'rgba(230,126,34,.35)' : (action === 'deposit' ? 'rgba(39,174,96,.35)' : '#23262e');
-        const actionBorder = x.worn ? '#64b5f6' : (action === 'sell' ? '#e67e22' : (action === 'deposit' ? '#27ae60' : '#3a3f4b'));
-return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" data-desc="${esc(desc || '(ไม่มีคำอธิบาย)')}" style="position:relative;aspect-ratio:1;background:${actionBg};border:1px solid ${actionBorder};border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:visible${x.worn ? ';box-shadow:0 0 4px rgba(100,181,246,.7)' : ''}" title="คลิก: เก็บ→ขาย→ฝาก">
+        const actionBorder = action === 'sell' ? '#e67e22' : (action === 'deposit' ? '#27ae60' : '#3a3f4b');
+return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" data-desc="${esc(desc || '(ไม่มีคำอธิบาย)')}" style="position:relative;aspect-ratio:1;background:${actionBg};border:1px solid ${actionBorder};border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:visible" title="คลิก: เก็บ→ขาย→ฝาก">
           <img src="${itemIconUrl(x.id)}" style="max-width:80%;max-height:80%;image-rendering:pixelated" onerror="this.style.display='none'">
-          ${x.worn ? `<span style="position:absolute;top:0;right:0;font-size:8px;background:#1565c0;color:#fff;padding:0 3px;border-radius:0 6px 0 3px;font-weight:bold">สวม</span>` : ''}
           ${action !== 'keep' ? `<span class="__inv_action" style="position:absolute;top:0;left:0;font-size:8px;background:#000;color:#fff;padding:0 3px;border-radius:3px 0 3px 0;font-weight:bold">${action === 'sell' ? 'ขาย' : 'ฝาก'}</span>` : ''}
-          <span style="position:absolute;bottom:0;right:2px;font-size:9px;color:#fff;text-shadow:0 0 2px #000,0 0 2px #000;font-weight:bold">${x.refine ? '+' + x.refine : (x.c > 999 ? Math.floor(x.c / 1000) + 'k' : (tab === 'equip' ? '' : x.c))}</span>
+          <span style="position:absolute;bottom:0;right:2px;font-size:9px;color:#fff;text-shadow:0 0 2px #000,0 0 2px #000;font-weight:bold">${x.refine ? '+' + x.refine : ''}</span>
         </div>`;
       }).join('') || '<div style="grid-column:1/-1;color:#666;font-size:11px;padding:20px;text-align:center">(ว่างเปล่า)</div>';
     }
