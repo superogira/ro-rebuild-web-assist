@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.162.1
+// @version      4.163.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,16 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.162.1';
+  const VERSION = '4.163.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.163.0', d: '2026-08-21', items: [
+      '♻️ รายการแมปฟาร์มหมุนวนเมื่อตาย (Sub-tab Farm) — เพิ่มได้หลายแมปพร้อมพิกัด',
+      '   ตายแต่ละครั้ง → หมุนไปแมปถัดไปในรายการ (วนกลับแมปแรก) + toggle เปิด-ปิด',
+      '   หลัง respawn พักเลือดเต็มแล้วระบบวาร์ปไปแมปใหม่เอง (ผ่าน farm-guard)',
+      '   แต่ละแถวมีปุ่ม "ใช้เลย" (สลับไปแมปนั้นทันที) + "ลบ" + ▶ บอกแมปปัจจุบัน',
+      '   เหมาะกับแมปมอนแรง/ผู้เล่นแย่งบอท — ตายบ่อยก็ได้ย้ายรังเป็นรอบ ๆ',
+    ]},
     { v: '4.162.1', d: '2026-08-21', items: [
       '☠️ ตายแล้วบอกสาเหตุ — "☠️ ตาย — สู้กับ Wolf · ตีเราล่าสุด: Wolf, Poring @ แมป (x,y)"',
       '   วิเคราะห์จาก target ที่กำลังสู้ + มอนที่ตีเราใน 10s ท้าย (ใหม่สุดก่อน สูงสุด 3 ชื่อ)',
@@ -802,7 +809,7 @@
     'restEnabled', 'restHpPercent', 'restUntilPercent', 'restMaxSec', 'restDelayMs', 'postCombatDelayMs', 'autoRespawnEnabled', 'autoRespawnDelayMs', 'telegramAlertCard', 'telegramAlertFlee', 'telegramAlertBotMention', 'telegramAlertNearby', 'telegramAlertWhisper', 'telegramBotToken', 'telegramChatId',
     'sellEnabled', 'sellNpcName', 'sellNpcMap', 'sellNpcX', 'sellNpcY', 'sellIntervalMin', 'sellOnFull', 'sellItemIds',
     'storageEnabled', 'kafraName', 'kafraMap', 'kafraMapX', 'kafraMapY', 'kafraChoice', 'depositOnFull', 'depositAfterSell', 'depositItemIds',
-    'farmMap', 'farmMapX', 'farmMapY', 'warpBackToFarm', 'fleeFromPlayers', 'fleeMode', 'fleeMaps', 'fleePlayerRadius', 'fleeWarpCooldownSec',
+    'farmMap', 'farmMapX', 'farmMapY', 'warpBackToFarm', 'farmMaps', 'farmRotateOnDeath', 'farmMapIdx', 'fleeFromPlayers', 'fleeMode', 'fleeMaps', 'fleePlayerRadius', 'fleeWarpCooldownSec',
     'navRecording', 'navMergeRadius', 'navWanderUseNav', 'navWanderMode',
     'itemNames',
   ];
@@ -1154,6 +1161,11 @@
     farmMapX: -999,               // พิกัด X ที่จะวาร์ปไป (-999 = random spawn ในแมปนั้น)
     farmMapY: -999,               // พิกัด Y
     warpBackToFarm: true,         // ถ้า currentMap เปลี่ยนจาก farmMap → วาร์ปกลับอัตโนมัติ
+    // ★★ รายการแมปฟาร์มหมุนวนเมื่อตาย — [{map, x, y}, ...]
+    //   ตายแต่ละครั้ง → หมุนไปแมปถัดไปในรายการ (วนกลับแมปแรก) — เหมาะกับแมปมอนแรง/แมปผู้เล่นเยอะ
+    farmMaps: [],
+    farmRotateOnDeath: false,     // toggle เปิด-ปิด ตายเปลี่ยนแมปฟาร์ม
+    farmMapIdx: 0,                // ตำแหน่งปัจจุบันในรายการ (persist กัน reset ตอน refresh)
     fleeFromPlayers: false,       // ★★ วาร์ปหนีผู้เล่น — เจอผู้เล่นในแมป → วาร์ปหนีทันที
     fleeMode: 'changeMap',        // ★★ 'changeMap' = เปลี่ยนแมป | 'sameMap' = วาร์ปสุ่มในแมปเดิม
     fleeMaps: [],                 // ★★ รายการแผนที่สำรอง ['moc_fild04','moc_fild08',...]
@@ -2062,6 +2074,19 @@
       const posInfo = currentMap ? ' @ ' + currentMap + (player.x != null ? ' (' + Math.round(player.x) + ',' + Math.round(player.y) + ')' : '') : '';
       // ★★ ขึ้น Log สำคัญ + Telegram (type=flee ครอบ "หนี/ตาย" อยู่แล้ว)
       logImportant('flee', '☠️ ตาย — ' + (cause || 'ไม่ทราบสาเหตุ') + posInfo);
+      // ★★ ตายเปลี่ยนแมปฟาร์ม — หมุนไปแมปถัดไปในรายการ (วนกลับ)
+      //   เปลี่ยน CFG.farmMap ทันที → หลัง respawn พักเลือดเต็ม ระบบ farm-guard วาร์ปไปแมปใหม่เอง
+      if (CFG.farmRotateOnDeath && Array.isArray(CFG.farmMaps) && CFG.farmMaps.length > 0) {
+        CFG.farmMapIdx = ((CFG.farmMapIdx || 0) + 1) % CFG.farmMaps.length;
+        const fe = CFG.farmMaps[CFG.farmMapIdx];
+        if (fe && fe.map) {
+          CFG.farmMap = fe.map;
+          CFG.farmMapX = (fe.x != null && fe.x !== '') ? fe.x : -999;
+          CFG.farmMapY = (fe.y != null && fe.y !== '') ? fe.y : -999;
+          saveConfigDebounced();
+          log('♻️ ตาย → หมุนแมปฟาร์มไป:', fe.map, '(' + (CFG.farmMapIdx + 1) + '/' + CFG.farmMaps.length + ') @(', CFG.farmMapX + ',' + CFG.farmMapY + ')');
+        }
+      }
       target = null;   // ★ ตายแล้วเลิกไล่เป้าเดิม
       // ★ ล้างเวลา buff — ตายแล้ว buff หายหมด → ใช้ใหม่ได้ทันทีหลัง respawn (mirror bot.js:743-746)
       if (lastBuffUse.size > 0) { lastBuffUse.clear(); saveBuffTimesDebounced(); }
@@ -6935,6 +6960,11 @@
             <div class="field"><label>พิกัดวาร์ป X</label><input type="number" id="__assist_farmx" placeholder="-999"><label style="margin-left:8px">Y</label><input type="number" id="__assist_farmy" placeholder="-999"><button id="__assist_usefarmpos" style="margin-left:8px;font-size:10px">ใช้พิกัดตัวละคร</button></div>
             <div class="btns"><button id="__assist_applyfarm">ใช้ค่า farm map</button></div>
             <div style="font-size:10px;color:#9aa0a6;margin-top:4px;">★ วิธีใช้: ยืนในแมปฟาร์ม → กด 'ใช้พิกัดตัวละคร' → ใช้ค่า farm map<br>★ ว่างช่องชื่อแมป = ปิดฟีเจอร์</div>
+            <h4 style="margin-top:14px;">♻️ รายการแมปฟาร์มหมุนวนเมื่อตาย</h4>
+            <div class="btns"><button id="__assist_t_farmondeath" class="off">☠️ ตายเปลี่ยนแมปฟาร์ม: ?</button></div>
+            <div class="field"><label>ชื่อแมป</label><input type="text" id="__assist_rmap" placeholder="เช่น gef_fild13" style="flex:1"><label style="margin-left:6px">X</label><input type="number" id="__assist_rmapx" placeholder="-999" style="width:64px"><label style="margin-left:6px">Y</label><input type="number" id="__assist_rmapy" placeholder="-999" style="width:64px"><button id="__assist_addrmap" style="margin-left:8px;font-size:10px">➕ เพิ่ม</button></div>
+            <div id="__assist_rmaplist" style="font-size:11px"></div>
+            <div style="font-size:10px;color:#9aa0a6;margin-top:4px;">★ ตายแต่ละครั้ง → หมุนไปแมปถัดไปในรายการ (วนกลับแมปแรก)<br>★ หลัง respawn พักเลือดเต็มแล้ววาร์ปไปแมปใหม่เอง · ว่าง X,Y = วาร์ปสุ่มในแมปนั้น</div>
           </div>
           <!-- ⚔️ Combat -->
           <div class="__assist_subpage" data-sub="combat">
@@ -7782,6 +7812,56 @@
       const fy = parseInt(root.querySelector('#__assist_farmy').value, 10);
       ASSIST.setFarmMap(fm, !isNaN(fx) ? fx : -999, !isNaN(fy) ? fy : -999);
     });
+    // ★★ รายการแมปฟาร์มหมุนวนเมื่อตาย — เพิ่ม/ลบ + ลิสต์
+    const renderFarmMapList = () => {
+      const listEl = root.querySelector('#__assist_rmaplist');
+      if (!listEl) return;
+      const escM = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+      const arr = Array.isArray(CFG.farmMaps) ? CFG.farmMaps : [];
+      if (arr.length === 0) { listEl.innerHTML = '<div style="color:#666">(ยังไม่มีแมปในรายการ)</div>'; return; }
+      listEl.innerHTML = arr.map((e, i) => {
+        const cur = (i === (CFG.farmMapIdx || 0) && CFG.farmMap === e.map);
+        return `<div style="display:flex;align-items:center;gap:6px;padding:2px 0;border-bottom:1px solid #1a1a2a;${cur ? 'background:rgba(76,175,80,.1);border-radius:3px;padding:2px 4px' : ''}">
+          <span style="color:${cur ? '#4caf50' : '#888'};width:14px">${cur ? '▶' : (i + 1) + '.'}</span>
+          <span style="flex:1;color:#ccc">${escM(e.map)} <span style="color:#666">(${e.x != null && e.x !== -999 ? e.x + ',' + e.y : 'สุ่ม'})</span></span>
+          <button data-rmapuse="${i}" style="background:#333;color:#8ab4f8;border:1px solid #444;border-radius:3px;padding:1px 6px;font-size:9px;cursor:pointer;font-family:inherit">ใช้เลย</button>
+          <button data-rmapdel="${i}" style="background:#4a2222;color:#ff8a80;border:1px solid #6a3232;border-radius:3px;padding:1px 6px;font-size:9px;cursor:pointer;font-family:inherit">ลบ</button>
+        </div>`;
+      }).join('');
+      listEl.querySelectorAll('button[data-rmapdel]').forEach(b => {
+        b.onclick = () => {
+          const i = parseInt(b.getAttribute('data-rmapdel'), 10);
+          CFG.farmMaps.splice(i, 1);
+          if ((CFG.farmMapIdx || 0) >= CFG.farmMaps.length) CFG.farmMapIdx = 0;
+          saveConfigDebounced();
+          log('🗑️ ลบแมปออกจากรายการหมุนวน — เหลือ', CFG.farmMaps.length, 'แมป');
+          renderFarmMapList();
+        };
+      });
+      listEl.querySelectorAll('button[data-rmapuse]').forEach(b => {
+        b.onclick = () => {
+          const i = parseInt(b.getAttribute('data-rmapuse'), 10);
+          const e = CFG.farmMaps[i];
+          if (!e) return;
+          CFG.farmMapIdx = i;
+          ASSIST.setFarmMap(e.map, (e.x != null && e.x !== '') ? e.x : -999, (e.y != null && e.y !== '') ? e.y : -999);
+          renderFarmMapList();
+        };
+      });
+    };
+    root.querySelector('#__assist_addrmap').addEventListener('click', () => {
+      const rm = root.querySelector('#__assist_rmap').value.trim();
+      if (!rm) { log('⚠️ กรอกชื่อแมปก่อนเพิ่ม'); return; }
+      const rx = parseInt(root.querySelector('#__assist_rmapx').value, 10);
+      const ry = parseInt(root.querySelector('#__assist_rmapy').value, 10);
+      if (!Array.isArray(CFG.farmMaps)) CFG.farmMaps = [];
+      CFG.farmMaps.push({ map: rm, x: isNaN(rx) ? -999 : rx, y: isNaN(ry) ? -999 : ry });
+      saveConfigDebounced();
+      log('➕ เพิ่มแมปหมุนวน:', rm, '@(', (isNaN(rx) ? -999 : rx) + ',' + (isNaN(ry) ? -999 : ry) + ') — รวม', CFG.farmMaps.length, 'แมป');
+      root.querySelector('#__assist_rmap').value = '';
+      renderFarmMapList();
+    });
+    renderFarmMapList();
     const tBtn = (sel, fn, cfgKey) => root.querySelector(sel).addEventListener('click', () => { CFG[cfgKey] = !CFG[cfgKey]; fn(CFG[cfgKey]); });
     tBtn('#__assist_t_antiks', (v) => ASSIST.toggleAntiKS(v), 'antiKS');
     tBtn('#__assist_t_avoidp', (v) => ASSIST.toggleAvoidPlayers(v), 'avoidOtherPlayers');
@@ -7789,6 +7869,7 @@
     tBtn('#__assist_t_wander', (v) => ASSIST.toggleWander(v), 'wanderEnabled');
     tBtn('#__assist_t_warpfind', (v) => ASSIST.toggleWarpFind(v), 'warpFindEnabled');
     tBtn('#__assist_t_guard', (v) => ASSIST.toggleGuard(v), 'guardEnabled');
+    tBtn('#__assist_t_farmondeath', (v) => { saveConfigDebounced(); log('☠️ ตายเปลี่ยนแมปฟาร์ม:', v ? 'เปิด (' + (Array.isArray(CFG.farmMaps) ? CFG.farmMaps.length : 0) + ' แมปในรายการ)' : 'ปิด'); }, 'farmRotateOnDeath');
     // ★ Guard — ใช้พิกัดตัวละครปัจจุบันเป็นจุดยืน
     root.querySelector('#__assist_useguardpos').addEventListener('click', () => {
       if (player.x == null) { log('⚠️ ยังไม่รู้พิกัดตัวละคร'); return; }
@@ -9299,6 +9380,7 @@ return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" d
     syncToggle('#__assist_t_wander', CFG.wanderEnabled);
     syncToggle('#__assist_t_warpfind', CFG.warpFindEnabled);
     syncToggle('#__assist_t_guard', CFG.guardEnabled);
+    syncToggle('#__assist_t_farmondeath', CFG.farmRotateOnDeath);
     syncToggle('#__assist_t_warptomon', CFG.warpToMonster);
     // sell config sync
     const sellBtn = root.querySelector('#__assist_sellbtn');
