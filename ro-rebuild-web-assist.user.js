@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.170.0
+// @version      4.170.1
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,16 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.170.0';
+  const VERSION = '4.170.1';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.170.1', d: '2026-08-21', items: [
+      '🐛 แก้ "บัพตัวเอง (รวมตัวเอง) ไม่ทำงานถ้าไม่มีใครเข้ามา" —',
+      '   บล็อก self ถูกวางไว้หลัง if (!best) continue = ไม่เจอผู้เล่นคนอื่น → ข้ามทั้งสกิล',
+      '   → ย้าย self เป็นผู้สมัครตั้งแต่ต้น (dist 0) ก่อนค้นคนอื่น — ไม่มีใครมาก็ยังบัพตัวเองได้',
+      '📍 ไม่รู้ตำแหน่งตัวเอง (หลัง respawn/วาร์ป) เดิมหยุดทั้ง loop — บัพตัวเองไม่ต้องใช้ตำแหน่ง:',
+      '   → ค้นคนอื่นข้ามได้ แต่ self-target ยังทำงาน (+ กัน ground skill ยิงไป 0,0)',
+    ]},
     { v: '4.170.0', d: '2026-08-21', items: [
       '🌀 แก้วาร์ปปิงปองรัว ๆ เมื่อเปิด Guard + Buff (จาก log จริง):',
       '   warp-back-to-farm ใน 0x12 handler ดึงไป farmMap สู้กับ Guard ที่ดึงมา guardMap',
@@ -1668,7 +1675,8 @@
     if (!CFG.skillEnabled || !CFG.skills || !CFG.skills.length) return;
     if (!activeWS || activeWS.readyState !== 1) return;
     if (isDead) return;
-    if (playerId == null || player.x == null) return;
+    if (playerId == null) return;              // ต้องรู้ id ตัวเอง (ส่ง targetId)
+    const knowPos = player.x != null;          // ★ ไม่รู้ตำแหน่ง → ค้นคนอื่นไม่ได้ แต่บัพตัวเองยังทำได้
     const now = nowMs();
     const disabled = Array.isArray(CFG.disabledSkillIds) ? CFG.disabledSkillIds : [];
     // ★★ SP-rest hysteresis — แก้ "บัพจน SP ต่ำแต่ไม่นั่งพัก":
@@ -1707,6 +1715,16 @@
       const names = Array.isArray(skill.buffNames) ? skill.buffNames.map(n => String(n).toLowerCase().trim()).filter(Boolean) : [];
       const wantAll = skill.buffAll !== false && names.length === 0;   // default: ทุกคน (ถ้าไม่ได้ตั้งชื่อ)
       let best = null, bestD = Infinity;
+      // ★★ รวมตัวเองเป็นผู้สมัครก่อนค้นคนอื่น — แก้ "บัพตัวเองไม่ทำงานถ้าไม่มีใครเข้ามา":
+      //   เดิมบล็อกนี้อยู่หลัง if (!best) continue = ไม่เจอใคร → ข้ามทั้งสกิล → ตัวเองไม่ได้บัพ
+      //   (รอบ delay ซ้ำใช้ร่วมกับคนอื่น · ไม่สน targetHpBelowPct — HP ตัวเองใช้โหมด ally + HP<% แยก)
+      if (skill.buffIncludeSelf) {
+        const perSkill2 = buffTargetUse.get(skill.skillId);
+        const lastSelf = perSkill2 ? (perSkill2.get(playerId) || 0) : 0;
+        const repeatMs2 = (Number(skill.repeatSec) > 0 ? Number(skill.repeatSec) : 300) * 1000;
+        if (!(lastSelf > 0 && now - lastSelf < repeatMs2)) { best = { id: playerId, name: '(ตัวเอง)', x: player.x, y: player.y }; bestD = 0; }
+      }
+      if (knowPos) {
       for (const e of entities.values()) {
         if (e.kind !== 0 || !e.alive || e.x == null || e.y == null) continue;
         if (e.id === playerId) continue;
@@ -1731,19 +1749,13 @@
         _dbReady++;
         if (d < bestD) { bestD = d; best = e; }
       }
+      }   // ★ จบ if (knowPos) — ไม่รู้ตำแหน่ง = ข้ามการค้นคนอื่น (ยังมีตัวเองเป็นผู้สมัครอยู่)
       if (now - (skill._lastBuffDbgAt || 0) > 5000) {
         skill._lastBuffDbgAt = now;
-        dbg('🤝 buff scan: ' + (skill.name || skill.skillId) + ' — เห็นผู้เล่น ' + _dbSeen + ' · ผ่านชื่อ ' + _dbNameOk + ' · ในระยะ ' + _dbRange + (tgtHpBelow > 0 ? ' · HPเป้า<' + tgtHpBelow + '% ' + _dbHpOk : '') + ' · พร้อมบัพ ' + _dbReady + (best ? ' → ' + best.name : ' (ยังไม่มีเป้า)'));
+        dbg('🤝 buff scan: ' + (skill.name || skill.skillId) + ' — เห็นผู้เล่น ' + _dbSeen + ' · ผ่านชื่อ ' + _dbNameOk + ' · ในระยะ ' + _dbRange + (tgtHpBelow > 0 ? ' · HPเป้า<' + tgtHpBelow + '% ' + _dbHpOk : '') + ' · พร้อมบัพ ' + _dbReady + (best ? ' → ' + best.name : ' (ยังไม่มีเป้า)') + (knowPos ? '' : ' [ไม่รู้ตำแหน่ง—เฉพาะตัวเอง]'));
         _dbSeen = _dbNameOk = _dbRange = _dbReady = _dbHpOk = 0;
       }
       if (!best) continue;
-      // ★★ รวมตัวเองในการบัพ (buffIncludeSelf) — บัพตัวเองตามรอบ repeatSec เหมือนคนอื่น
-      if (skill.buffIncludeSelf) {
-        const perSkill2 = buffTargetUse.get(skill.skillId);
-        const lastSelf = perSkill2 ? (perSkill2.get(playerId) || 0) : 0;
-        const repeatMs2 = (Number(skill.repeatSec) > 0 ? Number(skill.repeatSec) : 300) * 1000;
-        if (!(lastSelf > 0 && now - lastSelf < repeatMs2)) { best = { id: playerId, name: '(ตัวเอง)', x: player.x, y: player.y }; bestD = 0; }
-      }
       // ★★ กำลังนั่งพักอยู่ → ลุกมาบัพก่อน (SP ไม่ต้องฟื้นครบ — บัพเสร็จค่อยนั่งใหม่)
       //   ★ set lastRestStandAt ด้วย — กัน combatLoop นั่งซ้ำทันที (เดิมลืม set → นั่ง-ลุก flapping รัว ๆ)
       if (isResting) {
@@ -1756,6 +1768,7 @@
       //   สกิลพื้นที่ (Sanctuary/Pneuma/Safety Wall): [1d][04][x:2][y:2][skillId:1][level:1]
       //     ★★ ต้องส่ง "พิกัดของผู้เล่นเป้าหมาย" ไม่ใช่ playerId (เดิมส่ง targeted เสมอ = ground skill พัง)
       const isGroundBuff = !!skill.ground;
+      if (isGroundBuff && (best.x == null || best.y == null)) continue;   // ★ ground skill ต้องรู้พิกัดเป้า — ไม่รู้ = รอ tick หน้า
       if (sendSkill(skill.skillId, skill.level || 1,
                     isGroundBuff ? null : best.id,
                     isGroundBuff ? Math.round(best.x) : null,
