@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.161.1
+// @version      4.162.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,18 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.161.1';
+  const VERSION = '4.162.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.162.0', d: '2026-08-20', items: [
+      '🛡️ ใหม่! GUARD MODE — ยืนประจำตำแหน่ง (เตรียมทำบอทคอยบัพให้คนอื่น)',
+      '   ยืนนิ่งไม่หามอน ไม่ wander ไม่วาร์ปหามอน · มอนมาตีถึงตีกลับ',
+      '   มอนยิงไกล → เดินเข้าไปตี (ลอจิกเดินหาเป้าเดิม) · ฆ่าเสร็จกลับจุดยืน',
+      '   เลิกตีเมื่อมอนเลิกตีเรา 8s · ห่างจุดยืน >60 ช่อง → วาร์ปกลับ',
+      '   ผิดแมป guard → วาร์ปกลับเอง (แทน farm-guard ตอน guard เปิด)',
+      '⚙️ ตั้งค่าใน Sub-tab Combat: toggle + แผนที่ + X,Y + ปุ่ม "ใช้พิกัดตัวละคร"',
+      '   (ASSIST.toggleGuard / setGuardPos ก็ได้) · ใช้ร่วมกับ Combat: ON',
+    ]},
     { v: '4.161.1', d: '2026-08-20', items: [
       '🐛 แก้ปุ่ม เก็บ/ขาย/ฝาก ใน remote monitor กดแล้วเงียบ — relay server ส่งต่อแค่',
       '   system+action และตัด itemId ทิ้ง → คำสั่ง item action หายกลางทาง',
@@ -780,7 +789,7 @@
     'skillEnabled', 'skills', 'disabledSkillIds',
     'lootEnabled', 'lootDelayAfterDropMs', 'lootUseKillPos', 'pickRadiusKill', 'lootRespectOthers', 'filter', 'sendThrottleMs', 'maxAttempts',
     'warpLootEnabled',
-    'combatEnabled', 'targetWhitelist', 'targetBlacklist', 'fightBackBlacklisted', 'warpDanceEnabled', 'warpDanceMode', 'warpDanceDistance', 'warpDanceThrottleMs', 'autoLoginEnabled', 'autoLoginUser', 'autoLoginPass', 'autoLoginSlot', 'autoRefreshEnabled', 'autoRefreshStallSec', 'attackRange', 'rangedAttackRange',
+    'combatEnabled', 'targetWhitelist', 'targetBlacklist', 'fightBackBlacklisted', 'guardEnabled', 'guardMap', 'guardX', 'guardY', 'warpDanceEnabled', 'warpDanceMode', 'warpDanceDistance', 'warpDanceThrottleMs', 'autoLoginEnabled', 'autoLoginUser', 'autoLoginPass', 'autoLoginSlot', 'autoRefreshEnabled', 'autoRefreshStallSec', 'attackRange', 'rangedAttackRange',
     'maxAcquireDistance', 'searchRadii', 'maxChaseDistance', 'attackPendingMax', 'antiKS', 'avoidOtherPlayers', 'targetLowestHpFirst',
     'fleeOnMobCount', 'fleeOnAggroCount', 'fleeOnProximityCount', 'fleeOnProximityRadius', 'fleeMonsters', 'fleeMonsterRadius', 'maxEngageSec', 'maxEngageSecSlow', 'slowMonsterSubIds',
     'wanderEnabled', 'warpFindEnabled', 'warpToMonster', 'stuckWarpOnAbandon', 'stepAsideOnAbandon', 'warpToBoss', 'warpToMiniBoss', 'bossAlertRadius', 'noMonsterWarpSec',
@@ -1181,6 +1190,12 @@
     warpDanceMode: 'cycle',       // 'cycle' = เรียงวน 8 ทิศ / 'random' = สุ่มทิศ
     warpDanceDistance: 5,         // ระยะห่างจากมอนหลังวาร์ป (1-10 — ควร ≤ ระยะโจมตี)
     warpDanceThrottleMs: 800,     // ★ ระยะห่างขั้นต่ำระหว่างวาร์ป (ms — กันยิงถี่เกินที่ server รับไหว)
+    // ★★ GUARD MODE — ยืนประจำตำแหน่ง ไม่หามอนเอง ตีกลับเฉพาะมอนที่มาตีเรา
+    //   เตรียมไว้สำหรับบอทบัพ (คอยประจำจุดใช้สกิลให้คนอื่น)
+    guardEnabled: false,
+    guardMap: '',            // แผนที่ประจำ (ว่าง = ยึดแมปที่เปิด guard)
+    guardX: -999,
+    guardY: -999,
     // ★★ Auto-Login / Auto-Refresh (เก็บใน localStorage ทั้งหมด — รอดจาก refresh)
     //   ⚠️ password เก็บแบบ plain text ใน localStorage ของเบราว์เซอร์ (เฉพาะ origin นี้)
     //      ห้ามใช้ในเครื่องส่วนรวม! และระบบจะไม่ส่งค่าเหล่านี้ไป monitor/feedback เด็ดขาด
@@ -4195,6 +4210,56 @@
     skillUsesOnTarget.clear();   // ★ reset per-target skill uses (mirror bot.js:4083)
     return target;
   }
+  // ★★ GUARD MODE — เลือกเป้า "เฉพาะมอนที่ตีเรา" (fight back) ไม่หามอนเอง
+  //   - mobAttackers = มอนที่ตีเราล่าสุด (0x0b victim=player) — มอนยิงไกลก็จะเดินเข้าไปตีเอง (ลอจิกเดินหา target เดิม)
+  //   - เลิกสู้เมื่อมอนเลิกตีเราแล้ว 8s (เช่น de-aggro หนีไป) → กลับจุดยืน
+  //   - เคารพ blacklist เหมือน combat ปกติ (เว้นแต่เปิด fightBackBlacklisted)
+  function acquireGuardTarget(now) {
+    if (now - lastTargetSwitchAt < 1500) return null;
+    if (player.x == null) return null;
+    let best = null, bestD = Infinity;
+    for (const [mid, at] of mobAttackers) {
+      if (now - at >= 8000) continue;
+      const e = entities.get(mid);
+      if (!e || !e.alive || e.x == null || e.kind !== 1) continue;
+      if (isStaleId(mid, now)) continue;
+      if (isBeaconPlayer(mid, now)) continue;
+      if (!CFG.fightBackBlacklisted && matchList(e, CFG.targetBlacklist)) continue;
+      const d = Math.hypot(e.x - player.x, e.y - player.y);
+      if (d < bestD) { bestD = d; best = e; }
+    }
+    if (!best) return null;
+    log('🛡️ Guard ตีกลับ:', best.name || best.id.toString(16), '@ dist', bestD.toFixed(1));
+    target = {
+      id: best.id, x: best.x, y: best.y, acquiredAt: now, engageAt: 0,
+      lastAttackAt: 0, lastAttackResultAt: 0, pendingAttacks: 0, firstAttackAt: 0,
+      stuckCount: 0, warpCount: 0, lastDist: null,
+    };
+    lastTargetSwitchAt = now;
+    skillUsesOnTarget.clear();
+    return target;
+  }
+  // ★★ GUARD MODE — กลับไปยืนจุดประจำเมื่อไม่มีมอนตีเราแล้ว
+  let guardReturnLastAt = 0, guardWasReturning = false;
+  function guardReturnToPost(now) {
+    if (player.x == null) return;
+    const gx = CFG.guardX, gy = CFG.guardY;
+    if (gx == null || gy == null || gx <= -999 || gy <= -999) return;
+    const d = Math.hypot(player.x - gx, player.y - gy);
+    if (d <= 2) {   // ยืนครบแล้ว
+      if (guardWasReturning) { guardWasReturning = false; log('🛡️ Guard: กลับมายืนจุดประจำแล้ว @(', gx + ',' + gy + ')'); }
+      return;
+    }
+    if (now - guardReturnLastAt < 1500) return;
+    guardReturnLastAt = now;
+    if (!guardWasReturning) { guardWasReturning = true; log('🛡️ Guard: กลับจุดยืน @(', gx + ',' + gy + ') — ห่าง', d.toFixed(0), 'ช่อง'); }
+    if (d > 60) {
+      // ห่างเกิน (ไล่มอนไกล) → วาร์ปกลับ (ผ่าน teleport serializer กันตีกับ warp อื่น)
+      sendTeleport(CFG.guardMap || currentMap, gx, gy);
+    } else {
+      sendMove(gx, gy);
+    }
+  }
   // เดินไปหามอน — เดินเส้นตรงไปทางมอน + stuck detection ดูระยะลดลง
   let lastWalkToTargetAt = 0;
   let lastDistToTarget = null;
@@ -4245,6 +4310,7 @@
   let fleeBurstTimes = [];               // ★ timestamps การหนีล่าสุด — กันหนีถี่ผิดปกติ (dot ผี/วาร์ปล้ม)
   let lastFleeDebugAt = 0;
   let lastStatusDbgAt = 0;             // ★ throttle บรรทัดสถานะใน Debug log (ทุก 10s)
+  let lastGuardWarpBackAt = 0;         // ★ guard: throttle วาร์ปกลับแมปประจำ (ทุก 5s)
   let last3cDebugAt = 0;
   let lastDamageDebugAt = 0;
   let lastSpawnFailDbgAt = 0;         // ★ throttle dbg SPAWN parse fail
@@ -4477,7 +4543,19 @@
     //      ถ้า abort แล้ว (state = IDLE) ต้องวาร์ปกลับฟาร์ม ไม่งั้นติดในเมือง
     const inSellRoutine = sellState !== 'IDLE';
     const inStorageRoutine = storageState !== 'IDLE';
-    if (CFG.farmMap && currentMap && currentMap !== CFG.farmMap
+    if (CFG.guardEnabled) {
+      // ★★ GUARD MODE — จัดการแมปเอง: ผิดแมป guard → วาร์ปกลับจุดประจำ (แทน farm-guard)
+      if (CFG.guardMap && currentMap && currentMap !== CFG.guardMap) {
+        const nowG = nowMs();
+        if (nowG - (lastGuardWarpBackAt || 0) > 5000) {
+          log('🛡️ Guard: อยู่แมปผิด (' + currentMap + ') → วาร์ปกลับ', CFG.guardMap, '@(', CFG.guardX + ',' + CFG.guardY + ')');
+          sendTeleport(CFG.guardMap, CFG.guardX, CFG.guardY);
+          lastGuardWarpBackAt = nowG;
+        }
+        return;
+      }
+    }
+    else if (CFG.farmMap && currentMap && currentMap !== CFG.farmMap
         && !(inSellRoutine && currentMap === CFG.sellNpcMap)
         && !(inStorageRoutine && currentMap === CFG.kafraMap)) {
       const now2 = nowMs();
@@ -4870,8 +4948,11 @@
           return;   // ปล่อยให้ส่วน auto-rest ทำงานใน tick ถัดไป (จะนั่งเอง)
         }
       }
-      const t = acquireTarget(now);
+      // ★★ GUARD MODE — ตีกลับเฉพาะมอนที่มาตีเรา (ไม่หามอนเอง)
+      const t = CFG.guardEnabled ? acquireGuardTarget(now) : acquireTarget(now);
       if (t) { target = t; noMonsterSince = 0; return; }
+      // ★★ GUARD: ไม่มีมอนตี → กลับจุดยืน + ห้าม wander/วาร์ปหามอน (นิ่งประจำการ)
+      if (CFG.guardEnabled) { guardReturnToPost(now); return; }
       // ไม่เจอมอน
       if (!noMonsterSince) noMonsterSince = now;
       const noMonSec = (now - noMonsterSince) / 1000;
@@ -5886,6 +5967,9 @@
     toggleLowestHpFirst(on) { CFG.targetLowestHpFirst = !!on; log('⚔️ targetLowestHpFirst =', CFG.targetLowestHpFirst); },
     toggleWander(on) { CFG.wanderEnabled = !!on; log('⚔️ wander =', CFG.wanderEnabled); },
     toggleWarpFind(on) { CFG.warpFindEnabled = !!on; log('⚔️ warpFind =', CFG.warpFindEnabled); },
+    // ★★ GUARD MODE — ยืนประจำตำแหน่ง ตีกลับเฉพาะมอนที่มาตี (เตรียมบอทบัพ)
+    toggleGuard(on) { CFG.guardEnabled = !!on; saveConfigDebounced(); if (CFG.guardEnabled) { target = null; guardWasReturning = false; log('🛡️ Guard: ON — ยืนประจำ @(', CFG.guardMap || '(แมปปัจจุบัน)', CFG.guardX + ',' + CFG.guardY + ') ตีกลับเฉพาะมอนที่มาตี'); } else log('🛡️ Guard: OFF'); },
+    setGuardPos(map, x, y) { CFG.guardMap = map || ''; CFG.guardX = x; CFG.guardY = y; guardWasReturning = false; saveConfigDebounced(); log('🛡️ Guard จุดยืน =', CFG.guardMap || '(แมปปัจจุบัน)', '@(', x + ',' + y + ')'); },
     toggleWarpToMonster(on) { CFG.warpToMonster = !!on; log('⚔️ warpToMonster =', CFG.warpToMonster); },
     // debug
     getEntities() {
@@ -6856,6 +6940,12 @@
               <button id="__assist_t_warptominiboss" class="off">👹 วาร์ปไปสู้ Mini Boss</button>
             </div>
             <div class="btns"><button id="__assist_applycombat">ใช้ค่า combat</button></div>
+            <h4 style="margin-top:14px;">🛡️ Guard — ยืนประจำตำแหน่ง (ตีกลับเฉพาะมอนที่มาตี)</h4>
+            <div class="btns"><button id="__assist_t_guard" class="off">🛡️ Guard: ?</button></div>
+            <div class="field"><label>แผนที่ประจำตำแหน่ง (ว่าง = ยึดแมปที่เปิด guard)</label><input type="text" id="__assist_guardmap" placeholder="เช่น izlude"></div>
+            <div class="field"><label>พิกัดจุดยืน X</label><input type="number" id="__assist_guardx" placeholder="-999"><label style="margin-left:8px">Y</label><input type="number" id="__assist_guardy" placeholder="-999"><button id="__assist_useguardpos" style="margin-left:8px;font-size:10px">ใช้พิกัดตัวละคร</button></div>
+            <div class="btns"><button id="__assist_applyguard">💾 ใช้ค่า guard</button></div>
+            <div style="font-size:10px;color:#9aa0a6;margin-top:4px;">★ ยืนเฉย ๆ ไม่หามอน — มอนมาตีถึงตีกลับ (มอนยิงไกลก็เดินเข้าไปตี) ฆ่าเสร็จกลับมายืนจุดเดิม<br>★ เปิดใช้ร่วมกับ Combat: ON · เตรียมไว้สำหรับบอทคอยประจำจุดใช้สกิลบัพให้คนอื่น</div>
             <h4 style="margin-top:14px;">🌀 Warp Dance — ตี 1 ครั้งแล้ววาร์ปรอบตัวมอน</h4>
             <div class="btns"><button id="__assist_t_warpdance" class="off">🌀 Warp Dance: ?</button></div>
             <div class="field"><label>โหมดวาร์ป — cycle = เรียงวน 8 ทิศ / random = สุ่มทิศ</label><select id="__assist_wdmode" style="width:100%;background:#23262e;color:#e8e8e8;border:1px solid #3a3f4b;border-radius:6px;padding:6px;font-family:inherit"><option value="cycle">cycle — เรียงวน 8 ทิศ</option><option value="random">random — สุ่มทิศ</option></select></div>
@@ -7671,6 +7761,30 @@
     tBtn('#__assist_t_lowhp', (v) => ASSIST.toggleLowestHpFirst(v), 'targetLowestHpFirst');
     tBtn('#__assist_t_wander', (v) => ASSIST.toggleWander(v), 'wanderEnabled');
     tBtn('#__assist_t_warpfind', (v) => ASSIST.toggleWarpFind(v), 'warpFindEnabled');
+    tBtn('#__assist_t_guard', (v) => ASSIST.toggleGuard(v), 'guardEnabled');
+    // ★ Guard — ใช้พิกัดตัวละครปัจจุบันเป็นจุดยืน
+    root.querySelector('#__assist_useguardpos').addEventListener('click', () => {
+      if (player.x == null) { log('⚠️ ยังไม่รู้พิกัดตัวละคร'); return; }
+      root.querySelector('#__assist_guardx').value = Math.round(player.x);
+      root.querySelector('#__assist_guardy').value = Math.round(player.y);
+      if (currentMap) root.querySelector('#__assist_guardmap').value = currentMap;
+      log('🛡️ จดจุดยืน guard: ', currentMap + ' @(' + Math.round(player.x) + ',' + Math.round(player.y) + ') — กด "ใช้ค่า guard" เพื่อบันทึก');
+    });
+    root.querySelector('#__assist_applyguard').addEventListener('click', () => {
+      const gm = root.querySelector('#__assist_guardmap').value.trim();
+      const gx = parseInt(root.querySelector('#__assist_guardx').value, 10);
+      const gy = parseInt(root.querySelector('#__assist_guardy').value, 10);
+      CFG.guardMap = gm;
+      if (!isNaN(gx)) CFG.guardX = gx;
+      if (!isNaN(gy)) CFG.guardY = gy;
+      guardWasReturning = false;
+      saveConfigDebounced();
+      log('🛡️ Guard จุดยืน =', gm || '(แมปปัจจุบัน)', '@(', CFG.guardX + ',' + CFG.guardY + ')');
+    });
+    // ★ populate guard inputs ครั้งเดียว
+    const _gm = root.querySelector('#__assist_guardmap'); if (_gm) _gm.value = CFG.guardMap || '';
+    const _gx = root.querySelector('#__assist_guardx'); if (_gx) _gx.value = CFG.guardX != null && CFG.guardX > -999 ? CFG.guardX : '';
+    const _gy = root.querySelector('#__assist_guardy'); if (_gy) _gy.value = CFG.guardY != null && CFG.guardY > -999 ? CFG.guardY : '';
     tBtn('#__assist_t_warptomon', (v) => ASSIST.toggleWarpToMonster(v), 'warpToMonster');
 
     root.querySelector('#__assist_resetstats').addEventListener('click', () => ASSIST.resetStats());
@@ -9157,6 +9271,7 @@ return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" d
     syncToggle('#__assist_t_lowhp', CFG.targetLowestHpFirst);
     syncToggle('#__assist_t_wander', CFG.wanderEnabled);
     syncToggle('#__assist_t_warpfind', CFG.warpFindEnabled);
+    syncToggle('#__assist_t_guard', CFG.guardEnabled);
     syncToggle('#__assist_t_warptomon', CFG.warpToMonster);
     // sell config sync
     const sellBtn = root.querySelector('#__assist_sellbtn');
