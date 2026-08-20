@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.162.0
+// @version      4.162.1
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,15 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.162.0';
+  const VERSION = '4.162.1';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.162.1', d: '2026-08-21', items: [
+      '☠️ ตายแล้วบอกสาเหตุ — "☠️ ตาย — สู้กับ Wolf · ตีเราล่าสุด: Wolf, Poring @ แมป (x,y)"',
+      '   วิเคราะห์จาก target ที่กำลังสู้ + มอนที่ตีเราใน 10s ท้าย (ใหม่สุดก่อน สูงสุด 3 ชื่อ)',
+      '   ★ ขึ้น Log สำคัญ + ส่ง Telegram ด้วย (เดิมเป็น log ปกติอย่างเดียว ไม่บอกมอน)',
+      '   + ตายแล้วเคลียร์ target เดิมทันที (กันไล่เป้าผีหลัง respawn)',
+    ]},
     { v: '4.162.0', d: '2026-08-20', items: [
       '🛡️ ใหม่! GUARD MODE — ยืนประจำตำแหน่ง (เตรียมทำบอทคอยบัพให้คนอื่น)',
       '   ยืนนิ่งไม่หามอน ไม่ wander ไม่วาร์ปหามอน · มอนมาตีถึงตีกลับ',
@@ -2036,6 +2042,27 @@
       isDead = true;
       hp.cur = 0;
       stats.deaths++;
+      // ★★ วิเคราะห์ต้นเหตุการตาย — จาก target ที่กำลังสู้ + มอนที่ตีเราล่าสุด (0x0b victim=player)
+      //   มอนที่ตีล่าสุด (ใหม่สุดก่อน) = ฆาตกรที่มีโอกาสสูงสุด · กรองเฉพาะที่ตีเราใน 10s ท้าย
+      const nowD = nowMs();
+      let cause = '';
+      if (target) {
+        const te = entities.get(target.id);
+        cause = 'สู้กับ ' + ((te && te.name) || target.id.toString(16));
+      }
+      const attackers = [...mobAttackers.entries()]
+        .filter(([, t]) => nowD - t < 10000)
+        .sort((a, b) => b[1] - a[1])                       // ใหม่สุดก่อน
+        .map(([mid]) => { const e = entities.get(mid); return e ? (e.name || mid.toString(16)) : null; })
+        .filter(Boolean);
+      const uniqAtk = [...new Set(attackers)].slice(0, 3);  // ชื่อซ้ำรวมเป็นตัวเดียว สูงสุด 3
+      if (uniqAtk.length > 0) {
+        cause = (cause ? cause + ' · ' : '') + 'ตีเราล่าสุด: ' + uniqAtk.join(', ');
+      }
+      const posInfo = currentMap ? ' @ ' + currentMap + (player.x != null ? ' (' + Math.round(player.x) + ',' + Math.round(player.y) + ')' : '') : '';
+      // ★★ ขึ้น Log สำคัญ + Telegram (type=flee ครอบ "หนี/ตาย" อยู่แล้ว)
+      logImportant('flee', '☠️ ตาย — ' + (cause || 'ไม่ทราบสาเหตุ') + posInfo);
+      target = null;   // ★ ตายแล้วเลิกไล่เป้าเดิม
       // ★ ล้างเวลา buff — ตายแล้ว buff หายหมด → ใช้ใหม่ได้ทันทีหลัง respawn (mirror bot.js:743-746)
       if (lastBuffUse.size > 0) { lastBuffUse.clear(); saveBuffTimesDebounced(); }
       // ★ ล้างเวลา skill + per-target uses (mirror bot.js:744-747)
