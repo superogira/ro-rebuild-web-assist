@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.168.1
+// @version      4.169.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,18 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.168.1';
+  const VERSION = '4.169.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.169.0', d: '2026-08-21', items: [
+      '🐛 แก้ "บัพจน SP ต่ำแต่ไม่นั่งพัก" — 2 ชั้น:',
+      '   1. SP gate ของบัพเป็นค่า flat (spMin) ไม่ใช่ % → ช่วง spmin ถึง restSpPercent',
+      '      วน นั่ง→ลุกบัพ→นั่ง รัว ๆ SP ไม่เคยฟื้น',
+      '   2. การลุกมาบัพไม่ set lastRestStandAt → ระบบพักนั่งซ้ำทันทีไม่มีช่วงห่าง',
+      '   → เพิ่ม hysteresis: SP% < restSpPercent = หยุดบัพทั้งหมด นั่งพักจน SP% ≥',
+      '     restUntilPercent ค่อยกลับมาบัพ (log บอกชัดทั้งขาเข้า/ขาออก)',
+      '   → ลุกมาบัพ set lastRestStandAt กันนั่ง-ลุกตีกัน',
+    ]},
     { v: '4.168.1', d: '2026-08-21', items: [
       '🐛 แก้สกิลบัพประเภทพื้นที่ (Sanctuary/Pneuma/Safety Wall) ให้คนอื่น —',
       '   เดิมส่ง targeted [1d][01]+playerId เสมอ = ground skill พัง (server คงปฏิเสธเงียบ)',
@@ -1653,6 +1662,21 @@
     if (playerId == null || player.x == null) return;
     const now = nowMs();
     const disabled = Array.isArray(CFG.disabledSkillIds) ? CFG.disabledSkillIds : [];
+    // ★★ SP-rest hysteresis — แก้ "บัพจน SP ต่ำแต่ไม่นั่งพัก":
+    //   เดิม SP gate ของบัพเป็นค่า flat (spMin) ไม่ใช่ % → ช่วง spMin-ถึง-restSpPercent
+    //   วน นั่ง→ลุกบัพ→นั่ง รัว ๆ SP ไม่เคยฟื้น (และการลุกไม่ set lastRestStandAt = นั่งซ้ำทันที)
+    //   → SP% < restSpPercent: หยุดบัพทั้งหมด ให้ระบบพักนั่งจน SP% ≥ restUntilPercent ค่อยกลับมาบัพ
+    if (CFG.restEnabled && CFG.restSpPercent > 0 && sp.cur != null && sp.max > 0) {
+      const spPP = (sp.cur / sp.max) * 100;
+      if (!buffSpResting && spPP < CFG.restSpPercent) {
+        buffSpResting = true;
+        log('🪑 SP', spPP.toFixed(0) + '% < ' + CFG.restSpPercent + '% → หยุดบัพ นั่งพักจน SP ' + CFG.restUntilPercent + '%');
+      } else if (buffSpResting && spPP >= CFG.restUntilPercent) {
+        buffSpResting = false;
+        log('🪑 SP ฟื้น', spPP.toFixed(0) + '% ≥ ' + CFG.restUntilPercent + '% → กลับมาบัพต่อ');
+      }
+    }
+    if (buffSpResting) return;   // กำลังพัก SP → ไม่หาเพื่อบัพ (ไม่ลุก)
     // ★ diagnostic — ทำไมไม่บัพ (เห็นผู้เล่นกี่คน / ตกมากี่เงื่อนไข) ทุก 5s ไป Debug log
     let _dbSeen = 0, _dbNameOk = 0, _dbRange = 0, _dbReady = 0, _dbHpOk = 0;
     for (const skill of CFG.skills) {
@@ -1712,9 +1736,11 @@
         if (!(lastSelf > 0 && now - lastSelf < repeatMs2)) { best = { id: playerId, name: '(ตัวเอง)', x: player.x, y: player.y }; bestD = 0; }
       }
       // ★★ กำลังนั่งพักอยู่ → ลุกมาบัพก่อน (SP ไม่ต้องฟื้นครบ — บัพเสร็จค่อยนั่งใหม่)
+      //   ★ set lastRestStandAt ด้วย — กัน combatLoop นั่งซ้ำทันที (เดิมลืม set → นั่ง-ลุก flapping รัว ๆ)
       if (isResting) {
         if (sendStand()) { log('🪑 ลุกยืน: มี ' + (best.name || 'ผู้เล่น') + ' รอบัพ — บัพก่อนแล้วค่อยพักต่อ'); }
         isResting = false;
+        lastRestStandAt = now;
       }
       // ★ ส่งสกิลให้ผู้เล่น — เลือก format ตามชนิดสกิล:
       //   ปกติ (Heal/Blessing): [1d][01][playerId:4][skillId:1][level:1] — ยืนยันจาก capture จริง
@@ -4215,6 +4241,7 @@
   const lastSkillUse = new Map();        // skillId → timestamp (cooldown)
   const skillUsesOnTarget = new Map();   // skillId → Map<targetId, count> (maxUsesPerTarget)
   const buffTargetUse = new Map();       // skillId → Map<playerId, lastAt> — delay บัพซ้ำต่อคน (buffMode)
+  let buffSpResting = false;             // ★ hysteresis: SP% ต่ำ → พักบัพทั้งหมด จน SP ฟื้นถึง restUntilPercent ค่อยกลับมา
   // persist skill times ข้าม session
   const SKILL_TIMES_KEY = 'roAssistSkillTimes_v1';
   function loadSkillTimes() {
