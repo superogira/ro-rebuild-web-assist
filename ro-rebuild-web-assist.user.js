@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.166.1
+// @version      4.167.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,18 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.166.1';
+  const VERSION = '4.167.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.167.0', d: '2026-08-21', items: [
+      '🪑 นั่งพักเมื่อ SP ต่ำ (restSpPercent — 0=ปิด) เหมือน HP ใช้เวลานั่ง/เกณฑ์ลุกอันเดียวกัน',
+      '   ลุกเมื่อ HP และ SP ฟื้นถึง restUntilPercent ครบทั้งคู่ — เหมาะกับบอทบัพที่ SP ไหลลงตลอด',
+      '🤝 นั่งอยู่ + มีคนรอบัพ → ลุกมาบัพก่อน แล้วค่อยนั่งพักใหม่ (SP ไม่ต้องครบก่อน)',
+      '🙋 buff เพิ่มตัวเลือก "รวมตัวเอง" — บัพตัวเองด้วยสกิลเดียวกันตามรอบ delay ซ้ำ',
+      '🔀 addSkill dedupe ด้วย skillId+โหมด — สร้าง Heal (ally HP<50%) + Heal (buff ให้คน) พร้อมกันได้',
+      'ℹ️ ชี้แจง cooldown: เป็นช่วงห่างระหว่าง cast ต่อเนื่อง (ข้ามคนได้) ไม่ได้บล็อคคนอื่น —',
+      '   บัพหลายคนต่อเนื่องได้ ห่างกัน cast ละ cooldownMs · repeatSec เป็นตัวคุมซ้ำต่อคน',
+    ]},
     { v: '4.166.1', d: '2026-08-21', items: [
       '🐛 แก้บั๊กแก้ค่า buff (รายชื่อ/ชื่อ/delay) แล้วค่าเดิม — save handler เดิมบันทึก',
       '   เฉพาะเมื่อ mode=buff ถ้า mode select ค้างค่าเดิม ค่าที่แก้หลุดหมด + ลบชื่อไม่ถูกบันทึก',
@@ -842,7 +851,7 @@
     'maxAcquireDistance', 'searchRadii', 'maxChaseDistance', 'attackPendingMax', 'antiKS', 'avoidOtherPlayers', 'targetLowestHpFirst',
     'fleeOnMobCount', 'fleeOnAggroCount', 'fleeOnProximityCount', 'fleeOnProximityRadius', 'fleeMonsters', 'fleeMonsterRadius', 'maxEngageSec', 'maxEngageSecSlow', 'slowMonsterSubIds',
     'wanderEnabled', 'warpFindEnabled', 'warpToMonster', 'stuckWarpOnAbandon', 'stepAsideOnAbandon', 'warpToBoss', 'warpToMiniBoss', 'bossAlertRadius', 'noMonsterWarpSec',
-    'restEnabled', 'restHpPercent', 'restUntilPercent', 'restMaxSec', 'restDelayMs', 'postCombatDelayMs', 'autoRespawnEnabled', 'autoRespawnDelayMs', 'telegramAlertCard', 'telegramAlertFlee', 'telegramAlertBotMention', 'telegramAlertNearby', 'telegramAlertWhisper', 'telegramBotToken', 'telegramChatId',
+    'restEnabled', 'restHpPercent', 'restSpPercent', 'restUntilPercent', 'restMaxSec', 'restDelayMs', 'postCombatDelayMs', 'autoRespawnEnabled', 'autoRespawnDelayMs', 'telegramAlertCard', 'telegramAlertFlee', 'telegramAlertBotMention', 'telegramAlertNearby', 'telegramAlertWhisper', 'telegramBotToken', 'telegramChatId',
     'sellEnabled', 'sellNpcName', 'sellNpcMap', 'sellNpcX', 'sellNpcY', 'sellIntervalMin', 'sellOnFull', 'sellItemIds',
     'storageEnabled', 'kafraName', 'kafraMap', 'kafraMapX', 'kafraMapY', 'kafraChoice', 'depositOnFull', 'depositAfterSell', 'depositItemIds',
     'farmMap', 'farmMapX', 'farmMapY', 'warpBackToFarm', 'farmMaps', 'farmRotateOnDeath', 'farmMapIdx', 'fleeFromPlayers', 'fleeMode', 'fleeMaps', 'fleePlayerRadius', 'fleeWarpCooldownSec',
@@ -1145,6 +1154,8 @@
     //  ★ โดนรุมระหว่างนั่ง → ลุกทันทีเพื่อตีตอบ
     restEnabled: true,
     restHpPercent: 40,            // HP ต่ำกว่า 30% → นั่งพัก
+    restSpPercent: 0,            // ★★ SP% ต่ำกว่านี้ → นั่งพักด้วย (0 = ไม่สน SP) — สำหรับบอทบัพ
+                                 //   ลุกเมื่อ HP และ SP ฟื้นถึง restUntilPercent ครบทั้งคู่ (ใช้ค่าเดียวกัน)
     restUntilPercent: 90,         // ฟื้นถึง 90% → ลุก
     restMaxSec: 40,               // นั่งนานสุด 60 วิ (กันค้าง — HP ไม่ขยับ = มีปัญหา)
     restDelayMs: 1000,            // ★ ดีเลย์ก่อนนั่งพักหลังเก็บของเสร็จ — กันดูเป็นบอท (นั่งทันที = ไม่ธรรมชาติ)
@@ -1493,6 +1504,7 @@
     hp.max = m;
   }
   const hpPct = () => (hp.cur != null && hp.max > 0) ? (hp.cur / hp.max) * 100 : null;
+  const spPct = () => (sp.cur != null && sp.max > 0) ? (sp.cur / sp.max) * 100 : null;
 
   // ============================================================
   //  AUTO-HEAL
@@ -1671,6 +1683,18 @@
         _dbSeen = _dbNameOk = _dbRange = _dbReady = 0;
       }
       if (!best) continue;
+      // ★★ รวมตัวเองในการบัพ (buffIncludeSelf) — บัพตัวเองตามรอบ repeatSec เหมือนคนอื่น
+      if (skill.buffIncludeSelf) {
+        const perSkill2 = buffTargetUse.get(skill.skillId);
+        const lastSelf = perSkill2 ? (perSkill2.get(playerId) || 0) : 0;
+        const repeatMs2 = (Number(skill.repeatSec) > 0 ? Number(skill.repeatSec) : 300) * 1000;
+        if (!(lastSelf > 0 && now - lastSelf < repeatMs2)) { best = { id: playerId, name: '(ตัวเอง)', x: player.x, y: player.y }; bestD = 0; }
+      }
+      // ★★ กำลังนั่งพักอยู่ → ลุกมาบัพก่อน (SP ไม่ต้องฟื้นครบ — บัพเสร็จค่อยนั่งใหม่)
+      if (isResting) {
+        if (sendStand()) { log('🪑 ลุกยืน: มี ' + (best.name || 'ผู้เล่น') + ' รอบัพ — บัพก่อนแล้วค่อยพักต่อ'); }
+        isResting = false;
+      }
       // ★ ส่งสกิลให้ผู้เล่น — format [1d][01][playerId:4][skillId:1][level:1]
       if (sendSkill(skill.skillId, skill.level || 1, best.id, null, null)) {
         lastSkillUse.set(skill.skillId, now);
@@ -4743,13 +4767,19 @@
     }
 
     // === -1. AUTO-REST (priority สูงสุด — ก่อน flee) ===
-    //   ถ้า HP ต่ำ + ไม่โดนรุม → นั่งพัก; ถ้ากำลังนั่งอยู่ → จัดการลุก/นั่งต่อ
+    //   ถ้า HP ต่ำ (+SP ต่ำถ้าตั้ง restSpPercent) และไม่โดนรุม → นั่งพัก; ถ้ากำลังนั่งอยู่ → จัดการลุก/นั่งต่อ
     if (CFG.restEnabled && pct != null && hp.cur != null && pct > 0) {
       // ★ pct=0 = tracking ผิด (ไม่ตายจริง) → ไม่นั่งพัก (รอ STAT แก้)
+      // ★★ SP condition — นั่งด้วยเมื่อ SP% ต่ำกว่า restSpPercent (>0 = เปิด) สำหรับบอทบัพ
+      //   ลุกเมื่อ HP+SP ฟื้นถึง restUntilPercent ครบทั้งคู่ (หรือหมดเวลา)
+      const spP = spPct();
+      const spLow = CFG.restSpPercent > 0 && spP != null && spP < CFG.restSpPercent;
+      const hpLow = pct < CFG.restHpPercent;
+      const spOkToStand = !(CFG.restSpPercent > 0) || spP == null || spP >= CFG.restUntilPercent;
       // ★★ มีของรอเก็บ → ยังไม่นั่ง! เก็บให้เสร็จก่อน (ยืนเก็บได้/ไม่ต้องวาร์ปไปเก็บตอนนั่ง)
       //   (บั๊กเดิม: นั่งก่อน → loot loop ยิงเก็บตอนนั่ง fail รัว → วาร์ปไปเก็บ → การนั่งพัง)
       //   + พักหลังเก็บของเสร็จอย่างน้อย restDelayMs — เก็บเสร็จแล้วนั่งทันที = ดูเป็นบอท
-      if (!isResting && pct < CFG.restHpPercent && mobCount === 0
+      if (!isResting && (hpLow || spLow) && mobCount === 0
           && queue.size === 0 && warpQueue.size === 0
           && now - lastLootActivityAt >= CFG.restDelayMs
           && now - lastRestStandAt >= 2000) {
@@ -4757,7 +4787,8 @@
         if (sendSit()) {
           isResting = true;
           restUntil = now + CFG.restMaxSec * 1000;
-          log('🪑 นั่งพัก: HP', pct.toFixed(0) + '% < ' + CFG.restHpPercent + '% (นานสุด ' + CFG.restMaxSec + 's หรือจนถึง ' + CFG.restUntilPercent + '%)');
+          if (hpLow) log('🪑 นั่งพัก: HP', pct.toFixed(0) + '% < ' + CFG.restHpPercent + '% (นานสุด ' + CFG.restMaxSec + 's หรือจนถึง ' + CFG.restUntilPercent + '%)');
+          else log('🪑 นั่งพัก: SP', (spP != null ? spP.toFixed(0) + '% < ' + CFG.restSpPercent + '%' : 'ต่ำ') + ' (นานสุด ' + CFG.restMaxSec + 's หรือจนถึง SP ' + CFG.restUntilPercent + '%)');
         }
         return;
       }
@@ -4776,16 +4807,16 @@
         }
         // โดนรุมระหว่างนั่ง → ลุกทันทีเพื่อตีตอบ (ไม่ return — ให้ flee/defensive ทำงานต่อ)
         else if (mobCount > 0) {
-          if (sendStand()) { log('⚠️ โดนรุมระหว่างนั่ง → ลุกทันที'); }
+          if (sendStand()) { log('⚠️ โดนรุมขณะนั่ง → ลุกทันที'); }
           isResting = false;
         }
-        // ฟื้นถึง restUntilPercent หรือหมดเวลา → ลุก
-        else if (pct >= CFG.restUntilPercent || now >= restUntil) {
-          const byFull = pct >= CFG.restUntilPercent;
+        // ฟื้นถึง restUntilPercent (HP ครบ + SP ครบถ้าเปิด SP rest) หรือหมดเวลา → ลุก
+        else if ((pct >= CFG.restUntilPercent && spOkToStand) || now >= restUntil) {
+          const byFull = pct >= CFG.restUntilPercent && spOkToStand;
           if (sendStand()) {
-            log('🪑 ลุกยืน: HP ' + pct.toFixed(0) + '%' + (byFull
+            log('🪑 ลุกยืน: HP ' + pct.toFixed(0) + '%' + (CFG.restSpPercent > 0 && spP != null ? ' SP ' + spP.toFixed(0) + '%' : '') + (byFull
               ? ' (ฟื้นครบ ≥ ' + CFG.restUntilPercent + '%)'
-              : ' (หมดเวลา ' + CFG.restMaxSec + 's แต่ HP ไม่ขยับ — น่าจะ tracking ค้าง ตรวจ player_id)'));
+              : ' (หมดเวลา ' + CFG.restMaxSec + 's แต่ยังไม่ครบ — น่าจะ tracking ค้าง ตรวจ player_id)'));
           }
           isResting = false;
           lastRestStandAt = now;
@@ -5908,9 +5939,12 @@
     },
     addSkill(skill) {
       if (!skill || skill.skillId == null) { log('⚠️ ต้องมี skillId'); return; }
-      const existing = CFG.skills.find(s => s.skillId === skill.skillId);
-      if (existing) { Object.assign(existing, skill); log('✨ แก้ skill', skill.skillId); }
-      else { CFG.skills.push(skill); log('✨ เพิ่ม skill', skill.skillId); }
+      // ★★ dedupe ด้วย skillId + โหมด — สกิลเดียวกันต่างโหมดอยู่ด้วยกันได้
+      //   (เช่น Heal ally HP<50% สำหรับตัวเอง + Heal buff ให้คนอื่น — คนละเงื่อนไข)
+      const modeKey = (s) => s.buffMode ? 'buff' : (s.ally ? 'ally' : (s.selfCast ? 'self' : (s.ground ? 'ground' : (s.targeted ? 'targeted' : 'aoe'))));
+      const existing = CFG.skills.find(s => s.skillId === skill.skillId && modeKey(s) === modeKey(skill));
+      if (existing) { Object.assign(existing, skill); log('✨ แก้ skill', skill.skillId, '(' + modeKey(skill) + ')'); }
+      else { CFG.skills.push(skill); log('✨ เพิ่ม skill', skill.skillId, '(' + modeKey(skill) + ')'); }
     },
     removeSkill(skillId) {
       CFG.skills = CFG.skills.filter(s => s.skillId !== skillId);
@@ -6691,6 +6725,7 @@
               </select>
               <input data-edit="buffNames" value="${(Array.isArray(s.buffNames)?s.buffNames:[]).join(',')}" placeholder="รายชื่อผู้เล่น (คั่นจุลภาค)" style="flex:2;background:#15171c;border:1px solid #3a3f4b;border-radius:4px;color:#e8e8e8;padding:4px 6px;font-size:10px;font-family:inherit" title="เช่น superogira0,testmage — ใช้เมื่อเลือก 'เฉพาะรายชื่อ'">
               ${fld('delay ซ้ำ/คน (วิ)', inp('repeatSec', s.repeatSec||300, '60px'), 'รออย่างน้อย N วินาทีก่อนบัพซ้ำคนเดิม (กันสแปม) — default 300 = 5 นาที')}
+              ${fld('รวมตัวเอง', `<select data-edit="buffIncludeSelf" style="width:55px;background:#15171c;border:1px solid #3a3f4b;border-radius:4px;color:#e8e8e8;padding:4px 3px;font-size:10px;font-family:inherit"><option value="1"${s.buffIncludeSelf?' selected':''}>ใช่</option><option value="0"${!s.buffIncludeSelf?' selected':''}>ไม่</option></select>`, 'บัพตัวเองด้วยสกิลนี้ตามรอบ delay ซ้ำ (แยกจากโหมด ally/self-cast ที่ใช้ HP% หรือ interval)')}
             </div>
             <div style="display:flex;gap:4px">
               <button data-saveedit="${i}" style="flex:1;background:#1b5e20;border:1px solid #2e7d32;border-radius:4px;color:#a5d6a7;cursor:pointer;font-size:10px;padding:5px;font-family:inherit">✓ บันทึก</button>
@@ -6756,6 +6791,10 @@
           </select>
           <input id="__assist_skill_buffnames" placeholder="รายชื่อผู้เล่น (คั่นจุลภาค)" style="flex:2;background:#15171c;border:1px solid #3a3f4b;border-radius:5px;color:#e8e8e8;padding:5px 7px;font-size:11px;font-family:inherit" title="เช่น superogira0,testmage (ใช้เมื่อเลือกเฉพาะรายชื่อ)">
           <input id="__assist_skill_repeatsec" type="number" placeholder="ซ้ำ/คน(วิ)" value="300" title="delay ก่อนบัพซ้ำคนเดิม (วินาที)" style="width:80px;background:#15171c;border:1px solid #3a3f4b;border-radius:5px;color:#e8e8e8;padding:5px 7px;font-size:11px;font-family:inherit">
+          <select id="__assist_skill_buffself" title="รวมบัพตัวเองด้วยสกิลนี้ตามรอบ delay ซ้ำ" style="width:70px;background:#15171c;border:1px solid #3a3f4b;border-radius:5px;color:#e8e8e8;padding:5px 4px;font-size:11px;font-family:inherit">
+            <option value="0">เฉพาะคนอื่น</option>
+            <option value="1">รวมตัวเอง</option>
+          </select>
         </div>
         <button id="__assist_skill_addbtn" style="width:100%;background:#1b5e20;border:1px solid #2e7d32;border-radius:5px;color:#a5d6a7;cursor:pointer;font-size:11px;padding:6px;font-family:inherit">+ เพิ่ม skill</button>
       </div>`;
@@ -6817,6 +6856,8 @@
           if (bNamesEl) s.buffNames = bNamesEl.value.split(',').map(x => x.trim()).filter(Boolean);
           const rSecEl = bodyEl.querySelector('[data-edit="repeatSec"]');
           if (rSecEl) { const rs2 = parseInt(rSecEl.value, 10); if (!isNaN(rs2) && rs2 > 0) s.repeatSec = rs2; }
+          const bisEl = bodyEl.querySelector('[data-edit="buffIncludeSelf"]');
+          if (bisEl) s.buffIncludeSelf = bisEl.value === '1';
           log('✎ บันทึก skill', s.name, s.buffMode ? ('· buff: ' + (s.buffAll === false ? 'เฉพาะ ' + (s.buffNames || []).join(',') : 'ทุกคน') + ' ≤' + (s.maxDistance || 9) + 'ช่อง ทุก' + (s.repeatSec || 300) + 'วิ') : '');
           s.spMin = parseInt(getVal('spMin'), 10) || 0;
           const cdSec = parseFloat(getVal('cooldownSec'));
@@ -6877,6 +6918,7 @@
           const buffAll = bodyEl.querySelector('#__assist_skill_buffall').value !== 'list';
           const buffNames = (bodyEl.querySelector('#__assist_skill_buffnames').value || '').split(',').map(x => x.trim()).filter(Boolean);
           const repeatSec = parseInt(bodyEl.querySelector('#__assist_skill_repeatsec').value, 10) || 300;
+          const buffIncludeSelf = bodyEl.querySelector('#__assist_skill_buffself').value === '1';
           if (isNaN(skillId)) { return; }
           ASSIST.addSkill({
             name, skillId, level,
@@ -6885,7 +6927,7 @@
             selfCast: mode === 'self',
             ally: mode === 'ally',
             buffMode: mode === 'buff',
-            buffAll, buffNames, repeatSec,
+            buffAll, buffNames, repeatSec, buffIncludeSelf,
             intervalMin, mobCountMin, maxUsesPerTarget, maxDistance, minDistance, spMin, cooldownMs,
             hpBelowPct: Math.max(0, Math.min(100, hpBelowPct)),
           });
@@ -7253,7 +7295,8 @@
           <div class="__assist_subpage" data-sub="rest">
             <div class="btns"><button id="__assist_restbtn" class="off">Rest: ?</button></div>
             <div class="field"><label>HP% ที่จะนั่งพัก (ต่ำกว่านี้ → นั่ง)</label><input type="number" id="__assist_resthp" min="1" max="99"></div>
-            <div class="field"><label>HP% ที่จะลุกยืน (ฟื้นถึงนี้ → ลุก)</label><input type="number" id="__assist_restuntil" min="1" max="100"></div>
+            <div class="field"><label>SP% ที่จะนั่งพัก (ต่ำกว่านี้ → นั่งด้วย · 0 = ไม่สน SP — สำหรับบอทบัพ)</label><input type="number" id="__assist_restsp" min="0" max="99"></div>
+            <div class="field"><label>HP/SP% ที่จะลุกยืน (ฟื้นถึงนี้ → ลุก · ใช้ค่าเดียวกันทั้ง HP และ SP)</label><input type="number" id="__assist_restuntil" min="1" max="100"></div>
             <div class="field"><label>นั่งนานสุด (วินาที) — กันค้าง</label><input type="number" id="__assist_restmaxsec" min="5" max="300"></div>
             <div class="field"><label>ดีเลย์ก่อนนั่ง (ms) — หลังเก็บของเสร็จ รอก่อนค่อยนั่ง (กันดูเป็นบอท)</label><input type="number" id="__assist_restdelay" min="0" max="10000" step="100"></div>
             <div class="btns"><button id="__assist_applyrest">ใช้ค่า rest</button></div>
@@ -7833,18 +7876,23 @@
     root.querySelector('#__assist_respawnbtn').addEventListener('click', () => { CFG.autoRespawnEnabled = !CFG.autoRespawnEnabled; saveConfigDebounced(); log('💀 Auto-Respawn:', CFG.autoRespawnEnabled ? 'เปิด' : 'ปิด'); });
     root.querySelector('#__assist_applyrest').addEventListener('click', () => {
       const hp = parseInt(root.querySelector('#__assist_resthp').value, 10);
+      const rsp = parseInt(root.querySelector('#__assist_restsp').value, 10);
       const until = parseInt(root.querySelector('#__assist_restuntil').value, 10);
       const sec = parseInt(root.querySelector('#__assist_restmaxsec').value, 10);
       const delay = parseInt(root.querySelector('#__assist_restdelay').value, 10);
       if (!isNaN(hp)) ASSIST.setRestHp(hp);
+      if (!isNaN(rsp) && rsp >= 0) { CFG.restSpPercent = Math.min(rsp, 99); log('🪑 SP% นั่งพัก =', CFG.restSpPercent === 0 ? 'ปิด (ไม่สน SP)' : CFG.restSpPercent + '%'); }
       if (!isNaN(until)) ASSIST.setRestUntil(until);
       if (!isNaN(sec)) ASSIST.setRestMaxSec(sec);
       if (!isNaN(delay) && delay >= 0) ASSIST.setRestDelay(delay);
+      saveConfigDebounced();
     });
     // ★ populate rest inputs ครั้งเดียวตอนเริ่ม (เดิมไม่เคย fill — ช่องว่างตลอด)
     const _rhp = root.querySelector('#__assist_resthp'), _run2 = root.querySelector('#__assist_restuntil');
     const _rms = root.querySelector('#__assist_restmaxsec'), _rdl = root.querySelector('#__assist_restdelay');
+    const _rsp = root.querySelector('#__assist_restsp');
     if (_rhp) _rhp.value = CFG.restHpPercent;
+    if (_rsp) _rsp.value = CFG.restSpPercent != null ? CFG.restSpPercent : 0;
     if (_run2) _run2.value = CFG.restUntilPercent;
     if (_rms) _rms.value = CFG.restMaxSec;
     if (_rdl) _rdl.value = CFG.restDelayMs;
