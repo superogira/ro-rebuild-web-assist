@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.148.0
+// @version      4.149.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,16 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.147.1';
+  const VERSION = '4.149.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.149.0', d: '2026-08-19', items: [
+      '🖱️ Popup Inventory ลากย้ายอิสระได้ — จับที่แถบหัวเรื่องกดค้างลาก',
+      '   กันลากหลุดจอ (เหลือให้เห็นอย่างน้อย 80×40 px) · ลากแล้วคลิกพื้นหลังปิดได้เหมือนเดิม',
+      '🎨 แก้สีไม่ sync ตอนคลิกของซ้ำหลายชิ้นใน Equip (เช่น แหวน 2 วง)',
+      '   action ผูกกับ itemId → ตอนนี้ทุกชิ้นของ item เดียวกันเปลี่ยนสี/label พร้อมกันทันที',
+      '🔧 แก้ const VERSION ค้าง 4.147.1 (ลืมอัปเดตตอนปล่อย 4.148.0)',
+    ]},
     { v: '4.148.0', d: '2026-08-19', items: [
       '⚔️ Equip inventory sync real-time — ถอดโครงจาก capture 4 ไฟล์ (สวมใส่/ถอด/ถอดคาฟรา)',
       '   0x32 sub=5 (ถอดคาฟรา/เก็บ equipment จากพื้น) → เพิ่มเข้า equipmentList ทันที',
@@ -7727,7 +7734,7 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
     overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:999999;display:flex;align-items:center;justify-content:flex-end;padding-right:10px';
     overlay.innerHTML = `
       <div style="background:#1a1a2e;color:#e8e8e8;border-radius:12px;padding:14px;width:660px;max-width:92vw;max-height:82vh;display:flex;flex-direction:column;font-family:sans-serif;box-shadow:0 8px 32px rgba(0,0,0,.5)">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div id="__assist_inv_hdr" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;cursor:move;user-select:none;touch-action:none">
           <span style="font-size:15px;font-weight:700;color:#ffb74d">🎒 Inventory <span id="__assist_inv_count" style="font-size:11px;color:#888"></span></span>
           <span>
             <button id="__assist_inv_close" style="background:none;border:none;color:#888;font-size:18px;cursor:pointer">✕</button>
@@ -7801,6 +7808,7 @@ return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" d
     grid.addEventListener('mouseleave', () => { if (tipEl) tipEl.style.display = 'none'; });
 
     // ★★ คลิกช่อง = วน toggle เก็บ(เทา)→ขาย(ส้ม)→ฝาก(เขียว) — สีพื้นหลังทันที (เหมือนสถิติ)
+    //   ★★ action ผูกกับ itemId → ของซ้ำหลายชิ้น (เช่น แหวน 2 วง) ต้องเปลี่ยนสี+label ทุกช่องพร้อมกัน
     grid.addEventListener('click', (e) => {
       const slot = e.target.closest('.invslot');
       if (!slot) return;
@@ -7810,19 +7818,20 @@ return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" d
       const newAction = cycleItemAction(id);
       const bg = newAction === 'sell' ? 'rgba(230,126,34,.35)' : (newAction === 'deposit' ? 'rgba(39,174,96,.35)' : '#23262e');
       const bd = newAction === 'sell' ? '#e67e22' : (newAction === 'deposit' ? '#27ae60' : '#3a3f4b');
-      slot.style.background = bg; slot.style.borderColor = bd;
-      // ★ label มุมซ้ายบน — อัปเดต/สร้าง/ลบ ตาม action ใหม่
-      let label = slot.querySelector('.__inv_action');
-      if (newAction === 'keep') { if (label) label.remove(); }
-      else {
+      grid.querySelectorAll('.invslot').forEach(s => {
+        if (parseInt(s.dataset.itemid, 10) !== id) return;
+        s.style.background = bg; s.style.borderColor = bd;
+        // ★ label มุมซ้ายบน — อัปเดต/สร้าง/ลบ ตาม action ใหม่
+        let label = s.querySelector('.__inv_action');
+        if (newAction === 'keep') { if (label) label.remove(); return; }
         if (!label) {
           label = document.createElement('span');
           label.className = '__inv_action';
           label.style.cssText = 'position:absolute;top:0;left:0;font-size:8px;background:#000;color:#fff;padding:0 3px;border-radius:3px 0 3px 0;font-weight:bold';
-          slot.appendChild(label);
+          s.appendChild(label);
         }
         label.textContent = newAction === 'sell' ? 'ขาย' : 'ฝาก';
-      }
+      });
       if (tipEl) tipEl.style.display = 'none';
     });
 
@@ -7835,6 +7844,37 @@ return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" d
       };
     });
     render('usable');   // เริ่มที่ Item
+
+    // ★★ ลากหน้าต่างย้ายอิสระ — จับที่แถบหัวเรื่อง (กดค้างลาก) ปุ่ม ✕ ไม่นับ
+    const win = overlay.firstElementChild;
+    const hdr = overlay.querySelector('#__assist_inv_hdr');
+    let dragSt = null;
+    hdr.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('#__assist_inv_close')) return;
+      // ★ ตรึงตำแหน่งปัจจุบันก่อนลากครั้งแรก (ถอดจาก flex ชิดขวาของ overlay)
+      if (win.style.position !== 'fixed') {
+        const r0 = win.getBoundingClientRect();
+        overlay.style.display = 'block';
+        overlay.style.paddingRight = '0';
+        win.style.position = 'fixed';
+        win.style.left = r0.left + 'px';
+        win.style.top = r0.top + 'px';
+        win.style.margin = '0';
+      }
+      const r = win.getBoundingClientRect();
+      dragSt = { dx: e.clientX - r.left, dy: e.clientY - r.top };
+      try { hdr.setPointerCapture(e.pointerId); } catch (_) {}
+      e.preventDefault();
+    });
+    hdr.addEventListener('pointermove', (e) => {
+      if (!dragSt) return;
+      // กันลากหลุดจอ — เหลือให้เห็นอย่างน้อย 80×40 px
+      const nx = Math.max(-win.offsetWidth + 80, Math.min(e.clientX - dragSt.dx, innerWidth - 80));
+      const ny = Math.max(0, Math.min(e.clientY - dragSt.dy, innerHeight - 40));
+      win.style.left = nx + 'px'; win.style.top = ny + 'px';
+    });
+    hdr.addEventListener('pointerup', () => { dragSt = null; });
+    hdr.addEventListener('pointercancel', () => { dragSt = null; });
 
     // ★★ live refresh — ข้อมูล inventory/equipment เปลี่ยน (เก็บของ/ฝาก/ถอดคาฟรา/สวมใส่ ฯลฯ)
     //   → render ใหม่เองภายใน 1s (คง scroll ไว้) — เปิด popup ทิ้งไว้ดู real-time ได้
