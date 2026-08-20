@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.163.0
+// @version      4.164.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,16 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.163.0';
+  const VERSION = '4.164.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.164.0', d: '2026-08-21', items: [
+      '❤️ เงื่อนไขสกิลใหม่: "ใช้เมื่อ HP < %" — เช่น Heal ตัวเองเมื่อ HP ต่ำกว่า 50%',
+      '   0 หรือว่าง = ไม่สน HP (ใช้ตามเงื่อนไขเดิม) · HP ไม่รู้ค่า (?) = ไม่ใช้ (กันยิงพร่ำเพรื่อ)',
+      '   ตั้งได้ทั้งตอนเพิ่มสกิลใหม่และแก้ไข (✎) · รายการแสดง HP<50% ต่อท้าย',
+      '🔓 ปลด gate "ต้องมี target" ของ auto-skill — สกิล self-cast (Heal/บัพตัวเอง)',
+      '   ใช้ได้แม้ยืนเฉย ๆ ไม่มีมอน (สำคัญกับ Guard mode / บอทบัพในอนาคต)',
+    ]},
     { v: '4.163.0', d: '2026-08-21', items: [
       '♻️ รายการแมปฟาร์มหมุนวนเมื่อตาย (Sub-tab Farm) — เพิ่มได้หลายแมปพร้อมพิกัด',
       '   ตายแต่ละครั้ง → หมุนไปแมปถัดไปในรายการ (วนกลับแมปแรก) + toggle เปิด-ปิด',
@@ -4839,15 +4846,20 @@
 
     // === 2.8 Auto-Skill (ใช้สกิลตามเงื่อนไข — ก่อน attack) ===
     //   mirror bot.js _maybeSkill:3440-3538 — ทีละสกิลต่อ tick
-    //   mode: targeted (Bash/Charge), AoE (Magnum), self-cast (Quicken)
-    if (CFG.skillEnabled && CFG.skills && CFG.skills.length && target) {
+    //   mode: targeted (Bash/Charge), AoE (Magnum), self-cast (Quicken/Heal ตัวเอง)
+    //   ★★ ไม่บังคับต้องมี target อีกแล้ว — สกิล self-cast (เช่น Heal เมื่อ HP ต่ำ) ใช้ได้แม้ยืนเฉย ๆ
+    if (CFG.skillEnabled && CFG.skills && CFG.skills.length) {
       const mobCount = getMobAttackerCount();
       const curSP = sp.cur;
       const curSPmax = sp.max;
+      const curHpPct = hpPct();
       const disabled = Array.isArray(CFG.disabledSkillIds) ? CFG.disabledSkillIds : [];
       for (const skill of CFG.skills) {
         if (!skill || skill.skillId == null) continue;
         if (disabled.includes(skill.skillId)) continue;
+        // ★ สกิลที่ต้องมีเป้า (targeted/ground ไม่ใช่ self) — ไม่มี target ข้าม
+        const needsTarget = (skill.targeted || skill.ground) && !skill.selfCast;
+        if (needsTarget && !target) continue;
         const lastUse = lastSkillUse.get(skill.skillId) || 0;
         // ★ timer mode (intervalMin > 0) — self-cast buff
         const intervalMin = Number(skill.intervalMin) || 0;
@@ -4860,6 +4872,10 @@
         // ★ SP gate
         const spMin = skill.spMin ?? 0;
         if (spMin > 0 && curSP != null && curSP < spMin) continue;
+        // ★★ HP% gate — ใช้เฉพาะเมื่อ HP% ต่ำกว่าเกณฑ์ (เช่น Heal ตัวเองเมื่อ HP < 50%)
+        //   0 หรือว่าง = ไม่สน HP · HP ไม่รู้ค่า (?) = ไม่ใช้ (กันยิงพร่ำเพรื่อ)
+        const hpBelow = Number(skill.hpBelowPct) || 0;
+        if (hpBelow > 0 && (curHpPct == null || curHpPct >= hpBelow)) continue;
         // ★ mob count gate (AoE skill)
         const mobMin = skill.mobCountMin ?? 0;
         if (mobCount < mobMin) continue;
@@ -6519,11 +6535,12 @@
         const spStr = s.spMin ? ` SP≥${s.spMin}` : '';
         const cdStr = s.intervalMin > 0 ? ` ทุก${s.intervalMin}นาที` : (s.cooldownMs ? ` cd${(s.cooldownMs/1000).toFixed(0)}s` : '');
         const distStr = s.maxDistance ? ` ≤${s.maxDistance}ช่อง` : '';
+        const hpStr = s.hpBelowPct > 0 ? ` HP<${s.hpBelowPct}%` : '';
         let row = `<div style="padding:5px 6px;border-bottom:1px solid rgba(255,255,255,.04)">
           <div style="display:flex;align-items:center;gap:8px">
             <span style="flex:1;font-size:11px;color:#e8e8e8">${s.name || 'skill_'+s.skillId} <span style="color:#5f6368">(#${s.skillId} Lv${s.level})</span></span>
             <span style="font-size:10px;color:${modeColor};background:${modeColor}22;padding:1px 6px;border-radius:3px">${mode}</span>
-            <span style="font-size:10px;color:#9aa0a6">${spStr}${cdStr}${distStr}</span>
+            <span style="font-size:10px;color:#9aa0a6">${spStr}${hpStr}${cdStr}${distStr}</span>
             <button data-editskill="${i}" style="background:#2a3441;border:1px solid #3a3f4b;border-radius:4px;color:#8ab4f8;cursor:pointer;font-size:11px;padding:3px 8px">✎</button>
             <button class="rmbtn" data-rmskill="${i}" style="background:#4a2020;border:1px solid #6a3030;border-radius:4px;color:#e8e8e8;cursor:pointer;font-size:11px;padding:3px 8px">✕</button>
           </div>`;
@@ -6556,6 +6573,7 @@
             <div style="display:flex;gap:6px;margin-bottom:6px">
               ${fld('ระยะเวลา (นาที) — self', `<input data-edit="intervalMin" type="number" step="0.5" value="${s.intervalMin||0}" style="flex:1;background:#15171c;border:1px solid #3a3f4b;border-radius:4px;color:#e8e8e8;padding:4px 6px;font-size:10px;font-family:inherit">`, 'สำหรับ self-cast: ร่ายใหม่ทุก N นาที (0=ใช้ cooldownMs แทน)')}
               ${fld('ระยะต่ำสุด (ช่อง)', `<input data-edit="minDistance" type="number" value="${s.minDistance||0}" style="flex:1;background:#15171c;border:1px solid #3a3f4b;border-radius:4px;color:#e8e8e8;padding:4px 6px;font-size:10px;font-family:inherit">`, 'ต้องอยู่ไกลอย่างน้อย N ช่อง (เช่น Charge Attack)')}
+              ${fld('ใช้เมื่อ HP < %', inp('hpBelowPct', s.hpBelowPct||0, '60px'), 'ใช้สกิลเฉพาะเมื่อ HP% ต่ำกว่าค่านี้ (เช่น Heal ตัวเอง) — 0 หรือว่าง = ไม่สน HP')}
             </div>
             <div style="display:flex;gap:4px">
               <button data-saveedit="${i}" style="flex:1;background:#1b5e20;border:1px solid #2e7d32;border-radius:4px;color:#a5d6a7;cursor:pointer;font-size:10px;padding:5px;font-family:inherit">✓ บันทึก</button>
@@ -6610,6 +6628,7 @@
         <div style="display:flex;gap:4px;margin-bottom:6px">
           <input id="__assist_skill_interval" type="number" placeholder="intervalMin (self)" value="0" step="0.5" style="flex:1;background:#15171c;border:1px solid #3a3f4b;border-radius:5px;color:#e8e8e8;padding:5px 7px;font-size:11px;font-family:inherit">
           <input id="__assist_skill_mindist" type="number" placeholder="minDist" value="0" style="flex:1;background:#15171c;border:1px solid #3a3f4b;border-radius:5px;color:#e8e8e8;padding:5px 7px;font-size:11px;font-family:inherit">
+          <input id="__assist_skill_hpbelow" type="number" placeholder="HP<%" value="0" min="0" max="100" title="ใช้เมื่อ HP% ต่ำกว่าค่านี้ (0=ไม่สน HP)" style="width:70px;background:#15171c;border:1px solid #3a3f4b;border-radius:5px;color:#e8e8e8;padding:5px 7px;font-size:11px;font-family:inherit">
         </div>
         <button id="__assist_skill_addbtn" style="width:100%;background:#1b5e20;border:1px solid #2e7d32;border-radius:5px;color:#a5d6a7;cursor:pointer;font-size:11px;padding:6px;font-family:inherit">+ เพิ่ม skill</button>
       </div>`;
@@ -6668,6 +6687,7 @@
           s.mobCountMin = parseInt(getVal('mobCountMin'), 10) || 0;
           s.intervalMin = parseFloat(getVal('intervalMin')) || 0;
           s.minDistance = parseInt(getVal('minDistance'), 10) || 0;
+          s.hpBelowPct = parseInt(getVal('hpBelowPct'), 10) || 0;
           saveConfigDebounced();
           editingSkillIdx = -1;
           log('✎ แก้ไข skill', s.name);
@@ -6712,6 +6732,7 @@
           const mobCountMin = parseInt(bodyEl.querySelector('#__assist_skill_mobmin').value, 10) || 0;
           const intervalMin = parseFloat(bodyEl.querySelector('#__assist_skill_interval').value) || 0;
           const minDistance = parseInt(bodyEl.querySelector('#__assist_skill_mindist').value, 10) || 0;
+          const hpBelowPct = parseInt(bodyEl.querySelector('#__assist_skill_hpbelow').value, 10) || 0;
           if (isNaN(skillId)) { return; }
           ASSIST.addSkill({
             name, skillId, level,
@@ -6719,6 +6740,7 @@
             ground: mode === 'ground',
             selfCast: mode === 'self',
             intervalMin, mobCountMin, maxUsesPerTarget, maxDistance, minDistance, spMin, cooldownMs,
+            hpBelowPct: Math.max(0, Math.min(100, hpBelowPct)),
           });
           saveConfigDebounced();
           refresh();
