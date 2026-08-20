@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.166.0
+// @version      4.166.1
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,19 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.166.0';
+  const VERSION = '4.166.1';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.166.1', d: '2026-08-21', items: [
+      '🐛 แก้บั๊กแก้ค่า buff (รายชื่อ/ชื่อ/delay) แล้วค่าเดิม — save handler เดิมบันทึก',
+      '   เฉพาะเมื่อ mode=buff ถ้า mode select ค้างค่าเดิม ค่าที่แก้หลุดหมด + ลบชื่อไม่ถูกบันทึก',
+      '   → บันทึก buff fields เสมอ + log ยืนยันค่าที่บันทึกทุกครั้ง',
+      '🤝 เพิ่ม toggle "บัพให้คนอื่น" (Sub-tab Skill) — default ปิด!',
+      '   กันบัพมั่วใส่คนแปลกหน้าตอนเดินผ่านฝูงคน (ตามที่ผู้ใช้ทักถูก)',
+      '   ต้องเปิด Skill: ON + toggle นี้ ถึงเริ่มบัพ',
+      '🔍 diagnostic ทุก 5s ใน Debug: เห็นผู้เล่นกี่คน · ผ่านชื่อ · ในระยะ · พร้อมบัพ —',
+      '   ไล่ได้ทันทีว่าทำไมไม่บัพ',
+    ]},
     { v: '4.166.0', d: '2026-08-21', items: [
       '🤝 ใหม่! โหมดสกิล "buff" — บอทบัพให้ผู้เล่นอื่นอัตโนมัติ',
       '   ตั้งต่อสกิล: ใช้กับ "ทุกคนในระยะ" หรือ "เฉพาะรายชื่อ" (เพิ่มได้หลายชื่อ คั่นจุลภาค)',
@@ -825,7 +835,7 @@
   const PERSIST_KEYS = [
     'healEnabled', 'healAtPercent', 'healItems', 'healMode', 'healDelayMs', 'healAtMax',
     'buffEnabled', 'buffItems', 'buffRebuffDelayMs', 'autoClearConsoleMin', 'monitorServerEnabled', 'monitorServerUrl', 'monitorSendIntervalMs',
-    'skillEnabled', 'skills', 'disabledSkillIds',
+    'skillEnabled', 'skills', 'disabledSkillIds', 'buffOthersEnabled',
     'lootEnabled', 'lootDelayAfterDropMs', 'lootUseKillPos', 'pickRadiusKill', 'lootRespectOthers', 'filter', 'sendThrottleMs', 'maxAttempts',
     'warpLootEnabled',
     'combatEnabled', 'targetWhitelist', 'targetBlacklist', 'fightBackBlacklisted', 'guardEnabled', 'guardMap', 'guardX', 'guardY', 'warpDanceEnabled', 'warpDanceMode', 'warpDanceDistance', 'warpDanceThrottleMs', 'autoLoginEnabled', 'autoLoginUser', 'autoLoginPass', 'autoLoginSlot', 'autoRefreshEnabled', 'autoRefreshStallSec', 'attackRange', 'rangedAttackRange',
@@ -1111,6 +1121,7 @@
     skillEnabled: false,          // ★ default OFF
     skills: [],                   // รายการ skill config
     disabledSkillIds: [],         // skillId ที่ toggle ปิดชั่วคราว
+    buffOthersEnabled: false,     // ★★ บอทบัพให้ผู้เล่นอื่น — default OFF! ต้องเปิดเอง (กันบัพมั่วใส่คนแปลกหน้าตอนเดินผ่าน)
 
     // ---------- MISC ----------
     autoClearConsoleMin: 10,       // ★ 0=off, >0=clear browser console ทุก N นาที (กัน log เยอะค้างหน่วย)
@@ -1610,15 +1621,19 @@
   //  ★ packet ยืนยันจาก capture จริง: Heal Lv10 กับ superogira0 = [1d][01][playerId:4][41][0a]
   // ============================================================
   const buffOthersLoop = setInterval(() => {
+    if (!CFG.buffOthersEnabled) return;   // ★★ toggle เฉพาะ — default OFF ต้องเปิดเอง (กันบัพมั่ว)
     if (!CFG.skillEnabled || !CFG.skills || !CFG.skills.length) return;
     if (!activeWS || activeWS.readyState !== 1) return;
     if (isDead) return;
     if (playerId == null || player.x == null) return;
     const now = nowMs();
     const disabled = Array.isArray(CFG.disabledSkillIds) ? CFG.disabledSkillIds : [];
+    // ★ diagnostic — ทำไมไม่บัพ (เห็นผู้เล่นกี่คน / ตกมากี่เงื่อนไข) ทุก 5s ไป Debug log
+    let _dbHasSkill = false, _dbSeen = 0, _dbNameOk = 0, _dbRange = 0, _dbReady = 0;
     for (const skill of CFG.skills) {
       if (!skill || !skill.buffMode || skill.skillId == null) continue;
       if (disabled.includes(skill.skillId)) continue;
+      _dbHasSkill = true;
       // cooldown ระหว่าง cast (สั้น ๆ กันยิงรัว)
       const lastUse = lastSkillUse.get(skill.skillId) || 0;
       const cooldown = skill.cooldownMs ?? 2000;
@@ -1636,16 +1651,24 @@
         if (e.id === playerId) continue;
         if (isStaleId(e.id, now)) continue;
         if (!e.name || !e.name.trim()) continue;          // ต้องมีชื่อจาก SPAWN (ไม่ใช่ dot ผี)
-        if (e._src === 'beacon') continue;                // beacon = ผู้เล่นแน่ แต่ไม่มีชื่อ → ข้ามไว้รอ SPAWN
+        _dbSeen++;
         if (!wantAll && !names.some(n => e.name.toLowerCase().includes(n))) continue;
+        _dbNameOk++;
         const d = Math.hypot(e.x - player.x, e.y - player.y);
         if (d > radius) continue;
+        _dbRange++;
         // delay ซ้ำต่อคน: ยังไม่ครบ repeatSec → ข้าม
         const perSkill = buffTargetUse.get(skill.skillId);
         const lastFor = perSkill ? (perSkill.get(e.id) || 0) : 0;
         const repeatMs = (Number(skill.repeatSec) > 0 ? Number(skill.repeatSec) : 300) * 1000;
         if (lastFor > 0 && now - lastFor < repeatMs) continue;
+        _dbReady++;
         if (d < bestD) { bestD = d; best = e; }
+      }
+      if (now - (skill._lastBuffDbgAt || 0) > 5000) {
+        skill._lastBuffDbgAt = now;
+        dbg('🤝 buff scan: ' + (skill.name || skill.skillId) + ' — เห็นผู้เล่น ' + _dbSeen + ' · ผ่านชื่อ ' + _dbNameOk + ' · ในระยะ ' + _dbRange + ' · พร้อมบัพ ' + _dbReady + (best ? ' → ' + best.name : ' (ยังไม่มีเป้า)'));
+        _dbSeen = _dbNameOk = _dbRange = _dbReady = 0;
       }
       if (!best) continue;
       // ★ ส่งสกิลให้ผู้เล่น — format [1d][01][playerId:4][skillId:1][level:1]
@@ -6785,14 +6808,16 @@
           s.selfCast = mode === 'self';
           s.ally = mode === 'ally';
           s.buffMode = mode === 'buff';
-          // ★ buff settings (ใช้เมื่อโหมด buff)
-          if (s.buffMode) {
-            const bAll = getVal('buffAll');
-            const bNames = getVal('buffNames').split(',').map(x => x.trim()).filter(Boolean);
-            s.buffAll = bAll !== 'list';   // 'all' = true
-            s.buffNames = bNames;
-            s.repeatSec = parseInt(getVal('repeatSec'), 10) || 300;
-          }
+          // ★★ buff settings — บันทึกเสมอไม่ gate ด้วย mode (เดิม gate ด้วย buffMode → ถ้า mode select
+          //   ยังค้างค่าเดิมตอนกดบันทึก ค่าที่แก้จะหลุดทั้งหมด — บั๊กค่าไม่อัปเดตที่ผู้ใช้พบ)
+          //   ★ เช็ค element ตรง ๆ (getVal แยก "ไม่มีช่อง" กับ "ช่องว่าง" ไม่ได้ — ลบชื่อออกต้องบันทึกด้วย)
+          const bAllEl = bodyEl.querySelector('[data-edit="buffAll"]');
+          if (bAllEl) s.buffAll = bAllEl.value !== 'list';
+          const bNamesEl = bodyEl.querySelector('[data-edit="buffNames"]');
+          if (bNamesEl) s.buffNames = bNamesEl.value.split(',').map(x => x.trim()).filter(Boolean);
+          const rSecEl = bodyEl.querySelector('[data-edit="repeatSec"]');
+          if (rSecEl) { const rs2 = parseInt(rSecEl.value, 10); if (!isNaN(rs2) && rs2 > 0) s.repeatSec = rs2; }
+          log('✎ บันทึก skill', s.name, s.buffMode ? ('· buff: ' + (s.buffAll === false ? 'เฉพาะ ' + (s.buffNames || []).join(',') : 'ทุกคน') + ' ≤' + (s.maxDistance || 9) + 'ช่อง ทุก' + (s.repeatSec || 300) + 'วิ') : '');
           s.spMin = parseInt(getVal('spMin'), 10) || 0;
           const cdSec = parseFloat(getVal('cooldownSec'));
           s.cooldownMs = isNaN(cdSec) ? (s.cooldownMs || 2000) : Math.round(cdSec * 1000);
@@ -7180,8 +7205,9 @@
               <button id="__assist_skillbtn" class="off">Skill: ?</button>
               <button id="__assist_skillnow" class="primary">ใช้ skill เดี๋ยวนี้</button>
               <button id="__assist_manageskill">📋 จัดการ skill</button>
+              <button id="__assist_t_buffothers" class="off">🤝 บัพให้คนอื่น: ?</button>
             </div>
-            <div style="font-size:10px;color:#9aa0a6;margin-top:4px;">★ เพิ่ม/แก้/ลบ skill list ผ่าน popup — รองรับ targeted (Bash), AoE (Magnum), self-cast (Quicken)</div>
+            <div style="font-size:10px;color:#9aa0a6;margin-top:4px;">★ เพิ่ม/แก้/ลบ skill list ผ่าน popup — รองรับ targeted (Bash), AoE (Magnum), self-cast (Quicken), ally (Heal ตัวเอง), buff (บัพให้คนอื่น)<br>★ บัพให้คนอื่น: ต้องเปิด Skill: ON + toggle นี้ — ใช้เฉพาะรายชื่อเพื่อกันบัพมั่วใส่คนแปลกหน้า</div>
             <div id="__assist_skillcountdown" style="font-size:10px;color:#9aa0a6;margin-top:4px;line-height:1.6">(ยังไม่ตั้ง skill)</div>
           </div>
           <!-- ✨ Buff -->
@@ -7620,6 +7646,13 @@
     root.querySelector('#__assist_skillbtn').addEventListener('click', () => CFG.skillEnabled ? ASSIST.skillOff() : ASSIST.skillOn());
     root.querySelector('#__assist_skillnow').addEventListener('click', () => ASSIST.skillNow());
     root.querySelector('#__assist_manageskill').addEventListener('click', () => openSkillPopup());
+    // ★ toggle บอทบัพให้คนอื่น (default OFF — กันบัพมั่วใส่คนแปลกหน้าตอนเดินผ่าน)
+    root.querySelector('#__assist_t_buffothers').addEventListener('click', () => {
+      CFG.buffOthersEnabled = !CFG.buffOthersEnabled;
+      saveConfigDebounced();
+      const bSkills = (CFG.skills || []).filter(s => s && s.buffMode);
+      log('🤝 บัพให้คนอื่น:', CFG.buffOthersEnabled ? 'เปิด (' + bSkills.length + ' สกิล buff · ' + (bSkills.map(s => s.name).join(', ') || 'ยังไม่มี') + ')' : 'ปิด');
+    });
     root.querySelector('#__assist_lootmode').addEventListener('change', e => ASSIST.setLootMode(e.target.value));
     root.querySelector('#__assist_manageonly').addEventListener('click', () => openItemListPopup('only'));
     root.querySelector('#__assist_manageexcept').addEventListener('click', () => openItemListPopup('except'));
@@ -9463,6 +9496,8 @@ return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" d
     // skill config sync + countdown display
     const skillBtn = root.querySelector('#__assist_skillbtn');
     if (skillBtn) { skillBtn.textContent = 'Skill: ' + (CFG.skillEnabled ? 'ON' : 'OFF'); skillBtn.className = CFG.skillEnabled ? 'on' : 'off'; }
+    const buffOthBtn = root.querySelector('#__assist_t_buffothers');
+    if (buffOthBtn) { buffOthBtn.textContent = '🤝 บัพให้คนอื่น: ' + (CFG.buffOthersEnabled ? 'ON' : 'OFF'); buffOthBtn.className = CFG.buffOthersEnabled ? 'on' : 'off'; }
     const skCdEl = root.querySelector('#__assist_skillcountdown');
     if (skCdEl) {
       if (!CFG.skills || !CFG.skills.length) {
