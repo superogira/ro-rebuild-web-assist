@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.170.2
+// @version      4.171.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,19 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.170.2';
+  const VERSION = '4.171.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.171.0', d: '2026-08-21', items: [
+      '🔁 ใหม่! ไปรับบัพจากบอทอีกตัว (คู่บอท: ฟาร์ม + บัพ) — Sub-tab Buff',
+      '   ตั้ง: แมป+พิกัดจุดรับ / ทุกกี่วินาทีไปรับ / รอรับนานสุดกี่วินาที',
+      '   ครบกำหนด (เฉพาะตอนว่าง: ไม่สู้ ไม่นั่งพัก ของเก็บหมด) → จดจุดฟาร์ม →',
+      '   ไปหาบอทบัพ: แมปเดิม+ใกล้ (≤60 ช่อง) = เดิน · ไกล/คนละแมป = วาร์ป',
+      '   ยืนรับ Heal/Buff ตามเวลารอ → วาร์ปกลับฟาร์มแมป+พิกัดเดิม → นับรอบใหม่',
+      '🛡️ กันชนครบ: farm-back ทั้ง 0x12 และ combatLoop ไม่ดึงกลับตอนอยู่แมปรับบัพ ·',
+      '   ระหว่างเดิน/รอ/กลับ ไม่หามอนใหม่ ไม่ wander (โดนตีตีกลับได้ตามปกติ)',
+      '   · ห้ามชนกับ sell/storage ตาม gates เดิม · ผ่าน teleport serializer กันยิงทับ',
+    ]},
     { v: '4.170.2', d: '2026-08-21', items: [
       '🐛 แก้ "Heal ตัวเองรัว ๆ ทั้งที่ HP เต็ม" (buff + รวมตัวเอง + HPเป้า<90%) —',
       '   บล็อก self ใน v4.170.1 ไม่สน targetHpBelowPct (ยิงตามรอบ delay อย่างเดียว)',
@@ -886,7 +896,7 @@
   // keys ที่บันทึก/โหลด (boolean/number/array/string — ไม่เก็บ function หรือ object ซ้อน)
   const PERSIST_KEYS = [
     'healEnabled', 'healAtPercent', 'healItems', 'healMode', 'healDelayMs', 'healAtMax',
-    'buffEnabled', 'buffItems', 'buffRebuffDelayMs', 'autoClearConsoleMin', 'monitorServerEnabled', 'monitorServerUrl', 'monitorSendIntervalMs',
+    'buffEnabled', 'buffItems', 'buffRebuffDelayMs', 'buffVisitEnabled', 'buffVisitMap', 'buffVisitX', 'buffVisitY', 'buffVisitIntervalSec', 'buffVisitWaitSec', 'autoClearConsoleMin', 'monitorServerEnabled', 'monitorServerUrl', 'monitorSendIntervalMs',
     'skillEnabled', 'skills', 'disabledSkillIds', 'buffOthersEnabled',
     'lootEnabled', 'lootDelayAfterDropMs', 'lootUseKillPos', 'pickRadiusKill', 'lootRespectOthers', 'filter', 'sendThrottleMs', 'maxAttempts',
     'warpLootEnabled',
@@ -1163,6 +1173,13 @@
     // ★ รายการ buff: [{itemId, intervalMin}] — intervalMin = ทุกกี่นาทีจะใช้ซ้ำ
     //   ตัวอย่าง: [{itemId:656, intervalMin:30}] = Awakening Potion ทุก 30 นาที
     buffItems: [{itemId:645, intervalMin:30}],                // ★ default ว่าง = ไม่ใช้ buff ใด ๆ
+    // ★★ ไปรับบัพจากบอทอีกตัว (คู่บอท: ตัวฟาร์มย้อนกลับหาตัวบัพเป็นระยะ)
+    buffVisitEnabled: false,
+    buffVisitMap: '',             // แผนที่ที่บอทบัพประจำ (จุด Guard)
+    buffVisitX: -999,
+    buffVisitY: -999,
+    buffVisitIntervalSec: 600,    // ทุกกี่วินาทีไปรับ (default 10 นาที)
+    buffVisitWaitSec: 20,        // รอบอทบัพนานสุดกี่วินาที (ยืนรอรับ Heal/Buff)
     buffCheckMs: 20000,            // ความถี่ในการเช็ค (1 วิ)
     buffRebuffDelayMs: 5000,      // รออย่างน้อย N ms ก่อนใช้ buff ตัวเดิมซ้ำ (กัน spurious)
 
@@ -1798,6 +1815,95 @@
     }
   }, 1000);
 
+  // ============================================================
+  //  BUFF VISIT — บอทฟาร์มย้อนกลับไปรับบัพจากบอทบัพ (คู่บอท)
+  //  IDLE(ครบกำหนด) → GOING(เดินถ้าใกล้/วาร์ปถ้าไกลหรือคนละแมป) → WAITING(ยืนรับ) → RETURN(กลับจุดฟาร์มเดิม)
+  //  ★ จดจุดฟาร์มก่อนออก → รับเสร็จวาร์ปกลับแมป+พิกัดเดิม · gates: ไม่ชน sell/storage/rest/loot/เป้า
+  // ============================================================
+  let buffVisitState = 'IDLE';
+  let buffVisitLastAt = 0;
+  let buffVisitWaitUntil = 0;
+  let buffVisitReturnTo = null;
+  let buffVisitLastMoveAt = 0;
+  let buffVisitLastWarpAt = 0;
+  const buffVisitLoop = setInterval(() => {
+    if (!CFG.buffVisitEnabled) return;
+    if (!activeWS || activeWS.readyState !== 1) return;
+    if (isDead) return;
+    if (playerId == null || player.x == null || !currentMap) return;
+    if (sellState !== 'IDLE' || storageState !== 'IDLE') return;   // ห้ามชน routine
+    const now = nowMs();
+
+    if (buffVisitState === 'IDLE') {
+      if (!CFG.buffVisitMap) return;
+      if (buffVisitLastAt === 0) { buffVisitLastAt = now; return; }   // เริ่มจับเวลาตอนเปิด (ไม่ยิงทันที)
+      if (now - buffVisitLastAt < CFG.buffVisitIntervalSec * 1000) return;
+      // ★★ ไปเฉพาะตอนว่างจริง: ไม่นั่งพัก / ไม่มีเป้า / ไม่โดนรุม / ของเก็บหมด / ไม่เดินตาม remote
+      if (isResting || target || getMobAttackerCount() > 0) return;
+      if (queue.size > 0 || warpQueue.size > 0) return;
+      if (remoteWalkTarget) return;
+      // ★ จดจุดฟาร์มปัจจุบัน (กลับมาเดิมหลังรับบัพ)
+      buffVisitReturnTo = { map: currentMap, x: Math.round(player.x), y: Math.round(player.y) };
+      buffVisitState = 'GOING';
+      buffVisitLastWarpAt = 0;
+      const dV = Math.hypot(player.x - CFG.buffVisitX, player.y - CFG.buffVisitY);
+      log('🔁 ครบกำหนดรับบัพ →', currentMap === CFG.buffVisitMap ? 'เดิน' : 'วาร์ป', 'ไปหาบอทบัพ', CFG.buffVisitMap, '@(', CFG.buffVisitX + ',' + CFG.buffVisitY + ')', currentMap === CFG.buffVisitMap ? '(ห่าง ' + dV.toFixed(0) + ' ช่อง)' : '');
+      return;
+    }
+
+    if (buffVisitState === 'GOING') {
+      if (currentMap === CFG.buffVisitMap) {
+        const d = Math.hypot(player.x - CFG.buffVisitX, player.y - CFG.buffVisitY);
+        if (d <= 4) {   // ★ ถึงจุดรับบัพ (ยืนใกล้บอทบัพให้อยู่ในรัศมีบัพ)
+          buffVisitState = 'WAITING';
+          buffVisitWaitUntil = now + CFG.buffVisitWaitSec * 1000;
+          log('🔁 ถึงจุดรับบัพ — ยืนรอบอทบัพ', CFG.buffVisitWaitSec, 'วิ');
+          return;
+        }
+        if (d > 60) {   // แมปเดียวกันแต่ไกล → วาร์ปเข้าใกล้
+          if (now - buffVisitLastWarpAt > 5000) { buffVisitLastWarpAt = now; sendTeleport(CFG.buffVisitMap, CFG.buffVisitX, CFG.buffVisitY); }
+          return;
+        }
+        if (now - buffVisitLastMoveAt > 1200) { buffVisitLastMoveAt = now; sendMove(CFG.buffVisitX, CFG.buffVisitY); }   // ใกล้ → เดิน
+        return;
+      }
+      // ★ ผิดแมป (ยังไม่ถึง / วาร์ปล้ม) → วาร์ปไปแมปบัพ (ผ่าน teleport serializer)
+      if (now - buffVisitLastWarpAt > 5000) { buffVisitLastWarpAt = now; sendTeleport(CFG.buffVisitMap, CFG.buffVisitX, CFG.buffVisitY); }
+      return;
+    }
+
+    if (buffVisitState === 'WAITING') {
+      // ★ ยืนรอรับบัพ — จนครบเวลา → กลับ (บอทบัพ Heal/Buff ใส่เราเองระหว่างนี้)
+      if (now >= buffVisitWaitUntil) {
+        buffVisitState = 'RETURN';
+        buffVisitLastWarpAt = 0;
+        log('🔁 รับบัพครบเวลา → กลับฟาร์ม', buffVisitReturnTo ? (buffVisitReturnTo.map + ' @(' + buffVisitReturnTo.x + ',' + buffVisitReturnTo.y + ')') : '');
+      }
+      return;
+    }
+
+    if (buffVisitState === 'RETURN') {
+      if (!buffVisitReturnTo) { buffVisitState = 'IDLE'; buffVisitLastAt = now; return; }
+      if (currentMap === buffVisitReturnTo.map) {
+        const d = Math.hypot(player.x - buffVisitReturnTo.x, player.y - buffVisitReturnTo.y);
+        if (d <= 4) {
+          buffVisitState = 'IDLE';
+          buffVisitLastAt = now;   // เริ่มนับรอบใหม่
+          log('🔁 กลับจุดฟาร์มแล้ว — ทำงานต่อ (รอบหน้าอีก', CFG.buffVisitIntervalSec + 's)');
+          return;
+        }
+        if (d > 60) {
+          if (now - buffVisitLastWarpAt > 5000) { buffVisitLastWarpAt = now; sendTeleport(buffVisitReturnTo.map, buffVisitReturnTo.x, buffVisitReturnTo.y); }
+          return;
+        }
+        if (now - buffVisitLastMoveAt > 1200) { buffVisitLastMoveAt = now; sendMove(buffVisitReturnTo.x, buffVisitReturnTo.y); }
+        return;
+      }
+      if (now - buffVisitLastWarpAt > 5000) { buffVisitLastWarpAt = now; sendTeleport(buffVisitReturnTo.map, buffVisitReturnTo.x, buffVisitReturnTo.y); }
+      return;
+    }
+  }, 1000);
+
   const buffLoop = setInterval(() => {    if (!CFG.buffEnabled) return;
     if (!CFG.buffItems || !CFG.buffItems.length) return;
     if (isDead) return;
@@ -2356,9 +2462,12 @@
           //      จุดมอนเดิมด้วย HP 2% → ตายซ้ำใน 3 วิ) — รอ postRespawnRest พักจบก่อน
           //      แล้ว combatLoop farm-guard จะวาร์ปกลับเอง (throttle 5s + รอพักเรียบร้อย)
           //   3. กำลังขาย/ฝากอยู่ → ห้ามแทรก warp กลาง routine
+          //   4. ★ กำลังไปรับบัพจากบอทอีกตัว (buffVisit) และแมปนี้คือแมปจุดรับ → ห้ามดึงกลับ
+          //      (ไม่งั้นวาร์ปปิงปอง farm-guard vs buffVisit เหมือนเคส Guard)
           if (CFG.warpBackToFarm && CFG.farmMap && name !== CFG.farmMap
               && name !== CFG.sellNpcMap && name !== CFG.kafraMap
               && !(CFG.guardEnabled && CFG.guardMap)
+              && !(typeof buffVisitState !== 'undefined' && buffVisitState !== 'IDLE' && name === CFG.buffVisitMap)
               && !isDead
               && !(typeof postRespawnRest !== 'undefined' && postRespawnRest)
               && !(typeof sellState !== 'undefined' && sellState !== 'IDLE')
@@ -4843,7 +4952,8 @@
     }
     else if (CFG.farmMap && currentMap && currentMap !== CFG.farmMap
         && !(inSellRoutine && currentMap === CFG.sellNpcMap)
-        && !(inStorageRoutine && currentMap === CFG.kafraMap)) {
+        && !(inStorageRoutine && currentMap === CFG.kafraMap)
+        && !(typeof buffVisitState !== 'undefined' && buffVisitState !== 'IDLE' && currentMap === CFG.buffVisitMap)) {   // ★ ไปรับบัพ — อยู่แมปบัพอยู่
       const now2 = nowMs();
       if (now2 - (lastFarmWarpBackAt || 0) > 5000) {
         log('🌀 ยังอยู่แมปผิด (' + currentMap + ') → วาร์ปกลับอีกครั้ง');
@@ -5256,6 +5366,9 @@
         }
       }
       // ★★ GUARD MODE — ตีกลับเฉพาะมอนที่มาตีเรา (ไม่หามอนเอง)
+      // ★★ กำลังเดินไป/ยืนรับบัพ/กลับจากบอทบัพ (buffVisit) — ไม่หามอนใหม่ ไม่ wander
+      //   (ให้ buffVisitLoop เป็นเจ้าของการเดิน · ถ้าโดนมอนตีระหว่างทาง combat ตีกลับผ่าน defensive อยู่แล้ว)
+      if (typeof buffVisitState !== 'undefined' && buffVisitState !== 'IDLE') return;
       const t = CFG.guardEnabled ? acquireGuardTarget(now) : acquireTarget(now);
       if (t) { target = t; noMonsterSince = 0; return; }
       // ★★ GUARD: ไม่มีมอนตี → กลับจุดยืน + ห้าม wander/วาร์ปหามอน (นิ่งประจำการ)
@@ -6280,6 +6393,9 @@
     // ★★ GUARD MODE — ยืนประจำตำแหน่ง ตีกลับเฉพาะมอนที่มาตี (เตรียมบอทบัพ)
     toggleGuard(on) { CFG.guardEnabled = !!on; saveConfigDebounced(); if (CFG.guardEnabled) { target = null; guardWasReturning = false; log('🛡️ Guard: ON — ยืนประจำ @(', CFG.guardMap || '(แมปปัจจุบัน)', CFG.guardX + ',' + CFG.guardY + ') ตีกลับเฉพาะมอนที่มาตี'); } else log('🛡️ Guard: OFF'); },
     setGuardPos(map, x, y) { CFG.guardMap = map || ''; CFG.guardX = x; CFG.guardY = y; guardWasReturning = false; saveConfigDebounced(); log('🛡️ Guard จุดยืน =', CFG.guardMap || '(แมปปัจจุบัน)', '@(', x + ',' + y + ')'); },
+    // ★★ ไปรับบัพจากบอทอีกตัว (คู่บอท)
+    toggleBuffVisit(on) { CFG.buffVisitEnabled = !!on; saveConfigDebounced(); buffVisitState = 'IDLE'; buffVisitLastAt = 0; buffVisitReturnTo = null; log('🔁 ไปรับบัพ:', on ? 'ON' : 'OFF'); },
+    setBuffVisitPos(map, x, y, intervalSec, waitSec) { CFG.buffVisitMap = map || ''; CFG.buffVisitX = x; CFG.buffVisitY = y; if (intervalSec > 0) CFG.buffVisitIntervalSec = intervalSec; if (waitSec > 0) CFG.buffVisitWaitSec = waitSec; saveConfigDebounced(); log('🔁 จุดรับบัพ =', CFG.buffVisitMap, '@(', x + ',' + y + ') ทุก', CFG.buffVisitIntervalSec + 's รอ', CFG.buffVisitWaitSec + 's'); },
     toggleWarpToMonster(on) { CFG.warpToMonster = !!on; log('⚔️ warpToMonster =', CFG.warpToMonster); },
     // debug
     getEntities() {
@@ -6414,7 +6530,7 @@
     getImportantLogs() { return importantLogBuf.slice(); },
     clearImportantLogs() { importantLogBuf.length = 0; log('🧹 ล้าง log สำคัญ'); },
     stopAll() {
-      clearInterval(healLoop); clearInterval(lootLoop); clearInterval(warpLoop); clearInterval(combatLoop); clearInterval(sellLoop); clearInterval(storageLoop); clearInterval(buffLoop); clearInterval(buffOthersLoop); clearInterval(consoleClearLoop); clearInterval(remoteWalkLoop); clearInterval(teleportFlusher);
+      clearInterval(healLoop); clearInterval(lootLoop); clearInterval(warpLoop); clearInterval(combatLoop); clearInterval(sellLoop); clearInterval(storageLoop); clearInterval(buffLoop); clearInterval(buffOthersLoop); clearInterval(buffVisitLoop); clearInterval(consoleClearLoop); clearInterval(remoteWalkLoop); clearInterval(teleportFlusher);
       if (typeof uiLoop !== 'undefined') clearInterval(uiLoop);
       log('⏹ หยุดระบบทั้งหมดแล้ว');
     },
@@ -7372,6 +7488,13 @@
             <div class="field"><label>buff: itemId,ทุกกี่นาที (คั่นบรรทัด เช่น 656,30) — เพิ่มได้หลายตัว</label><textarea id="__assist_buffitems" rows="3" style="width:100%;background:#15171c;border:1px solid #3a3f4b;border-radius:5px;color:#e8e8e8;padding:5px 7px;font-size:11px;font-family:'Consolas',monospace;resize:vertical" placeholder="656,30&#10;645,30"></textarea></div>
             <div class="btns"><button id="__assist_applybuff">ใช้ค่า buff</button><button id="__assist_clearbufftimes">รีเซ็ต countdown</button></div>
             <div id="__assist_buffcountdown" style="font-size:10px;color:#9aa0a6;margin-top:4px;line-height:1.6">(ยังไม่ตั้ง buff)</div>
+            <h4 style="margin-top:14px;">🔁 ไปรับบัพจากบอทอีกตัว (คู่บอท)</h4>
+            <div class="btns"><button id="__assist_t_buffvisit" class="off">🔁 ไปรับบัพ: ?</button></div>
+            <div class="field"><label>แผนที่จุดรับบัพ (ที่บอทบัพประจำ — Guard)</label><input type="text" id="__assist_bvmap" placeholder="เช่น izlude"></div>
+            <div class="field"><label>พิกัด X</label><input type="number" id="__assist_bvx" placeholder="-999"><label style="margin-left:8px">Y</label><input type="number" id="__assist_bvy" placeholder="-999"><button id="__assist_usebvpos" style="margin-left:8px;font-size:10px">ใช้พิกัดตัวละคร</button></div>
+            <div class="field"><label>ไปรับทุกกี่วินาที</label><input type="number" id="__assist_bvsec" min="30" max="7200" placeholder="600"><label style="margin-left:8px">รอรับนานสุด (วิ)</label><input type="number" id="__assist_bvwait" min="3" max="300" placeholder="20"></div>
+            <div class="btns"><button id="__assist_applybuffvisit">💾 ใช้ค่ารับบัพ</button></div>
+            <div style="font-size:10px;color:#9aa0a6;margin-top:4px;">★ ครบกำหนด (ตอนว่าง: ไม่สู้/ไม่นั่งพัก/ของเก็บหมด) → ไปหาบอทบัพ (แมปเดิม+ใกล้=เดิน · ไกล/คนละแมป=วาร์ป)<br>★ ยืนรับ Heal/Buff ตามเวลารอ → วาร์ปกลับฟาร์มแมป+พิกัดเดิม · ระหว่างเดินไม่หามอนใหม่ (โดนตีตีกลับได้)</div>
           </div>
           <!-- 💉 Heal -->
           <div class="__assist_subpage" data-sub="heal">
@@ -7796,6 +7919,40 @@
       ASSIST.setBuffItems(items);
     });
     root.querySelector('#__assist_clearbufftimes').addEventListener('click', () => ASSIST.clearBuffTimes());
+    // ★★ ไปรับบัพจากบอทอีกตัว (buffVisit) — toggle + พิกัด + interval/wait
+    root.querySelector('#__assist_t_buffvisit').addEventListener('click', () => {
+      CFG.buffVisitEnabled = !CFG.buffVisitEnabled;
+      saveConfigDebounced();
+      buffVisitState = 'IDLE'; buffVisitLastAt = 0; buffVisitReturnTo = null;
+      log('🔁 ไปรับบัพ:', CFG.buffVisitEnabled ? ('เปิด — จุดรับ ' + (CFG.buffVisitMap || '(ยังไม่ตั้ง!)') + ' @(' + CFG.buffVisitX + ',' + CFG.buffVisitY + ') ทุก ' + CFG.buffVisitIntervalSec + 's รอ ' + CFG.buffVisitWaitSec + 's') : 'ปิด');
+    });
+    root.querySelector('#__assist_usebvpos').addEventListener('click', () => {
+      if (player.x == null) { log('⚠️ ยังไม่รู้พิกัดตัวละคร'); return; }
+      root.querySelector('#__assist_bvx').value = Math.round(player.x);
+      root.querySelector('#__assist_bvy').value = Math.round(player.y);
+      if (currentMap) root.querySelector('#__assist_bvmap').value = currentMap;
+      log('🔁 จดจุดรับบัพ:', currentMap + ' @(' + Math.round(player.x) + ',' + Math.round(player.y) + ') — กด "ใช้ค่ารับบัพ" เพื่อบันทึก');
+    });
+    root.querySelector('#__assist_applybuffvisit').addEventListener('click', () => {
+      const bm = root.querySelector('#__assist_bvmap').value.trim();
+      const bx = parseInt(root.querySelector('#__assist_bvx').value, 10);
+      const by = parseInt(root.querySelector('#__assist_bvy').value, 10);
+      const bs = parseInt(root.querySelector('#__assist_bvsec').value, 10);
+      const bw = parseInt(root.querySelector('#__assist_bvwait').value, 10);
+      if (bm) CFG.buffVisitMap = bm;
+      if (!isNaN(bx)) CFG.buffVisitX = bx;
+      if (!isNaN(by)) CFG.buffVisitY = by;
+      if (!isNaN(bs) && bs >= 30) CFG.buffVisitIntervalSec = bs;
+      if (!isNaN(bw) && bw >= 3) CFG.buffVisitWaitSec = bw;
+      saveConfigDebounced();
+      log('🔁 จุดรับบัพ =', CFG.buffVisitMap || '(แมปปัจจุบัน)', '@(', CFG.buffVisitX + ',' + CFG.buffVisitY + ') ทุก', CFG.buffVisitIntervalSec + 's รอ', CFG.buffVisitWaitSec + 's');
+    });
+    // ★ populate buffVisit inputs ครั้งเดียว
+    const _bvm = root.querySelector('#__assist_bvmap'); if (_bvm) _bvm.value = CFG.buffVisitMap || '';
+    const _bvx2 = root.querySelector('#__assist_bvx'); if (_bvx2) _bvx2.value = CFG.buffVisitX != null && CFG.buffVisitX > -999 ? CFG.buffVisitX : '';
+    const _bvy2 = root.querySelector('#__assist_bvy'); if (_bvy2) _bvy2.value = CFG.buffVisitY != null && CFG.buffVisitY > -999 ? CFG.buffVisitY : '';
+    const _bvs = root.querySelector('#__assist_bvsec'); if (_bvs) _bvs.value = CFG.buffVisitIntervalSec || 600;
+    const _bvw = root.querySelector('#__assist_bvwait'); if (_bvw) _bvw.value = CFG.buffVisitWaitSec || 20;
     // ---- skill wires ----
     root.querySelector('#__assist_skillbtn').addEventListener('click', () => CFG.skillEnabled ? ASSIST.skillOff() : ASSIST.skillOn());
     root.querySelector('#__assist_skillnow').addEventListener('click', () => ASSIST.skillNow());
@@ -9635,6 +9792,8 @@ return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" d
     // buff config sync + countdown display
     const buffBtn = root.querySelector('#__assist_buffbtn');
     if (buffBtn) { buffBtn.textContent = 'Buff: ' + (CFG.buffEnabled ? 'ON' : 'OFF'); buffBtn.className = CFG.buffEnabled ? 'on' : 'off'; }
+    const bvBtn = root.querySelector('#__assist_t_buffvisit');
+    if (bvBtn) { bvBtn.textContent = '🔁 ไปรับบัพ: ' + (CFG.buffVisitEnabled ? 'ON' : 'OFF'); bvBtn.className = CFG.buffVisitEnabled ? 'on' : 'off'; }
     const bi = root.querySelector('#__assist_buffitems');
     if (bi && !isEditing(bi)) bi.value = (CFG.buffItems || []).map(x => x.itemId + ',' + x.intervalMin).join('\n');
     const cdEl = root.querySelector('#__assist_buffcountdown');
