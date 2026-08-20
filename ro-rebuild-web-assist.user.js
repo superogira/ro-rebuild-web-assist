@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.156.1
+// @version      4.157.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,17 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.156.1';
+  const VERSION = '4.157.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.157.0', d: '2026-08-20', items: [
+      '🔓 ตัวชี้ "สวมอยู่" ตัวจริง! — หางท้ายก้อน equipment มีรายการ inst ของชิ้นที่สวมอยู่',
+      '   (0 = ช่องว่าง เช่น ช่องโล่ตอนถือดาบ 2 มือ) — ยืนยัน 4/4 captures:',
+      '   testmage สวม 6 ชิ้นตรงเป๊ะ · superogira0 9 ชิ้น · ไม่สวม = รายการว่าง',
+      '   (แก้: เดิม v4.156 เข้าใจว่าก้อน = ของในถุงล้วน → ของที่สวมโผล่ใน Equip tab)',
+      '⚔️ ก้อน = สวม + ในถุงรวมกัน · bag slot id = 20000+ลำดับ "เฉพาะชิ้นที่ไม่ได้สวม"',
+      '📏 ถอดขอบ inst เดิม 0x13900 (เดิมหลุดชิ้นที่เกิน 32 — มีตัวละครถือ 59 ชิ้น!)',
+    ]},
     { v: '4.156.1', d: '2026-08-20', items: [
       '🖱️ ห้องแชทลากย้ายอิสระได้ — จับที่แถบหัวเรื่อง "🗨️ ห้องแชท" กดค้างลาก (เหมือน popup Inventory)',
       '   กันลากหลุดจอ · คลิกพื้นหลัง/Esc ปิดได้เหมือนเดิม · ช่องพิมพ์/ปุ่มใช้งานได้ปกติ',
@@ -2270,42 +2278,57 @@
         if (eqStart >= 0) {
           equipmentList.length = 0;
           invDataVer++;
-          // ★★ login = ความจริงชุดใหม่ → ล้าง slot id เก่าก่อน (relogin จัดเลขใหม่หมด —
-          //   ยืนยันจาก capture: Hood 20001→20000 หลัง relogin)
+          // ★★ login = ความจริงชุดใหม่ → ล้าง slot id เก่าก่อน (relogin จัดเลขใหม่หมด)
           equipmentSlots.clear();
+          // ★ pass 1: อ่าน records ทั้งหมด — inst = 0x13880 + 4×i (ไม่จำกัดขอบ 0x13900 เดิม
+          //   เพราะมีตัวละครถือ 59 ชิ้น → inst ไปถึง 0x13968)
+          //   ก้อน = สวมอยู่ + ในถุง รวมกัน · u8@11>>2 = refine · u32@28>>2 = card id
           let ep = eqStart;
-          let bagIdx = 0;
+          const recs = [];
           while (ep + 44 <= u.length) {
             const inst = u32(u, ep);
-            if (inst < 0x13880 || inst > 0x13900) break;
+            if (inst < 0x13880 || (inst - 0x13880) % 4 !== 0) break;
             const idE2 = u32(u, ep + 4);
             if (idE2 === 0 || idE2 % 4 !== 0) break;
             const eqId = idE2 >>> 2;
             if (eqId <= 0 || eqId > 12000) break;
-            // ★★★ ก้อน 0x13880 = "ของในถุง equipment เท่านั้น" ไม่รวมที่สวมอยู่!
-            //   ยืนยันจาก capture ฝากคาฟรา: ของในก้อน deposit ได้ตรง ๆ (Cotton=20000 ·
-            //   Guard=20003 · Egg=20004) — และลำดับในก้อน = ลำดับ bag slot id (20000+N)
-            //   (สรุปใหม่ลบล้างทฤษฎีเดิมที่ว่า @28&3 = สวม/ถุง — ผิด!)
-            //   u8@11 >> 2 = refine · u32@28 >> 2 = card id ในชิ้น (ยืนยัน 6/6 การ์ด)
             const f28 = u32(u, ep + 28);
             const cardId = f28 >> 2;
             const refineE = u[ep + 11] >> 2;
-            equipmentList.push({
+            recs.push({
               id: eqId,
-              worn: false,   // ก้อนนี้ = ของในถุงทั้งหมด (worn จะถูกพลิกโดย 0x30 ตอนสวมใส่)
+              worn: false,
               card: (cardId >= 4001 && cardId <= 4600) ? cardId : 0,
               refine: refineE > 1 ? refineE : 0,
             });
-            // ★★ ลงทะเบียน slot id = 20000+ลำดับ (unverified — ถ้าผิด server จะปฏิเสธแบบไม่พังข้อมูล)
-            const slotId2 = 20000 + bagIdx;
-            const slots2 = equipmentSlots.get(eqId) || [];
-            if (!slots2.includes(slotId2)) slots2.push(slotId2);
-            equipmentSlots.set(eqId, slots2);
-            bagIdx++;
             ep += 44;
           }
+          // ★★★ pass 2: "หาง" ท้ายก้อน = รายการ inst ของของที่กำลังสวมอยู่ (0 = ช่องว่าง
+          //   เช่น ช่องโล่ตอนถือดาบ 2 มือ) — ตัวชี้รายการถูกตำแหน่งสวมใส่แบบแน่นอน
+          //   ยืนยัน 4/4 captures: testmage สวม 6 ชิ้นตรงเป๊ะ · superogira0 9 ชิ้น · ไม่สวม = ไม่มี
+          for (let o = ep; o <= u.length - 4; o++) {
+            const v = u32(u, o);
+            if (v >= 0x13880 && (v - 0x13880) % 4 === 0) {
+              const i2 = (v - 0x13880) / 4;
+              if (i2 < recs.length) recs[i2].worn = true;
+            }
+          }
+          // ★★ pass 3: bag slot id = 20000 + ลำดับในถุง (ข้ามชิ้นที่สวมอยู่ — ไม่ถือ bag slot)
+          //   ยืนยันจาก deposit จริง: Cotton=20000 · Guard=20003 · Egg=20004 (ตอนไม่สวมอะไร)
+          let bagIdx = 0;
+          for (const r of recs) {
+            if (!r.worn) {
+              const slotId2 = 20000 + bagIdx;
+              const slots2 = equipmentSlots.get(r.id) || [];
+              if (!slots2.includes(slotId2)) slots2.push(slotId2);
+              equipmentSlots.set(r.id, slots2);
+              bagIdx++;
+            }
+            equipmentList.push(r);
+          }
           if (equipmentList.length > 0) {
-            dbg('⚔️ equipment ในถุง: ' + equipmentList.length + ' ชิ้น (slot 20000-' + (20000 + equipmentList.length - 1) + ') — ' + equipmentList.slice(0, 6).map(x => equipDisplayName(x)).join(', '));
+            const wornN = equipmentList.filter(x => x.worn).length;
+            dbg('⚔️ equipment: ' + equipmentList.length + ' ชิ้น (สวม ' + wornN + ' · ในถุง ' + (equipmentList.length - wornN) + ') — ในถุง: ' + equipmentList.filter(x => !x.worn).slice(0, 6).map(x => equipDisplayName(x)).join(', '));
           }
         }
       }
