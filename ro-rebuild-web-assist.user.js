@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.165.0
+// @version      4.166.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,19 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.165.0';
+  const VERSION = '4.166.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.166.0', d: '2026-08-21', items: [
+      '🤝 ใหม่! โหมดสกิล "buff" — บอทบัพให้ผู้เล่นอื่นอัตโนมัติ',
+      '   ตั้งต่อสกิล: ใช้กับ "ทุกคนในระยะ" หรือ "เฉพาะรายชื่อ" (เพิ่มได้หลายชื่อ คั่นจุลภาค)',
+      '   ระยะใช้ช่อง "ระยะสูงสุด" เดิม (default 9) · delay ซ้ำต่อคน (repeatSec, default 300 วิ)',
+      '   กันสแปมสองชั้น: cooldown ระหว่าง cast + จับเวลาต่อคนต่อสกิล',
+      '   ค้นเฉพาะผู้เล่นที่มีชื่อจาก SPAWN (ไม่ใช่ dot ผี) + เว้นชื่อตัวเอง',
+      '🔀 แยกเป็น buffOthersLoop เอกเอี่ยว — ยืน Guard ประจำจุดก็บัพได้ ไม่ต้องมีมอน',
+      '   (ต้องเปิด toggle Skill: ON เท่านั้น · packet [1d][01]+playerId ยืนยันจาก capture แล้ว)',
+      '📦 Preset พร้อมใช้: Blessing (บัพให้คน) + Increase Agility (บัพให้คน)',
+    ]},
     { v: '4.165.0', d: '2026-08-21', items: [
       '🤝 โหมดสกิลใหม่ "ally" — สกิล Ally ของ Skills.toml (Heal/Blessing/Kyrie ฯลฯ)',
       '   ใช้กับตัวเองผ่าน targetId ของเรา (packet [1d][01]) ต่างจาก selfCast ([1d][05] ไม่มี target)',
@@ -1593,8 +1603,64 @@
   //    แต่ละ item มี intervalMin ของตัวเอง → ใช้ซ้ำเมื่อครบเวลา
   //    เก็บ lastBuffUse ข้าม session → refresh หน้าแล้ว buff ยังจำเวลาเดิม
   // ============================================================
-  const buffLoop = setInterval(() => {
-    if (!CFG.buffEnabled) return;
+  // ============================================================
+  //  AUTO-BUFF OTHERS — บอทบัพให้ผู้เล่นอื่น (buffMode skills)
+  //  ค้นผู้เล่นรอบตัว → ผ่านเงื่อนไข (ทุกคน/รายชื่อ + ระยะ + delay ซ้ำต่อคน) → ส่ง [1d][01]+playerId
+  //  ★ แยกจาก combatLoop — ยืน Guard อยู่ก็บัพได้ ไม่ต้องมีมอน/ตีอะไร (เหมาะกับบอทบัพประจำจุด)
+  //  ★ packet ยืนยันจาก capture จริง: Heal Lv10 กับ superogira0 = [1d][01][playerId:4][41][0a]
+  // ============================================================
+  const buffOthersLoop = setInterval(() => {
+    if (!CFG.skillEnabled || !CFG.skills || !CFG.skills.length) return;
+    if (!activeWS || activeWS.readyState !== 1) return;
+    if (isDead) return;
+    if (playerId == null || player.x == null) return;
+    const now = nowMs();
+    const disabled = Array.isArray(CFG.disabledSkillIds) ? CFG.disabledSkillIds : [];
+    for (const skill of CFG.skills) {
+      if (!skill || !skill.buffMode || skill.skillId == null) continue;
+      if (disabled.includes(skill.skillId)) continue;
+      // cooldown ระหว่าง cast (สั้น ๆ กันยิงรัว)
+      const lastUse = lastSkillUse.get(skill.skillId) || 0;
+      const cooldown = skill.cooldownMs ?? 2000;
+      if (now - lastUse < cooldown) continue;
+      // SP gate
+      const spMin = skill.spMin ?? 0;
+      if (spMin > 0 && sp.cur != null && sp.cur < spMin) continue;
+      // ★ ค้นผู้เล่นเป้าหมาย: kind=0 มีชื่อ ไม่ใช่เรา ไม่ใช่ ghost/beacon ปลอม
+      const radius = skill.maxDistance > 0 ? skill.maxDistance : 9;
+      const names = Array.isArray(skill.buffNames) ? skill.buffNames.map(n => String(n).toLowerCase().trim()).filter(Boolean) : [];
+      const wantAll = skill.buffAll !== false && names.length === 0;   // default: ทุกคน (ถ้าไม่ได้ตั้งชื่อ)
+      let best = null, bestD = Infinity;
+      for (const e of entities.values()) {
+        if (e.kind !== 0 || !e.alive || e.x == null || e.y == null) continue;
+        if (e.id === playerId) continue;
+        if (isStaleId(e.id, now)) continue;
+        if (!e.name || !e.name.trim()) continue;          // ต้องมีชื่อจาก SPAWN (ไม่ใช่ dot ผี)
+        if (e._src === 'beacon') continue;                // beacon = ผู้เล่นแน่ แต่ไม่มีชื่อ → ข้ามไว้รอ SPAWN
+        if (!wantAll && !names.some(n => e.name.toLowerCase().includes(n))) continue;
+        const d = Math.hypot(e.x - player.x, e.y - player.y);
+        if (d > radius) continue;
+        // delay ซ้ำต่อคน: ยังไม่ครบ repeatSec → ข้าม
+        const perSkill = buffTargetUse.get(skill.skillId);
+        const lastFor = perSkill ? (perSkill.get(e.id) || 0) : 0;
+        const repeatMs = (Number(skill.repeatSec) > 0 ? Number(skill.repeatSec) : 300) * 1000;
+        if (lastFor > 0 && now - lastFor < repeatMs) continue;
+        if (d < bestD) { bestD = d; best = e; }
+      }
+      if (!best) continue;
+      // ★ ส่งสกิลให้ผู้เล่น — format [1d][01][playerId:4][skillId:1][level:1]
+      if (sendSkill(skill.skillId, skill.level || 1, best.id, null, null)) {
+        lastSkillUse.set(skill.skillId, now);
+        saveSkillTimesDebounced();
+        if (!buffTargetUse.has(skill.skillId)) buffTargetUse.set(skill.skillId, new Map());
+        buffTargetUse.get(skill.skillId).set(best.id, now);
+        log('🤝 บัพให้', best.name + ':', skill.name || ('id=' + skill.skillId), 'Lv' + (skill.level || 1), '@ dist', bestD.toFixed(1), '(sp', (sp.cur != null ? sp.cur : '?') + ')');
+        break;   // ทีละสกิลต่อ tick
+      }
+    }
+  }, 1000);
+
+  const buffLoop = setInterval(() => {    if (!CFG.buffEnabled) return;
     if (!CFG.buffItems || !CFG.buffItems.length) return;
     if (isDead) return;
     if (!activeWS || activeWS.readyState !== 1) return;
@@ -4071,6 +4137,7 @@
   // ★ Auto-Skill tracking (mirror bot.js:48-56)
   const lastSkillUse = new Map();        // skillId → timestamp (cooldown)
   const skillUsesOnTarget = new Map();   // skillId → Map<targetId, count> (maxUsesPerTarget)
+  const buffTargetUse = new Map();       // skillId → Map<playerId, lastAt> — delay บัพซ้ำต่อคน (buffMode)
   // persist skill times ข้าม session
   const SKILL_TIMES_KEY = 'roAssistSkillTimes_v1';
   function loadSkillTimes() {
@@ -4865,6 +4932,7 @@
       const disabled = Array.isArray(CFG.disabledSkillIds) ? CFG.disabledSkillIds : [];
       for (const skill of CFG.skills) {
         if (!skill || skill.skillId == null) continue;
+        if (skill.buffMode) continue;   // ★ buffMode ประมวลใน buffOthersLoop แยก (ไม่ต้องมีมอน/ตี)
         if (disabled.includes(skill.skillId)) continue;
         // ★ สกิลที่ต้องมีเป้า (targeted/ground ไม่ใช่ self/ally) — ไม่มี target ข้าม
         //   ally = ใช้กับ "ตัวเอง" ผ่าน targetId ของเรา (Heal/Blessing เป็น Ally-target ตาม Skills.toml)
@@ -6185,7 +6253,7 @@
     getImportantLogs() { return importantLogBuf.slice(); },
     clearImportantLogs() { importantLogBuf.length = 0; log('🧹 ล้าง log สำคัญ'); },
     stopAll() {
-      clearInterval(healLoop); clearInterval(lootLoop); clearInterval(warpLoop); clearInterval(combatLoop); clearInterval(sellLoop); clearInterval(storageLoop); clearInterval(buffLoop); clearInterval(consoleClearLoop); clearInterval(remoteWalkLoop); clearInterval(teleportFlusher);
+      clearInterval(healLoop); clearInterval(lootLoop); clearInterval(warpLoop); clearInterval(combatLoop); clearInterval(sellLoop); clearInterval(storageLoop); clearInterval(buffLoop); clearInterval(buffOthersLoop); clearInterval(consoleClearLoop); clearInterval(remoteWalkLoop); clearInterval(teleportFlusher);
       if (typeof uiLoop !== 'undefined') clearInterval(uiLoop);
       log('⏹ หยุดระบบทั้งหมดแล้ว');
     },
@@ -6326,6 +6394,8 @@
     { name: "Brandish Spear", skillId: 38, level: 10, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 12, cooldownMs: 2000, job: "Knight", desc: "โจมตี · SP 12/12/12/12/12/12/12/12/12/12 · ยังไม่ทดสอบ" },
     { name: "Spear Boomerang", skillId: 39, level: 5, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 10, cooldownMs: 2000, job: "Knight", desc: "โจมตี · SP 10 · ยังไม่ทดสอบ" },
     { name: "Heal", skillId: 41, level: 10, ally: true, hpBelowPct: 50, spMin: 40, cooldownMs: 2500, job: "Acolyte", desc: "Ally→ใช้กับตัวเอง · ใช้เมื่อ HP<50% · SP 13/16/19/22/25/28/31/34/37/40 · ปรับเลเวลได้ · ยังไม่ทดสอบ" },
+    { name: "Blessing (บัพให้คน)", skillId: 44, level: 10, buffMode: true, buffAll: true, repeatSec: 300, maxDistance: 9, spMin: 64, cooldownMs: 3000, job: "Acolyte/Priest", desc: "บอทบัพ · ให้ทุกคนในรัศมี 9 ช่อง · ซ้ำ/คนทุก 5 นาที · SP 28-64 · ยังไม่ทดสอบ" },
+    { name: "Increase Agility (บัพให้คน)", skillId: 42, level: 10, buffMode: true, buffAll: true, repeatSec: 300, maxDistance: 9, spMin: 45, cooldownMs: 3000, job: "Acolyte/Priest", desc: "บอทบัพ · ให้ทุกคนในรัศมี 9 ช่อง · ซ้ำ/คนทุก 5 นาที · SP 18-45 · ยังไม่ทดสอบ" },
     { name: "Increase Agility", skillId: 42, level: 10, ally: true, intervalMin: 4, spMin: 45, cooldownMs: 2000, job: "Acolyte", desc: "Ally→ใช้กับตัวเอง · SP 18/21/24/27/30/33/36/39/42/45 · ปรับเลเวลได้ · ยังไม่ทดสอบ" },
     { name: "Decrease Agility", skillId: 43, level: 10, targeted: true, maxDistance: 9, maxUsesPerTarget: 1, spMin: 33, cooldownMs: 2000, job: "Acolyte", desc: "โจมตี · SP 15/17/19/21/23/25/27/29/31/33 · ยังไม่ทดสอบ" },
     { name: "Blessing", skillId: 44, level: 10, ally: true, intervalMin: 4, spMin: 64, cooldownMs: 2000, job: "Acolyte", desc: "Ally→ใช้กับตัวเอง · SP 28/32/36/40/44/48/52/56/60/64 · ปรับเลเวลได้ · ยังไม่ทดสอบ" },
@@ -6543,23 +6613,24 @@
       let html = '';
       html += `<div style="padding:6px 8px;color:#8ab4f8;font-size:11px;font-weight:600;border-bottom:1px solid #2a2d35">🔮 skill list (${skills.length})</div>`;
       html += skills.length ? skills.map((s, i) => {
-        const mode = s.selfCast ? 'self' : (s.ally ? 'ally' : (s.targeted ? 'target' : 'AoE'));
-        const modeColor = s.ally ? '#29b6f6' : (s.selfCast ? '#27ae60' : (s.targeted ? '#e67e22' : '#8e44ad'));
+        const mode = s.selfCast ? 'self' : (s.ally ? 'ally' : (s.buffMode ? 'buff' : (s.targeted ? 'target' : 'AoE')));
+        const modeColor = s.buffMode ? '#d4e157' : (s.ally ? '#29b6f6' : (s.selfCast ? '#27ae60' : (s.targeted ? '#e67e22' : '#8e44ad')));
         const spStr = s.spMin ? ` SP≥${s.spMin}` : '';
         const cdStr = s.intervalMin > 0 ? ` ทุก${s.intervalMin}นาที` : (s.cooldownMs ? ` cd${(s.cooldownMs/1000).toFixed(0)}s` : '');
         const distStr = s.maxDistance ? ` ≤${s.maxDistance}ช่อง` : '';
         const hpStr = s.hpBelowPct > 0 ? ` HP<${s.hpBelowPct}%` : '';
+        const buffStr = s.buffMode ? ` ${s.buffAll === false && Array.isArray(s.buffNames) && s.buffNames.length ? 'ให้:' + s.buffNames.join(',') : 'ให้ทุกคน'} ≤${s.maxDistance || 9}ช่อง ทุก${s.repeatSec || 300}วิ` : '';
         let row = `<div style="padding:5px 6px;border-bottom:1px solid rgba(255,255,255,.04)">
           <div style="display:flex;align-items:center;gap:8px">
             <span style="flex:1;font-size:11px;color:#e8e8e8">${s.name || 'skill_'+s.skillId} <span style="color:#5f6368">(#${s.skillId} Lv${s.level})</span></span>
             <span style="font-size:10px;color:${modeColor};background:${modeColor}22;padding:1px 6px;border-radius:3px">${mode}</span>
-            <span style="font-size:10px;color:#9aa0a6">${spStr}${hpStr}${cdStr}${distStr}</span>
+            <span style="font-size:10px;color:#9aa0a6">${spStr}${hpStr}${buffStr}${cdStr}${distStr}</span>
             <button data-editskill="${i}" style="background:#2a3441;border:1px solid #3a3f4b;border-radius:4px;color:#8ab4f8;cursor:pointer;font-size:11px;padding:3px 8px">✎</button>
             <button class="rmbtn" data-rmskill="${i}" style="background:#4a2020;border:1px solid #6a3030;border-radius:4px;color:#e8e8e8;cursor:pointer;font-size:11px;padding:3px 8px">✕</button>
           </div>`;
         // ★ ฟอร์มแก้ไข (แสดงเมื่อกด ✎)
         if (editingSkillIdx === i) {
-          const modeVal = s.selfCast ? 'self' : (s.ally ? 'ally' : (s.ground ? 'ground' : (s.targeted ? 'targeted' : 'aoe')));
+          const modeVal = s.selfCast ? 'self' : (s.ally ? 'ally' : (s.buffMode ? 'buff' : (s.ground ? 'ground' : (s.targeted ? 'targeted' : 'aoe'))));
           const fld = (label, inner, title) => `<label style="display:flex;flex-direction:column;gap:1px;font-size:9px;color:#9aa0a6" title="${title}">${label}${inner}</label>`;
           const inp = (key, val, w) => `<input data-edit="${key}" type="number" value="${val}" style="width:${w};background:#15171c;border:1px solid #3a3f4b;border-radius:4px;color:#e8e8e8;padding:4px 6px;font-size:10px;font-family:inherit">`;
           row += `<div style="padding:8px;background:rgba(0,0,0,.2);border-radius:4px;margin-top:4px">
@@ -6575,7 +6646,8 @@
                 <option value="aoe"${modeVal==='aoe'?' selected':''}>AoE — รอบตัว (Magnum Break)</option>
                 <option value="self"${modeVal==='self'?' selected':''}>self-cast — ใช้กับตัวเอง (Quicken, Blessing)</option>
                 <option value="ally"${modeVal==='ally'?' selected':''}>ally — สกิล Ally ใช้กับตัวเอง (Heal, Kyrie)</option>
-              </select>`, 'targeted=ต้องมีมอนเป้าหมาย, AoE=ใช้รอบตัว, self=สกิล Self แท้, ally=สกิล Ally (Skills.toml) ใช้กับตัวเองผ่าน targetId')}
+                <option value="buff"${modeVal==='buff'?' selected':''}>buff — บอทบัพให้ผู้เล่นอื่น (Blessing, Heal ให้คน)</option>
+              </select>`, 'targeted=ต้องมีมอนเป้าหมาย, AoE=ใช้รอบตัว, self=สกิล Self แท้, ally=Ally ใช้กับตัวเอง, buff=หาผู้เล่นรอบตัวมาบัพให้อัตโนมัติ')}
             </div>
             <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap">
               ${fld('SP ขั้นต่ำ', inp('spMin', s.spMin||0, '55px'), 'SP ต้องมากกว่าหรือเท่ากับค่านี้ถึงจะใช้')}
@@ -6588,6 +6660,14 @@
               ${fld('ระยะเวลา (นาที) — self', `<input data-edit="intervalMin" type="number" step="0.5" value="${s.intervalMin||0}" style="flex:1;background:#15171c;border:1px solid #3a3f4b;border-radius:4px;color:#e8e8e8;padding:4px 6px;font-size:10px;font-family:inherit">`, 'สำหรับ self-cast: ร่ายใหม่ทุก N นาที (0=ใช้ cooldownMs แทน)')}
               ${fld('ระยะต่ำสุด (ช่อง)', `<input data-edit="minDistance" type="number" value="${s.minDistance||0}" style="flex:1;background:#15171c;border:1px solid #3a3f4b;border-radius:4px;color:#e8e8e8;padding:4px 6px;font-size:10px;font-family:inherit">`, 'ต้องอยู่ไกลอย่างน้อย N ช่อง (เช่น Charge Attack)')}
               ${fld('ใช้เมื่อ HP < %', inp('hpBelowPct', s.hpBelowPct||0, '60px'), 'ใช้สกิลเฉพาะเมื่อ HP% ต่ำกว่าค่านี้ (เช่น Heal ตัวเอง) — 0 หรือว่าง = ไม่สน HP')}
+            </div>
+            <div style="display:flex;gap:6px;margin-bottom:6px">
+              <select data-edit="buffAll" style="flex:1;background:#15171c;border:1px solid #3a3f4b;border-radius:4px;color:#e8e8e8;padding:4px 6px;font-size:10px;font-family:inherit" title="โหมด buff: ใช้กับใคร">
+                <option value="all"${(s.buffAll !== false && !(Array.isArray(s.buffNames) && s.buffNames.length))?' selected':''}>บัพให้ทุกคนที่เข้ามาในระยะ</option>
+                <option value="list"${(Array.isArray(s.buffNames) && s.buffNames.length)?' selected':''}>เฉพาะรายชื่อที่กำหนด</option>
+              </select>
+              <input data-edit="buffNames" value="${(Array.isArray(s.buffNames)?s.buffNames:[]).join(',')}" placeholder="รายชื่อผู้เล่น (คั่นจุลภาค)" style="flex:2;background:#15171c;border:1px solid #3a3f4b;border-radius:4px;color:#e8e8e8;padding:4px 6px;font-size:10px;font-family:inherit" title="เช่น superogira0,testmage — ใช้เมื่อเลือก 'เฉพาะรายชื่อ'">
+              ${fld('delay ซ้ำ/คน (วิ)', inp('repeatSec', s.repeatSec||300, '60px'), 'รออย่างน้อย N วินาทีก่อนบัพซ้ำคนเดิม (กันสแปม) — default 300 = 5 นาที')}
             </div>
             <div style="display:flex;gap:4px">
               <button data-saveedit="${i}" style="flex:1;background:#1b5e20;border:1px solid #2e7d32;border-radius:4px;color:#a5d6a7;cursor:pointer;font-size:10px;padding:5px;font-family:inherit">✓ บันทึก</button>
@@ -6630,6 +6710,7 @@
           <option value="aoe">AoE (Magnum Break — รอบตัว)</option>
           <option value="self">self-cast (Quicken — บัพตัวเอง)</option>
           <option value="ally">ally (Heal/Kyrie — สกิล Ally ใช้กับตัวเอง)</option>
+          <option value="buff">buff (บอทบัพให้ผู้เล่นอื่น)</option>
         </select>
         <div style="display:flex;gap:4px;margin-bottom:4px">
           <input id="__assist_skill_sp" type="number" placeholder="spMin" value="0" style="flex:1;background:#15171c;border:1px solid #3a3f4b;border-radius:5px;color:#e8e8e8;padding:5px 7px;font-size:11px;font-family:inherit">
@@ -6644,6 +6725,14 @@
           <input id="__assist_skill_interval" type="number" placeholder="intervalMin (self)" value="0" step="0.5" style="flex:1;background:#15171c;border:1px solid #3a3f4b;border-radius:5px;color:#e8e8e8;padding:5px 7px;font-size:11px;font-family:inherit">
           <input id="__assist_skill_mindist" type="number" placeholder="minDist" value="0" style="flex:1;background:#15171c;border:1px solid #3a3f4b;border-radius:5px;color:#e8e8e8;padding:5px 7px;font-size:11px;font-family:inherit">
           <input id="__assist_skill_hpbelow" type="number" placeholder="HP<%" value="0" min="0" max="100" title="ใช้เมื่อ HP% ต่ำกว่าค่านี้ (0=ไม่สน HP)" style="width:70px;background:#15171c;border:1px solid #3a3f4b;border-radius:5px;color:#e8e8e8;padding:5px 7px;font-size:11px;font-family:inherit">
+        </div>
+        <div style="display:flex;gap:4px;margin-bottom:6px">
+          <select id="__assist_skill_buffall" style="flex:1;background:#15171c;border:1px solid #3a3f4b;border-radius:5px;color:#e8e8e8;padding:5px 7px;font-size:11px;font-family:inherit" title="โหมด buff: ใช้กับใคร">
+            <option value="all">บัพทุกคนในระยะ</option>
+            <option value="list">เฉพาะรายชื่อ</option>
+          </select>
+          <input id="__assist_skill_buffnames" placeholder="รายชื่อผู้เล่น (คั่นจุลภาค)" style="flex:2;background:#15171c;border:1px solid #3a3f4b;border-radius:5px;color:#e8e8e8;padding:5px 7px;font-size:11px;font-family:inherit" title="เช่น superogira0,testmage (ใช้เมื่อเลือกเฉพาะรายชื่อ)">
+          <input id="__assist_skill_repeatsec" type="number" placeholder="ซ้ำ/คน(วิ)" value="300" title="delay ก่อนบัพซ้ำคนเดิม (วินาที)" style="width:80px;background:#15171c;border:1px solid #3a3f4b;border-radius:5px;color:#e8e8e8;padding:5px 7px;font-size:11px;font-family:inherit">
         </div>
         <button id="__assist_skill_addbtn" style="width:100%;background:#1b5e20;border:1px solid #2e7d32;border-radius:5px;color:#a5d6a7;cursor:pointer;font-size:11px;padding:6px;font-family:inherit">+ เพิ่ม skill</button>
       </div>`;
@@ -6695,6 +6784,15 @@
           s.ground = mode === 'ground';
           s.selfCast = mode === 'self';
           s.ally = mode === 'ally';
+          s.buffMode = mode === 'buff';
+          // ★ buff settings (ใช้เมื่อโหมด buff)
+          if (s.buffMode) {
+            const bAll = getVal('buffAll');
+            const bNames = getVal('buffNames').split(',').map(x => x.trim()).filter(Boolean);
+            s.buffAll = bAll !== 'list';   // 'all' = true
+            s.buffNames = bNames;
+            s.repeatSec = parseInt(getVal('repeatSec'), 10) || 300;
+          }
           s.spMin = parseInt(getVal('spMin'), 10) || 0;
           const cdSec = parseFloat(getVal('cooldownSec'));
           s.cooldownMs = isNaN(cdSec) ? (s.cooldownMs || 2000) : Math.round(cdSec * 1000);
@@ -6725,7 +6823,8 @@
           const p = SKILL_PRESETS[idx];
           ASSIST.addSkill({
             name: p.name, skillId: p.skillId, level: p.level,
-            targeted: !!p.targeted, selfCast: !!p.selfCast, ally: !!p.ally,
+            targeted: !!p.targeted, selfCast: !!p.selfCast, ally: !!p.ally, buffMode: !!p.buffMode,
+            buffAll: p.buffAll !== false, buffNames: Array.isArray(p.buffNames) ? p.buffNames : [], repeatSec: p.repeatSec || 300,
             intervalMin: p.intervalMin || 0, mobCountMin: p.mobCountMin || 0,
             maxUsesPerTarget: p.maxUsesPerTarget || 1, maxDistance: p.maxDistance || 0,
             minDistance: p.minDistance || 0, spMin: p.spMin || 0, cooldownMs: p.cooldownMs || 2000,
@@ -6750,6 +6849,9 @@
           const intervalMin = parseFloat(bodyEl.querySelector('#__assist_skill_interval').value) || 0;
           const minDistance = parseInt(bodyEl.querySelector('#__assist_skill_mindist').value, 10) || 0;
           const hpBelowPct = parseInt(bodyEl.querySelector('#__assist_skill_hpbelow').value, 10) || 0;
+          const buffAll = bodyEl.querySelector('#__assist_skill_buffall').value !== 'list';
+          const buffNames = (bodyEl.querySelector('#__assist_skill_buffnames').value || '').split(',').map(x => x.trim()).filter(Boolean);
+          const repeatSec = parseInt(bodyEl.querySelector('#__assist_skill_repeatsec').value, 10) || 300;
           if (isNaN(skillId)) { return; }
           ASSIST.addSkill({
             name, skillId, level,
@@ -6757,6 +6859,8 @@
             ground: mode === 'ground',
             selfCast: mode === 'self',
             ally: mode === 'ally',
+            buffMode: mode === 'buff',
+            buffAll, buffNames, repeatSec,
             intervalMin, mobCountMin, maxUsesPerTarget, maxDistance, minDistance, spMin, cooldownMs,
             hpBelowPct: Math.max(0, Math.min(100, hpBelowPct)),
           });
