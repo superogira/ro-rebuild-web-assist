@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.160.0
+// @version      4.160.1
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,15 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.160.0';
+  const VERSION = '4.160.1';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.160.1', d: '2026-08-20', items: [
+      '🐛 แก้ "ไม่มีของที่จะฝากใน inventory" ทั้งที่มี equipment เต็มถุง —',
+      '   ของ equipment จาก login อยู่ใน equipmentList/equipmentSlots ไม่ใช่ inventory map',
+      '   แต่ depositNow + คิวฝาก + คิวขาย เช็ค inventory.get() > 0 ก่อนเสมอ → ข้ามหมดเงียบ ๆ',
+      '   → ตรวจ equipmentSlots ก่อน (มี slot = ฝาก/ขายได้เลย) แล้วค่อยเช็ค inventory สำหรับ stackable',
+    ]},
     { v: '4.160.0', d: '2026-08-20', items: [
       '💰🏦 ปุ่ม "ขายเดี๋ยวนี้" + "ฝากเดี๋ยวนี้" ในหัว popup Inventory —',
       '   ทำงานเหมือนปุ่มใน panel (ASSIST.sellNow / depositNow) กดแล้ววาร์ปไปทำรายการทันที',
@@ -2604,20 +2610,19 @@
       const stackItems = [], eqItems = [];
       let noSlotSkipped = 0;
       for (const id of CFG.sellItemIds) {
-        const stock = inventory.get(id) || 0;
-        if (stock <= 0) continue;
         const eqSlots = equipmentSlots.get(id);
         if (eqSlots && eqSlots.length > 0) {
           // ★ equipment — ขายจาก slot สูง→ต่ำ (กัน index shift เหมือน storage)
+          //   ★★ ตรวจ equipmentSlots ก่อน inventory — ของ login ไม่เคยเข้า inventory map
           const sorted = [...eqSlots].sort((a, b) => b - a);
           for (const slotId of sorted) eqItems.push({ itemId: slotId, realId: id, count: 1 });
-        } else if (equipmentList.some(x => x.id === id)) {
-          // ★★ equipment ที่ไม่รู้ slot id — ส่งเป็น stackable = ผิดฟอร์แมต ต้องข้าม
-          noSlotSkipped++;
-        } else {
-          // ★ stackable — itemId + count จริง (server ปฏิเสธถ้า count ไม่ตรง)
-          stackItems.push({ itemId: id, count: stock });
+          continue;
         }
+        if (equipmentList.some(x => x.id === id)) { noSlotSkipped++; continue; }   // equipment ไม่รู้ slot id — ข้าม
+        const stock = inventory.get(id) || 0;
+        if (stock <= 0) continue;
+        // ★ stackable — itemId + count จริง (server ปฏิเสธถ้า count ไม่ตรง)
+        stackItems.push({ itemId: id, count: stock });
       }
       if (noSlotSkipped > 0) log('⚠️ ข้าม equipment', noSlotSkipped, 'ชนิดจากการขาย (ไม่รู้ slot id)');
       if (stackItems.length === 0 && eqItems.length === 0) {
@@ -3515,24 +3520,26 @@
     const queue = [];
     let noSlotSkipped = 0;
     for (const itemId of CFG.depositItemIds) {
-      const stock = inventory.get(itemId) || 0;
-      if (stock <= 0) continue;
       const eqSlots = equipmentSlots.get(itemId);
       if (eqSlots && eqSlots.length > 0) {
         // ★★ equipment — ฝากจาก slot สูง→ต่ำ (กัน index shift) ทีละชิ้น amount=1
-        //   verified=false (slot id จาก sub=5 เท่านั้นที่ verified) → ไม่ optimistic ลบ รอ server ยืนยัน
+        //   ★★ ตรวจ equipmentSlots ก่อน inventory — ของ equipment จาก login ไม่เคยเข้า
+        //   inventory map เลย (เดิมเช็ค stock>0 ก่อน → ของ login ถูกข้ามไปเงียบ ๆ!)
         const sorted = [...eqSlots].sort((a, b) => b - a);
         for (const slotId of sorted) queue.push({ itemId, amount: 1, invId: slotId, isEquipment: true, verified: verifiedEquipSlots.has(slotId) });
-      } else if (equipmentList.some(x => x.id === itemId)) {
-        // ★★ equipment ที่ไม่รู้ slot id (มาตั้งแต่ login) — ส่งเป็น stackable = ผิดฟอร์แมต ต้องข้าม
-        //   (slot id ได้เฉพาะจาก 0x32 sub=5 — เช่น ถอดออกจากคาฟรา/เก็บจากพื้น แล้วจะฝากได้เอง)
-        noSlotSkipped++;
-      } else {
-        // ★ stackable — ทั้งกองทีเดียว (moveId = itemId)
-        queue.push({ itemId, amount: stock, invId: itemId, isEquipment: false });
+        continue;
       }
+      if (equipmentList.some(x => x.id === itemId)) {
+        // equipment ที่ยังไม่รู้ slot id (เพิ่งสวม/ถอดกลางเซสชัน) — ข้าม รอเข้าเกมใหม่
+        noSlotSkipped++;
+        continue;
+      }
+      // ★ stackable — ทั้งกองทีเดียว (moveId = itemId)
+      const stock = inventory.get(itemId) || 0;
+      if (stock <= 0) continue;
+      queue.push({ itemId, amount: stock, invId: itemId, isEquipment: false });
     }
-    if (noSlotSkipped > 0) log('⚠️ ข้าม equipment', noSlotSkipped, 'ชนิด (ไม่รู้ slot id — ยังไม่เคยผ่านคาฟรา/เก็บใน session นี้)');
+    if (noSlotSkipped > 0) log('⚠️ ข้าม equipment', noSlotSkipped, 'ชนิด (ไม่รู้ slot id — รอเข้าเกมใหม่จะถูกต้อง)');
     return queue;
   }
   const storageLoop = setInterval(() => {
@@ -5702,8 +5709,12 @@
       if (storageState !== 'IDLE') { log('⚠️ กำลังฝากอยู่แล้ว (state:', storageState + ')'); return; }
       if (!CFG.depositItemIds.length) { log('⚠️ ยังไม่ได้เลือก item ที่จะฝาก'); return; }
       if (!currentMap || player.x == null) { log('⚠️ ยังไม่รู้พิกัดตัวละคร'); return; }
+      // ★★ ตรวจผ่าน equipmentSlots ด้วย — ของ equipment จาก login ไม่เคยเข้า inventory map
+      //   (เดิมเช็คแค่ inventory.get > 0 → มีแต่ equipment ตอนเข้าเกม = "ไม่มีของที่จะฝาก" ทั้งที่มีเต็มถุง!)
       let hasDeposit = false;
-      for (const id of CFG.depositItemIds) { if ((inventory.get(id) || 0) > 0) { hasDeposit = true; break; } }
+      for (const id of CFG.depositItemIds) {
+        if ((equipmentSlots.get(id) || []).length > 0 || (inventory.get(id) || 0) > 0) { hasDeposit = true; break; }
+      }
       if (!hasDeposit) { log('⚠️ ไม่มีของที่จะฝากใน inventory'); return; }
       startStorage('กดฝากเดี๋ยวนี้', null);
     },
