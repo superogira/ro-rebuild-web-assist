@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.159.1
+// @version      4.160.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,14 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.159.1';
+  const VERSION = '4.160.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.160.0', d: '2026-08-20', items: [
+      '💰🏦 ปุ่ม "ขายเดี๋ยวนี้" + "ฝากเดี๋ยวนี้" ในหัว popup Inventory —',
+      '   ทำงานเหมือนปุ่มใน panel (ASSIST.sellNow / depositNow) กดแล้ววาร์ปไปทำรายการทันที',
+      '   popup เปิดค้างไว้ดูได้เรื่อย ๆ (live-refresh) · ปุ่มไม่ชนกับการลากหน้าต่าง',
+    ]},
     { v: '4.159.1', d: '2026-08-20', items: [
       '🐛 แก้ Jobs ยังแสดงเป็นรหัสกลุ่ม (SwordUser) — ไฟล์ EquipmentGroups.csv',
       '   ไม่เคยถูก push ขึ้น GitHub (userscript ดึงจาก GitHub → 404 → groupInfo ว่าง)',
@@ -8166,7 +8171,9 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
       <div style="background:#1a1a2e;color:#e8e8e8;border-radius:12px;padding:14px;width:660px;max-width:92vw;max-height:82vh;display:flex;flex-direction:column;font-family:sans-serif;box-shadow:0 8px 32px rgba(0,0,0,.5)">
         <div id="__assist_inv_hdr" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;cursor:move;user-select:none;touch-action:none">
           <span style="font-size:15px;font-weight:700;color:#ffb74d">🎒 Inventory <span id="__assist_inv_count" style="font-size:11px;color:#888"></span></span>
-          <span>
+          <span style="display:flex;gap:6px;align-items:center">
+            <button id="__assist_inv_sellnow" title="วาร์ปไปขายของกับ NPC ทันที (เหมือนปุ่มใน panel)" style="background:#4a2c14;color:#ffb74d;border:1px solid #7a4a1e;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;font-family:inherit">💰 ขายเดี๋ยวนี้</button>
+            <button id="__assist_inv_depositnow" title="วาร์ปไปฝากของเข้า Kafra ทันที (เหมือนปุ่มใน panel)" style="background:#14324a;color:#81c784;border:1px solid #1e5a7a;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;font-family:inherit">🏦 ฝากเดี๋ยวนี้</button>
             <button id="__assist_inv_close" style="background:none;border:none;color:#888;font-size:18px;cursor:pointer">✕</button>
           </span>
         </div>
@@ -8287,7 +8294,7 @@ return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" d
     const hdr = overlay.querySelector('#__assist_inv_hdr');
     let dragSt = null;
     hdr.addEventListener('pointerdown', (e) => {
-      if (e.target.closest('#__assist_inv_close')) return;
+      if (e.target.closest('button')) return;   // ปุ่มต่าง ๆ ในหัวเรื่อง (ขาย/ฝาก/ปิด) ไม่นับเป็นการลาก
       // ★ ตรึงตำแหน่งปัจจุบันก่อนลากครั้งแรก (ถอดจาก flex ชิดขวาของ overlay)
       if (win.style.position !== 'fixed') {
         const r0 = win.getBoundingClientRect();
@@ -8327,6 +8334,9 @@ return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" d
 
     const close = () => { clearInterval(invLive); if (tipEl) tipEl.remove(); overlay.remove(); };
     overlay.querySelector('#__assist_inv_close').onclick = close;
+    // ★★ ปุ่มด่วน — ทำงานเหมือนปุ่มใน panel (sellNow/depositNow ของ ASSIST)
+    overlay.querySelector('#__assist_inv_sellnow').onclick = (e) => { e.stopPropagation(); ASSIST.sellNow(); };
+    overlay.querySelector('#__assist_inv_depositnow').onclick = (e) => { e.stopPropagation(); ASSIST.depositNow(); };
     overlay.onclick = (e) => { if (e.target === overlay) close(); };
     // ★ กัน Unity ขโมย click
     overlay.addEventListener('mousedown', (e) => { e.stopPropagation(); }, true);
