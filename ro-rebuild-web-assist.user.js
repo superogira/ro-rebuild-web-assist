@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.154.0
+// @version      4.154.1
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,13 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.154.0';
+  const VERSION = '4.154.1';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.154.1', d: '2026-08-20', items: [
+      '💰 หัวข้อ "ของที่เก็บได้ (session นี้)" แสดงยอดรวมเงินจากของที่เก็บได้',
+      '   — นับเฉพาะของที่ตั้งค่าให้ "ขาย" (อัปเดตสด ลดตามที่ขายไปแล้ว)',
+    ]},
     { v: '4.154.0', d: '2026-08-20', items: [
       '📊 สถิติ "ของที่เก็บได้" = เฉพาะของที่เก็บใน session นี้ (เดิมโชว์ของทั้งหมดใน inventory)',
       '   เรียงจากเก็บล่าสุด → เก่า · จำนวน = ของจริงที่มีอยู่ (ลดตามใช้/ขาย/ฝากสำเร็จ หมดแล้วหายเอง)',
@@ -6579,7 +6583,7 @@
           <div class="row"><span class="k">🎒 Inventory</span><span class="v" data-inventory>?</span></div>
           <div class="row"><span class="k">💰 Sell</span><span class="v" data-sellstate>OFF</span></div>
           <div class="row"><span class="k">🏦 Storage</span><span class="v" data-storagestate>OFF</span></div>
-          <h4>ของที่เก็บได้ (session นี้)</h4>
+          <h4>ของที่เก็บได้ (session นี้) <span data-pickupsell style="color:#f1c40f;font-size:11px;font-weight:normal"></span></h4>
           <div data-items style="font-size:11px;color:#9aa0a6">(ยังไม่มี)</div>
           <div class="btns"><button class="primary" id="__assist_sellnow2">💰 ไปขายของ</button><button class="danger" id="__assist_clearinv">ล้างรายการของ</button><button class="danger" id="__assist_resetstats">รีเซ็ตสถิติ</button></div>
         </div>
@@ -8733,6 +8737,9 @@ return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" d
         .map(([id, at]) => ({ id: Number(id), at, count: inventory.get(Number(id)) || 0 }))
         .filter(x => x.count > 0)
         .sort((a, b) => b.at - a.at);
+      // ★ ยอดรวมเงินจากของที่เก็บได้ — นับเฉพาะของที่ตั้งค่าให้ "ขาย"
+      const sellTotal = invTop.reduce((s, x) => getItemAction(x.id) === 'sell' ? s + (itemPrice(x.id) || 0) * x.count : s, 0);
+      set('[data-pickupsell]', sellTotal > 0 ? '· ขายได้ ~' + sellTotal.toLocaleString() + 'z' : '');
       itemsEl.innerHTML = invTop.length ? invTop.map(x => {
         const numId = x.id;
         const count = x.count;
