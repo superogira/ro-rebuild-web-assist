@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.147.1
+// @version      4.148.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -119,6 +119,18 @@
   const VERSION = '4.147.1';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.148.0', d: '2026-08-19', items: [
+      '⚔️ Equip inventory sync real-time — ถอดโครงจาก capture 4 ไฟล์ (สวมใส่/ถอด/ถอดคาฟรา)',
+      '   0x32 sub=5 (ถอดคาฟรา/เก็บ equipment จากพื้น) → เพิ่มเข้า equipmentList ทันที',
+      '   0x32 removal (ฝาก/ขาย/ทิ้ง) → ลบ 1 ชิ้นออกจาก equipmentList + จุด optimistic ตอนฝากคาฟรา',
+      '   แก้บั๊กหายของ: 0x38 resend หลังสวมใส่/ถอด เคยล้าง equipmentList ทิ้ง',
+      '   → ตอนนี้ล้างเฉพาะเมื่อเจอก้อน 0x13880 (มีเฉพาะตอนเข้าเกม)',
+      '⚖️ น้ำหนัก re-sync แม่นทุกครั้ง — server ส่ง 0x38 ซ้ำทุกครั้งที่สวมใส่/ถอด/ฝาก-ถอดคาฟรา',
+      '   ขยาย anchor: prefix byte 01/02 → 01-20 (เจอใหม่ 06/08) + f32 exponent 3f → 3d-3f',
+      '   → แก้ delta drift สะสมจากการคำนวณน้ำหนักเอง',
+      '🎒 Popup inventory live-refresh — ข้อมูลเปลี่ยน render ใหม่เองใน 1s (คง scroll)',
+      '⚔️ Log การสวมใส่/ถอด — ดัก OUT 0x30 จับทิศทาง + IN 0x30 บอก slot (อาวุธ/รองเท้า/ฯลฯ)',
+    ]},
     { v: '4.147.1', d: '2026-08-19', items: [
       '🐛 แก้ desc ไม่แสดงสำหรับ Equip/Card/Arrow — regex เดิมไม่รองรับ //id 2101',
       '   ไฟล์ desc ใช้ 2 format: //501 (usable) และ //id 2101 (equip/weapon/card/ammo)',
@@ -1915,12 +1927,17 @@
         const slotId = u32(u, 2) >>> 1;   // เช่น Bow(1701) slot 20010 → offset2 = 40020
         if (itemId > 0 && itemId < 50000) {
           inventory.set(itemId, (inventory.get(itemId) || 0) + 1);
+          // ★★ เพิ่มเข้า equipmentList ทันที (ถอดจากคาฟรา / เก็บ equipment จากพื้น)
+          //   ยืนยันจาก capture: ถอด Chain(1520)/Boots(2405) จากคาฟรา → 0x56 ตอบ itemId ตามด้วย 0x32-05
+          equipmentList.push(itemId);
+          invDataVer++;
           // ★ track slot id ของแต่ละชิ้น (mirror world.js:773-777)
           if (slotId > 0) {
             const slots = equipmentSlots.get(itemId) || [];
             if (!slots.includes(slotId)) slots.push(slotId);
             equipmentSlots.set(itemId, slots);
           }
+          dbg('⚔️ +equipment:', nameOf(itemId), '(slot', slotId + ') — รายการ equip อัปเดต');
         }
       } else if (sub !== 3 && sub !== 5 && u.length >= 7 && u.length <= 14) {
         // ★★ equipment removal (drop/sell/move to storage) — 12B packet
@@ -1938,6 +1955,10 @@
                 if (cur > 1) inventory.set(itemId, cur - 1);
                 else inventory.delete(itemId);
                 if (slots.length === 0) equipmentSlots.delete(itemId);
+                // ★★ ลบออกจาก equipmentList 1 ชิ้น (ฝากเข้าคาฟรา/ขาย/ทิ้ง — เฉพาะชิ้นที่ server ยืนยัน)
+                const eqIdx = equipmentList.indexOf(itemId);
+                if (eqIdx >= 0) equipmentList.splice(eqIdx, 1);
+                invDataVer++;
                 break;
               }
             }
@@ -1945,6 +1966,22 @@
         }
       }
       // ★ sub อื่น ๆ → ไม่ track (protocol.js:1265 ทิ้ง)
+    }
+    // 0x30 EQUIP_CHANGE (IN): [30][invIdx:1][4e 00 00][equipSlot:1][res:1] — ผลการสวมใส่/ถอด
+    //   ★ capture 18 ครั้ง: slot นิ่งต่อชนิดของ — 4=อาวุธ (Chain/Masamune), 7=รองเท้า (Boots)
+    //   ★ ชุด equipment รวม (สวมใส่+ในถุง) ไม่เปลี่ยน → equipmentList ไม่ต้องแก้
+    //     ตามมาเสมอด้วย 0x31 (stat) + 0x38 resend (น้ำหนัก+inventory แม่น)
+    else if (op === 0x30 && u.length >= 7 && u[2] === 0x4e) {
+      const invIdx = u[1], eqSlot = u[5];
+      const slotName = ({ 0: 'เสื้อ', 1: 'หมวก', 2: 'หมวกกลาง', 3: 'หมวกล่าง', 4: 'อาวุธ', 5: 'โล่', 6: 'ผ้าคลุม', 7: 'รองเท้า', 8: 'แหวน', 9: 'แหวน 2' })[eqSlot] || ('slot ' + eqSlot);
+      const o = lastOutEquip;
+      // ★ จับคู่ด้วย idx — การสวมใส่ "แทนที่" มาเป็นคู่ (ชิ้นเก่าถอด idx อื่น + ชิ้นใหม่ใส่ idx ตรงกับ OUT)
+      if (o && o.idx === invIdx && Date.now() - o.at < 3000) {
+        log(o.action === 1 ? ('⚔️ สวมใส่ → ' + slotName) : ('🧤 ถอด ' + slotName), '(inv#' + invIdx + ')');
+        lastOutEquip = null;
+      } else {
+        dbg('⚔️ equip-change slot ' + eqSlot + ' (inv#' + invIdx + ')');
+      }
     }
     // 0x20 SYS_MESSAGE: detect "too full" → inventoryFull (mirror world.js:264-279)
     else if (op === 0x20 && u.length >= 2) {
@@ -2045,12 +2082,17 @@
       //   กันข้อผิดพลาด: เพดาน id ≤ 12000 (ของจริงสูงสุด 7033) + ตัด phantom (id<100 แต่ count>500)
       //   ยืนยัน: ว่าง [] · 502×1 · 502×1+507×2 · testmage 55 ชนิด 1397 ชิ้น 3147.8/3820 ✓ 4/4
       for (let i = 10; i < u.length - 16; i++) {
-        if ((u[i] !== 0x01 && u[i] !== 0x02) || u[i+1] || u[i+2] || u[i+3]) continue;
+        // ★ byte แรก = count/type — เจอได้ทั้ง 01/02 (เข้าแมป) และ 06/08 (resend หลังสวมใส่/ถอด/คาฟรา)
+        //   → รับ 0x01-0x20 (ไม่รับ 0 = กันตัดเข้าก้อน stat ที่เป็นเลข 0)
+        if (u[i] < 0x01 || u[i] > 0x20 || u[i+1] || u[i+2] || u[i+3]) continue;
         const _mw = u32(u, i + 4);
         if (_mw % 10 !== 0 || _mw < 1000 || _mw > 999990) continue;
-        if (u[i + 11] !== 0x3f) continue;
+        // ★ f32 สัดส่วน ~0.04-0.99 → exponent byte = 3d/3e/3f (เดิมรับ 3f เท่านั้น — หลุดเคส < 0.5)
+        if (u[i + 11] < 0x3d || u[i + 11] > 0x3f) continue;
         const _cw = u16(u, i + 12);
         if (_cw > _mw) continue;   // น้ำหนักมีทศนิยม (3147.8 → 31478) ไม่เช็ค %10
+        // ★★ server ส่ง 0x38 ซ้ำทุกครั้งหลังสวมใส่/ถอด/ฝาก-ถอดคาฟรา → re-sync น้ำหนักแม่น (แก้ delta drift)
+        if (_cw / 10 !== playerWeight || _mw / 10 !== playerMaxWeight) invDataVer++;
         playerMaxWeight = _mw / 10; playerWeight = _cw / 10;
         const tryParse = (s) => {
           let p = s; const items = [];
@@ -2072,12 +2114,15 @@
           //   [inst:4 = 0x13880+i][itemId×4:4][a:2][b:2][UUID:16][slot:4][?:4][pad:4]
           //   ยืนยันจาก capture จริง 10/10 ตรงทุก id (Knife 1201 → Gladius 1220)
           // ★ หาก้อน equipment แบบอิสระ — สแกนหา 0x13880 (กันเคส inventory ว่างแต่มี equipment)
-          equipmentList.length = 0;
+          // ★★ ล้าง+สร้าง equipmentList ใหม่เฉพาะเมื่อเจอก้อน 0x13880 (มีเฉพาะตอนเข้าเกม)
+          //   0x38 resend หลังสวมใส่/ถอด/คาฟรา "ไม่มี" ก้อน equipment — ห้ามล้าง (ไม่งั้นรายการหายทั้งหมด!)
           let eqStart = -1;
           for (let q = i + 14; q < u.length - 44; q++) {
             if (u32(u, q) === 0x13880) { eqStart = q; break; }
           }
           if (eqStart >= 0) {
+            equipmentList.length = 0;
+            invDataVer++;
             let ep = eqStart;
             while (ep + 44 <= u.length) {
               const inst = u32(u, ep);
@@ -2824,6 +2869,11 @@
       }
       navBotMoving = false;   // reset flag (บอทสั่งครั้งเดียว)
     }
+    // ★ ดัก equip/unequip (0x30) ที่ client ส่ง — จำทิศทางไว้ให้ IN 0x30 ใช้
+    //   [30][invIdx:1][4e 00 00][action:1] — action 01=สวมใส่, 00=ถอด (ยืนยันจาก capture 18 ครั้ง)
+    if (u[0] === 0x30 && u.length >= 7) {
+      lastOutEquip = { idx: u[1], action: u[6], at: Date.now() };
+    }
   }
 
   // ---------- loop เก็บของ ----------
@@ -3190,6 +3240,10 @@
         const cur = inventory.get(item.itemId) || 0;
         if (cur > 1) inventory.set(item.itemId, cur - 1);
         else inventory.delete(item.itemId);
+        // ★★ ลบจาก equipmentList ด้วย — removal ของ server จะหา slot ไม่เจอแล้ว (เราลบก่อน)
+        const eqIdx = equipmentList.indexOf(item.itemId);
+        if (eqIdx >= 0) equipmentList.splice(eqIdx, 1);
+        invDataVer++;
       } else {
         inventory.delete(item.itemId);   // stackable ทั้งกอง
       }
@@ -3226,6 +3280,8 @@
   // ★★ equipmentList — อาวุธ/ชุดแยกเป็นชิ้นตามลำดับใน packet (ก้อน 0x13880 = ลำดับ slot เกม)
   const equipmentList = [];    // itemId -> count (authoritative from 0x32, mirror world.js:34)
   const equipmentSlots = new Map(); // ★ itemId -> [slotId, slotId, ...] (mirror world.js:773-777)
+  let invDataVer = 0;          // ★ version ของ inventory/equipment — bump ทุกครั้งที่ข้อมูลเปลี่ยน (modal live-refresh)
+  let lastOutEquip = null;     // ★ OUT 0x30 ล่าสุด {idx, action, at} — ให้ IN 0x30 รู้ทิศทาง สวมใส่/ถอด
   let inventoryFull = false;      // true เมื่อ server ส่ง "too full" (0x20)
   let sellState = 'IDLE';         // IDLE|WARP_TO_NPC|MOVE_TO_NPC|TALK|SELECT_SELL|SELL|WARP_BACK
   let sellNpcRetryAt = 0;         // ★ NPC retry — กัน abort ทันทีเมื่อ entities โหลดช้า
@@ -7143,7 +7199,7 @@
     root.querySelector('#__assist_resetstats').addEventListener('click', () => ASSIST.resetStats());
     root.querySelector('#__assist_sellnow2').addEventListener('click', () => ASSIST.sellNow());
     root.querySelector('#__assist_clearinv').addEventListener('click', () => {
-      inventory.clear(); equipmentSlots.clear();
+      inventory.clear(); equipmentSlots.clear(); equipmentList.length = 0; invDataVer++;
       log('🎒 ล้างรายการของที่เก็บได้แล้ว');
     });
     root.querySelector('#__assist_exportall').addEventListener('click', () => ASSIST.exportAll());
@@ -7685,14 +7741,16 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
           </div>
           <div id="__assist_inv_grid" style="flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(10,1fr);gap:4px;align-content:start;padding-right:4px"></div>
         </div>
-        <div id="__assist_inv_hint" style="font-size:9px;color:#666;margin-top:6px">★ Equip เรียงตามลำดับ slot เกม · คลิกช่อง: เก็บ→ขาย→ฝาก · hover ดูรายละเอียด</div>
+        <div id="__assist_inv_hint" style="font-size:9px;color:#666;margin-top:6px">★ Equip: ลำดับตอนเข้าเกม + ของใหม่ (ถอดคาฟรา/เก็บ) ต่อท้าย อัปเดตสด · คลิกช่อง: เก็บ→ขาย→ฝาก · hover ดูรายละเอียด</div>
       </div>`;
     document.body.appendChild(overlay);
     const grid = overlay.querySelector('#__assist_inv_grid');
     const cntEl = overlay.querySelector('#__assist_inv_count');
 
     function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+    let invCurTab = 'usable';
     function render(tab) {
+      invCurTab = tab;
       // ★ Equip: แยกชิ้นตามลำดับ packet (= ลำดับ slot เกม) · อื่น ๆ จาก inventory ตามหมวด
       let items;
       if (tab === 'equip') {
@@ -7778,7 +7836,19 @@ return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" d
     });
     render('usable');   // เริ่มที่ Item
 
-    const close = () => { if (tipEl) tipEl.remove(); overlay.remove(); };
+    // ★★ live refresh — ข้อมูล inventory/equipment เปลี่ยน (เก็บของ/ฝาก/ถอดคาฟรา/สวมใส่ ฯลฯ)
+    //   → render ใหม่เองภายใน 1s (คง scroll ไว้) — เปิด popup ทิ้งไว้ดู real-time ได้
+    let invLastVer = invDataVer;
+    const invLive = setInterval(() => {
+      if (!document.getElementById('__assist_inv_modal')) { clearInterval(invLive); return; }
+      if (invDataVer === invLastVer) return;
+      invLastVer = invDataVer;
+      const st = grid.scrollTop;
+      render(invCurTab);
+      grid.scrollTop = st;
+    }, 1000);
+
+    const close = () => { clearInterval(invLive); if (tipEl) tipEl.remove(); overlay.remove(); };
     overlay.querySelector('#__assist_inv_close').onclick = close;
     overlay.onclick = (e) => { if (e.target === overlay) close(); };
     // ★ กัน Unity ขโมย click
