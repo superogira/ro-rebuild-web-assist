@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.177.0
+// @version      4.178.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,20 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.177.0';
+  const VERSION = '4.178.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.178.0', d: '2026-08-21', items: [
+      '🔓 ตัวการสุดท้ายของ "ขาย equipment ไม่ออก" — จาก capture จริง:',
+      '   ขายสำเร็จ 5b 01 ได้ 299z จาก stackable แต่ก้อน equipment ก่อน/หลังเหมือนเป๊ะ (0 ชิ้นถูกขาย)',
+      '   เพราะ server ปิด sell dialog อัตโนมัติหลังขายสำเร็จ 1 ครั้ง (5b 01 → 38 → 4d 03)',
+      '   → แผน "แยก 2 รอบ: stackable ก่อน → equipment ทีหลัง" (ตั้งแต่ v4.150) ผิดตั้งแต่ฐาน:',
+      '     รอบ equipment ยิงใส่ dialog ที่ปิดไปแล้ว หายเงียบ ๆ ทุกครั้ง!',
+      '   (ส่วนที่ v4.150 เคยโดนปฏิเสธก้อนปน = บั๊ก slot ตำแหน่ง ซึ่งแก้แล้ว v4.177 — ตัวเกม',
+      '    เองก็ขาย 17 ชิ้นรวมก้อนเดียวมาแล้ว)',
+      '→ ตอนนี้: ส่งก้อนเดียวรวม stackable + equipment ทั้งหมดใน 0x57 เดียว',
+      '   + ถ้าล้มเหลว ลองซ้ำ 1 รอบโดย equipment อ้าง itemId ตรง ๆ แทน slot',
+    ]},
     { v: '4.177.0', d: '2026-08-21', items: [
       '🔓🔓 ไข้ปริศนาขาย equipment สำเร็จด้วย capture ตัวเกมจริง — ต้นเหตุเดียว 2 อาการ:',
       '   ★ ตัวเกมขายด้วย format เดียวกับเราเป๊ะ (0x57 + slot 20000+N เรียงสูง→ต่ำ → 5b 01 สำเร็จ)',
@@ -2785,11 +2796,12 @@
         if (msg.includes('could not complete sale') || msg.includes('do not match')) {
           // sell failed signal — ★★ จบเลย ไม่รอ timeout 15s (เดิมแค่ log แล้วค้างใน state SELL)
           if (sellState === 'SELL') {
-            // ★★ equipment โดนปฏิเสธแบบ slot id → ลองส่งแบบ itemId ตรง ๆ รอบเดียว (เหมือนช่องทาง 0x5b)
+            // ★★ ล้มเหลว → ลองส่งซ้ำ 1 รอบแบบ equipment อ้าง itemId ตรง ๆ (เหมือนช่องทาง 0x5b)
             if (pendingSellEquip.length > 0 && !sellEqRetryMode) {
               sellEqRetryMode = true;
-              log('🔁 ขาย equipment ด้วย slot id ไม่ผ่าน (server ปฏิเสธ) → ลองส่งแบบ itemId ตรง ๆ', pendingSellEquip.length, 'ชิ้น');
-              sendSellItems(pendingSellEquip.map(i => ({ itemId: i.realId, count: 1 })));
+              const retryItems2 = (lastSellSentItems && lastSellSentItems.length ? lastSellSentItems : []).map(i => i.realId == null ? i : { itemId: i.realId, count: 1 });
+              log('🔁 ขายไม่ผ่าน (server ปฏิเสธ) → ลองส่งใหม่โดย equipment อ้าง itemId ตรง ๆ', pendingSellEquip.length, 'ชิ้น');
+              sendSellItems(retryItems2);
               sellStateAt = nowMs();   // รอผลรอบลองใหม่ (ยังอยู่ state SELL)
               return;
             }
@@ -3159,16 +3171,25 @@
         sellState = 'WARP_BACK'; sellStateAt = nowMs();
       } else {
         pendingSellEquip = eqItems; sellEqRetryMode = false;
-        const first = stackItems.length > 0 ? stackItems : eqItems;
-        // ★ มีแต่ equipment (ไม่มี stackable) → ส่งรอบเดียวจบ ห้ามส่งซ้ำรอบสอง
-        if (stackItems.length === 0) sellEquipRoundSent = true;
-        log('💰 ขายของ', first.length, 'รายการ' + (stackItems.length > 0 && eqItems.length > 0 ? ' (+' + eqItems.length + ' equipment รอบถัดไป)' : '') + ':',
-            first.map(i => {
+        // ★★★ ส่ง "ก้อนเดียวรวมทุกอย่าง" — capture ยืนยัน: server ปิด sell dialog อัตโนมัติ
+        //   หลังขายสำเร็จ 1 ครั้ง (5b 01 → 38 resend → 4d 03 close) → แบ่ง 2 รอบแบบเดิม
+        //   คือรอบ equipment ยิงใส่ dialog ที่ปิดไปแล้ว หายเงียบ ๆ
+        //   (เคสจริง: ขาย stackable ได้ 299z แต่ equipment 0 ชิ้น ทั้งที่ slot ถูกต้อง)
+        //   ส่วน v4.150 เคยโดนปฏิเสธก้อนปน คือ slot id เพี้ยนจากบั๊กตำแหน่ง (แก้แล้ว v4.177)
+        //   ไม่ใช่เพราะปนกัน — ตัวเกมเองก็ขาย 17 ชิ้นรวมก้อนเดียวมาแล้ว
+        sellEquipRoundSent = true;   // ไม่มีรอบสองอีกต่อไป
+        const all = [
+          ...stackItems,
+          ...eqItems.map(e => ({ itemId: e.itemId, realId: e.realId, count: 1 })),
+        ];
+        lastSellSentItems = all;
+        log('💰 ขายของ', all.length, 'รายการ' + (stackItems.length > 0 && eqItems.length > 0 ? ' (' + stackItems.length + ' stackable + ' + eqItems.length + ' equipment)' : '') + ':',
+            all.map(i => {
               if (i.realId == null) return nameOf(i.itemId) + '×' + i.count;
               const rec = equipmentList.find(x => x.id === i.realId);
               return (rec ? equipDisplayName(rec) : nameOf(i.realId)) + ' (slot ' + i.itemId + ')';
             }).join(', '));
-        sendSellItems(first);
+        sendSellItems(all);
         sellState = 'SELL'; sellStateAt = nowMs();
       }
     }
@@ -3176,16 +3197,8 @@
     else if (op === 0x5b && u.length >= 2 && sellState === 'SELL') {
       log('📥 SELL_RESULT:', Array.from(u).map(b => b.toString(16).padStart(2, '0')).join(' '));
       if (u[1] > 0) {
-        // ★★ รอบ stackable สำเร็จ + มี equipment ค้าง → ส่งรอบสอง (แยก packet)
-        //   ★ ห้ามเมื่อกำลังอยู่รอบ retry แบบ itemId (มิจะส่งซ้ำ)
-        if (pendingSellEquip.length > 0 && !sellEquipRoundSent && !sellEqRetryMode) {
-          log('✅ ขาย stackable สำเร็จ! → ขาย equipment ต่อ', pendingSellEquip.length, 'ชิ้น');
-          sellEquipRoundSent = true;
-          sendSellItems(pendingSellEquip.map(i => ({ itemId: i.itemId, count: 1 })));
-          sellState = 'SELL'; sellStateAt = nowMs();   // รอ 0x5b รอบสอง
-          return;
-        }
-        log('✅ ขายของสำเร็จ!' + (sellEquipRoundSent ? ' (รวม equipment)' : ''));
+        // ★★ ไม่มีรอบสอง — server ปิด dialog อัตโนมัติหลังขายสำเร็จ (capture: 5b 01 → 38 → 4d 03)
+        log('✅ ขายของสำเร็จ!' + (pendingSellEquip.length > 0 ? ' (รวม equipment ' + pendingSellEquip.length + ' ชิ้น)' : ''));
         // ล้าง inventory tracking ของ sold items (mirror bot.js:1767)
         for (const id of CFG.sellItemIds) inventory.delete(id);
         for (const eq of pendingSellEquip) {
@@ -3216,16 +3229,17 @@
           }
         }
       } else {
-        // ★★ equipment โดนปฏิเสธแบบ slot id → ลองส่งแบบ itemId ตรง ๆ รอบเดียว
+        // ★★ ล้มเหลว → ลองส่งซ้ำ 1 รอบ: รายการเดิมทั้งก้อน แต่ equipment อ้าง itemId ตรง ๆ แทน slot id
         //   (ปลอดภัย: itemId = ชนิดเดียวกับที่ mark ขายไว้ — server เลือก instance เอง)
         if (pendingSellEquip.length > 0 && !sellEqRetryMode) {
           sellEqRetryMode = true;
-          log('🔁 ขาย equipment ด้วย slot id ไม่ผ่าน → ลองส่งแบบ itemId ตรง ๆ', pendingSellEquip.length, 'ชิ้น');
-          sendSellItems(pendingSellEquip.map(i => ({ itemId: i.realId, count: 1 })));
+          const retryItems = (lastSellSentItems && lastSellSentItems.length ? lastSellSentItems : []).map(i => i.realId == null ? i : { itemId: i.realId, count: 1 });
+          log('🔁 ขายไม่ผ่าน (SELL_RESULT flag=0) → ลองส่งใหม่โดย equipment อ้าง itemId ตรง ๆ', pendingSellEquip.length, 'ชิ้น');
+          sendSellItems(retryItems);
           sellState = 'SELL'; sellStateAt = nowMs();   // รอผลรอบลองใหม่
           return;
         }
-        log('⚠️ ขายของล้มเหลว (SELL_RESULT flag=0)' + (sellEquipRoundSent ? ' — รอบ equipment (stackable ขายไปแล้ว)' : ''));
+        log('⚠️ ขายของล้มเหลว (SELL_RESULT flag=0)' + (pendingSellEquip.length > 0 ? ' — ลอง itemId ตรง ๆ แล้วก็ไม่ผ่าน' : ''));
         pendingSellEquip = []; sellEquipRoundSent = false; sellEqRetryMode = false;
         sendSellClose();   // ★★ ปิด dialog ก่อน warp
       }
@@ -3900,6 +3914,7 @@
   let pendingSellEquip = [];     // ★ equipment รอขายรอบสอง (แยก packet กัน server ปฏิเสธทั้งก้อน)
   let sellEquipRoundSent = false;
   let sellEqRetryMode = false;   // ★ true = รอบลองส่ง equipment แบบ itemId ตรง ๆ (slot id โดนปฏิเสธ — ไม่เคยสำเร็จเลยตั้งแต่ v4.150)
+  let lastSellSentItems = [];    // ★ รายการที่ส่งล่าสุด (สำหรับ retry เปลี่ยน equipment เป็น itemId)
   function abortSell(reason) {
     log('⚠️ ยกเลิกขาย:', reason);
     sellState = 'IDLE'; sellStateAt = 0;
