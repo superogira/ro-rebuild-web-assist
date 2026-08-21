@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.173.1
+// @version      4.174.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,15 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.173.1';
+  const VERSION = '4.174.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.174.0', d: '2026-08-21', items: [
+      '🛡️ guard เลขเวอร์ชั่น — เช็คตอน checkVersion:',
+      '   1. @version ที่ Tampermonkey รายงาน (GM_info) ไม่ตรง const VERSION → เตือนทันที',
+      '   2. @version บน GitHub ต่ำกว่า VERSION ที่รัน → เตือน (header ค้าง หรือยังไม่ push)',
+      '   (เคยพลาดจริง 2 ครั้ง — ผู้ใช้ไม่ได้รับอัปเดตทั้งที่เลขใน UI ขึ้นใหม่แล้ว)',
+    ]},
     { v: '4.173.1', d: '2026-08-21', items: [
       '📊 แท็บสถิติ "มอน (ตี/aggro/รอบ)" ตัดค่า threat ทิ้ง — เหลือ 3 ค่าตรงชื่อแถว',
       '   (threat = max(aggro, มอนรอบ) ซ้ำซ้อน และหลังแก้ flee แล้วไม่ได้ถูกใช้คุบอะไร)',
@@ -10068,6 +10074,7 @@ return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" d
   let lastVersionCheckAt = 0;
   let latestVersion = null;          // เวอร์ชั่นล่าสุดจาก GitHub (null = ยังไม่ได้เช็ค)
   let updateChecking = false;
+  let versionMismatchWarned = false; // ★ guard @version vs VERSION — เตือนครั้งเดียวพอ
   function parseVersionFromHeader(src) {
     const m = src.match(/@version\s+([\d.]+)/);
     return m ? m[1] : null;
@@ -10084,6 +10091,15 @@ return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" d
     if (updateChecking) return;
     updateChecking = true;
     try {
+      // ★★ guard: @version ใน header (ตัวที่ Tampermonkey/self-updater ใช้) ต้องตรง const VERSION
+      //   เคยพลาดจริง 2 ครั้ง: const VERSION ค้าง 4.147.1 / @version ค้าง 4.172.0 — ถ้าไม่ตรง
+      //   ผู้ใช้จะไม่มีวันได้รับอัปเดตทั้งที่เลขใน UI ขึ้นใหม่แล้ว
+      const _hdrVer = (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) ? GM_info.script.version : null;
+      if (_hdrVer && _hdrVer !== VERSION && !versionMismatchWarned) {
+        versionMismatchWarned = true;
+        log('⚠️ @version ใน header =', _hdrVer, 'ไม่ตรง VERSION =', VERSION, '— ลืมอัปเดต header ก่อนปล่อย!');
+        console.warn('[ASSIST] ⚠️ @version (' + _hdrVer + ') != VERSION (' + VERSION + ') — อัปเดตให้ตรงกันก่อนปล่อย!');
+      }
       const res = await fetch(GITHUB_RAW, { cache: 'no-store' });
       if (!res.ok) return;
       const src = await res.text();
@@ -10092,6 +10108,10 @@ return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" d
         latestVersion = remote;
         if (cmpVer(remote, VERSION) > 0) {
           log('🔔 มีเวอร์ชั่นใหม่!', VERSION, '→', remote, '(กดปุ่ม ⬆ อัปเดต หรือ ASSIST.update())');
+        } else if (remote !== VERSION && !versionMismatchWarned) {
+          // ★ @version บน GitHub ต่ำกว่า VERSION ที่รันอยู่ = header ค้าง (หรือยังไม่ push)
+          versionMismatchWarned = true;
+          log('⚠️ @version บน GitHub =', remote, 'ต่ำกว่า VERSION =', VERSION, '— ลืมอัปเดต @version หรือยังไม่ push!');
         } else {
           log('✅ เวอร์ชั่นล่าสุดแล้ว (' + VERSION + ')');
         }
