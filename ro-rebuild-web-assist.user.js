@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.178.0
+// @version      4.179.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,18 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.178.0';
+  const VERSION = '4.179.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.179.0', d: '2026-08-21', items: [
+      '👤 ใหม่! Profile การตั้งค่า — สร้าง/สลับ/ลบ ชุด config ได้หลายชุด',
+      '   เหมาะกับ: บอทหลายตัวต่างบัญชี (รวม auto-login) หรือสไตล์เล่นต่างกัน',
+      '   อยู่ใน Sub-tab เดียวกับ export/import: เลือก profile (● = กำลังใช้) ·',
+      '   "บันทึกเป็น" = สร้างใหม่/ทับ · "ใช้ตัวนี้" = เซฟของเดิมอัตโนมัติก่อนสลับ',
+      '   · สลับแบบแทนที่ทั้งชุด (key ที่ไม่มีในชุดใหม่ = กลับ default ไม่ค้างจากชุดเดิม)',
+      '   API: ASSIST.listProfiles / saveProfileAs / switchProfile / deleteProfile',
+      '   (buff/skill times + nav data ใช้ร่วมกันทุก profile)',
+    ]},
     { v: '4.178.0', d: '2026-08-21', items: [
       '🔓 ตัวการสุดท้ายของ "ขาย equipment ไม่ออก" — จาก capture จริง:',
       '   ขายสำเร็จ 5b 01 ได้ 299z จาก stackable แต่ก้อน equipment ก่อน/หลังเหมือนเป๊ะ (0 ชิ้นถูกขาย)',
@@ -1028,6 +1037,26 @@
   }
 
   // ============================================================
+  //  PROFILE — ชุดการตั้งค่าแยกหลายชุด (บอทหลายตัว / สไตล์เล่นต่างกัน)
+  //    เก็บ snapshot ของ PERSIST_KEYS ทั้งหมด รวม auto-login (แต่ละบอท = คนละบัญชี)
+  //    roAssistProfiles_v1 = { ชื่อ: {config} } · roAssistActiveProfile = ชื่อที่ใช้อยู่
+  // ============================================================
+  const PROFILES_KEY = 'roAssistProfiles_v1';
+  const PROFILE_ACTIVE_KEY = 'roAssistActiveProfile';
+  function loadProfilesObj() { try { return JSON.parse(localStorage.getItem(PROFILES_KEY)) || {}; } catch (e) { return {}; } }
+  function saveProfilesObj(obj) { try { localStorage.setItem(PROFILES_KEY, JSON.stringify(obj)); } catch (e) {} }
+  function buildPersistObject() {
+    const out = {};
+    for (const k of PERSIST_KEYS) if (k in CFG) out[k] = CFG[k];
+    const sortNum = (arr) => Array.isArray(arr) ? [...arr].sort((a, b) => a - b) : arr;
+    if (out.healItems) out.healItems = sortNum(out.healItems);
+    if (out.sellItemIds) out.sellItemIds = sortNum(out.sellItemIds);
+    if (out.depositItemIds) out.depositItemIds = sortNum(out.depositItemIds);
+    if (out.buffItems && Array.isArray(out.buffItems)) out.buffItems = [...out.buffItems].sort((a, b) => a.itemId - b.itemId);
+    return out;
+  }
+
+  // ============================================================
   //  AUTO-BUFF persistence — เก็บเวลาใช้ buff ล่าสุดข้าม session
   //    (mirror bot.js:207-231 serializeUseTimes)
   //    กัน buff หายเมื่อ refresh หน้าเว็บ → บัพจะใช้ใหม่ทันทีถ้าหมดเวลา
@@ -1475,6 +1504,9 @@
     },
   };
 
+  // ★★ snapshot ค่า default ของ CFG ไว้ก่อนโหลดค่าจริง — สำหรับสลับ profile แบบ "แทนที่ทั้งชุด"
+  //   (key ที่ profile ใหม่ไม่มี = กลับไป default ไม่ใช่ค้างจาก profile เดิม)
+  const CFG_DEFAULTS = JSON.parse(JSON.stringify(CFG));
   // ★ โหลดค่าที่บันทึกไว้จาก localStorage (ทับ default)
   loadConfig();
   loadBuffTimes();   // ★ โหลดเวลา buff ล่าสุดข้าม session
@@ -6719,6 +6751,51 @@
 
     // ---------- Full export/import (ย้ายเครื่อง) ----------
     //  รวม: config + buff times + skill times + nav data
+    // ---------- Profile — ชุดการตั้งค่าแยกหลายชุด ----------
+    activeProfile() { try { return localStorage.getItem(PROFILE_ACTIVE_KEY) || 'default'; } catch (e) { return 'default'; } },
+    listProfiles() {
+      const obj = loadProfilesObj();
+      const names = Object.keys(obj);
+      const cur = this.activeProfile();
+      if (!names.includes(cur)) names.unshift(cur);
+      names.sort((a, b) => (a === cur ? -1 : b === cur ? 1 : a.localeCompare(b)));
+      return names;
+    },
+    saveProfileAs(name) {
+      name = String(name || '').trim();
+      if (!name) { log('⚠️ กรุณาใส่ชื่อ profile ก่อนบันทึก'); return false; }
+      const obj = loadProfilesObj();
+      const existed = !!obj[name];
+      obj[name] = buildPersistObject();
+      saveProfilesObj(obj);
+      log(existed ? '💾 บันทึกทับ profile "' + name + '" (' + Object.keys(obj[name]).length + ' รายการ)'
+                  : '💾 สร้าง profile "' + name + '" จากค่าปัจจุบัน');
+      return true;
+    },
+    switchProfile(name) {
+      const obj = loadProfilesObj();
+      const target = obj[name];
+      if (!target) { log('⚠️ ไม่พบ profile:', name, '— สร้างก่อนด้วย "บันทึกเป็น"'); return false; }
+      const cur = this.activeProfile();
+      if (name === cur) { log('ℹ️ กำลังใช้ profile "' + name + '" อยู่แล้ว'); return false; }
+      obj[cur] = buildPersistObject();   // ★ เซฟของเดิมเข้าชื่อปัจจุบันก่อนสลับ (กันของหาย)
+      saveProfilesObj(obj);
+      // ★ แทนที่ทั้งชุด: key ที่ profile ใหม่ไม่มี = กลับ default (ไม่ค้างจากชุดเดิม)
+      for (const k of PERSIST_KEYS) CFG[k] = (k in target) ? target[k] : (k in CFG_DEFAULTS ? CFG_DEFAULTS[k] : CFG[k]);
+      try { localStorage.setItem(PROFILE_ACTIVE_KEY, name); } catch (e) {}
+      saveConfig();
+      log('🔄 สลับ profile:', cur, '→', name, '· (ค่าเดิมเซฟไว้ใน "' + cur + '" แล้ว — แนะนำปิด-เปิด panel ให้ช่องตั้งค่าแสดงค่าใหม่)');
+      return true;
+    },
+    deleteProfile(name) {
+      const obj = loadProfilesObj();
+      if (!obj[name]) { log('⚠️ ไม่พบ profile:', name); return false; }
+      if (name === this.activeProfile()) { log('⚠️ ห้ามลบ profile ที่กำลังใช้อยู่ — สลับไปตัวอื่นก่อน'); return false; }
+      delete obj[name];
+      saveProfilesObj(obj);
+      log('🗑 ลบ profile "' + name + '" แล้ว');
+      return true;
+    },
     exportAll() {
       const data = { _version: VERSION, _exportedAt: new Date().toISOString() };
       const cfg = {};
@@ -7787,6 +7864,15 @@
             </div>
             <div id="__assist_navstats" style="font-size:10px;color:#9aa0a6;margin-top:4px;line-height:1.6">(ยังไม่มีข้อมูล)</div>
             <div style="font-size:10px;color:#9aa0a6;margin-top:4px;">★ เปิด 'บันทึก' แล้วเดินเก็บข้อมูลในแมปที่ต้องการ ปิดเมื่อเสร็จ<br>★ wander จะใช้ waypoint graph แทนสุ่ม (ถ้ามีข้อมูลแมปนั้น)</div>
+            <h4>👤 Profile การตั้งค่า</h4>
+            <div class="field"><label>เลือก profile (● = กำลังใช้)</label><select id="__assist_profile_sel"></select></div>
+            <div class="field"><label>ชื่อ profile สำหรับ "บันทึกเป็น" (ใหม่ หรือทับของเดิม)</label><input type="text" id="__assist_profile_name" placeholder="เช่น บอทบัพ, บอทฟาร์ม"></div>
+            <div class="btns">
+              <button id="__assist_profile_save">💾 บันทึกเป็น</button>
+              <button id="__assist_profile_use">🔄 ใช้ตัวนี้</button>
+              <button id="__assist_profile_del">🗑 ลบ</button>
+            </div>
+            <div style="font-size:10px;color:#9aa0a6;margin-top:4px;">★ บันทึกเป็น: ใช้ชื่อในช่องข้อความ (ว่าง = ทับตัวที่เลือก)<br>★ สลับ: เซฟของเดิมอัตโนมัติก่อนโหลดชุดใหม่ (รวม auto-login)<br>★ buff/skill times + nav data ใช้ร่วมกันทุก profile</div>
             <h4>📤 สำรอง / ย้ายเครื่อง</h4>
             <div class="btns">
               <button id="__assist_exportall">📤 export ทั้งหมด</button>
@@ -8579,6 +8665,26 @@
     root.querySelector('#__assist_clearinv').addEventListener('click', () => {
       inventory.clear(); equipmentSlots.clear(); equipmentList.length = 0; sessionPickups.clear(); invDataVer++;
       log('🎒 ล้างรายการของที่เก็บได้แล้ว');
+    });
+    // ★ Profile — สร้าง/สลับ/ลบ ชุดการตั้งค่า
+    const _profSel = root.querySelector('#__assist_profile_sel');
+    const _profName = root.querySelector('#__assist_profile_name');
+    function refreshProfileSel() {
+      if (!_profSel) return;
+      const cur = ASSIST.activeProfile();
+      _profSel.innerHTML = ASSIST.listProfiles().map(n =>
+        '<option value="' + n.replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '"' + (n === cur ? ' selected' : '') + '>' + (n === cur ? '● ' : '') + n.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</option>').join('');
+    }
+    refreshProfileSel();
+    root.querySelector('#__assist_profile_save').addEventListener('click', () => {
+      const n = ((_profName && _profName.value) || (_profSel && _profSel.value) || '').trim();
+      if (ASSIST.saveProfileAs(n)) { if (_profName) _profName.value = ''; refreshProfileSel(); }
+    });
+    root.querySelector('#__assist_profile_use').addEventListener('click', () => {
+      if (ASSIST.switchProfile(_profSel.value)) refreshProfileSel();
+    });
+    root.querySelector('#__assist_profile_del').addEventListener('click', () => {
+      if (ASSIST.deleteProfile(_profSel.value)) refreshProfileSel();
     });
     root.querySelector('#__assist_exportall').addEventListener('click', () => ASSIST.exportAll());
     root.querySelector('#__assist_importall').addEventListener('click', () => {
