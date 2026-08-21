@@ -227,6 +227,7 @@ const CHAT_HISTORY_FILE = path.join(__dirname, 'chat-history.json');
 const CHAT_HISTORY_MAX = 10000;
 const CHAT_SEND_MAX = 100;   // ส่งให้ client สูงสุด 100 ข้อความล่าสุด
 let chatHistory = [];
+let chatMsgSeq = 0;   // ★ นับรันข้อความ — ใช้ทำ id เฉพาะตัว (สำหรับ reaction)
 try {
   chatHistory = JSON.parse(fs.readFileSync(CHAT_HISTORY_FILE, 'utf8'));
   if (!Array.isArray(chatHistory)) chatHistory = [];
@@ -557,7 +558,8 @@ wss.on('connection', (ws, req) => {
       const entry = ws.playerId ? bots.get(ws.playerId) : null;
       const botName = cleanPlayerName(entry?.lastData?.player?.name) || ws.playerName || '';
       const version = entry?.lastData?.version || '';
-      const msgObj = { t: Date.now(), displayName, botName, version, text, attachment };
+      // ★★ id เฉพาะตัวของข้อความ — reaction อ้างอิงด้วยตัวนี้ (ข้อความเก่าก่อนมีระบบจะไม่มี id)
+      const msgObj = { id: Date.now() + '-' + (++chatMsgSeq), t: Date.now(), displayName, botName, version, text, attachment };
       // ★★ replyTo — อ้างอิงข้อความเดิม (quote reply)
       if (msg.replyTo && typeof msg.replyTo === 'object' && msg.replyTo.displayName) {
         msgObj.replyTo = { displayName: String(msg.replyTo.displayName).slice(0, 30), text: String(msg.replyTo.text || '').slice(0, 100) };
@@ -567,6 +569,28 @@ wss.on('connection', (ws, req) => {
       saveChatHistory();
       broadcastToAll({ type: 'roomMessage', message: msgObj });
       log(`🗨️ RoomChat [${displayName}] (${botName || ws.role}): ${attachment ? '[📎 ' + attachment.type + ']' : ''} ${text.slice(0, 60)}`);
+      return;
+    }
+    // ★★ roomReact — reaction ข้อความ: toggle ต่อคนต่ออีโมจิ (ใครกดได้ทั้งข้อตัวเองและคนอื่น)
+    //   reactions ฝังใน message object เลย → persist ไปกับ chat-history.json อัตโนมัติ
+    if (msg.type === 'roomReact') {
+      const id = String(msg.id || '');
+      const emoji = String(msg.emoji || '').slice(0, 16).trim();
+      const name = String(msg.name || 'ผู้ไม่ประสงค์ออกนาม').trim().slice(0, 30);
+      const add = msg.add !== false;
+      if (!id || !emoji) return;
+      const m = chatHistory.find(x => x.id === id);
+      if (!m) return;   // ข้อความเก่าไม่มี id / ถูก rotate ไปแล้ว → เงียบ
+      if (!m.reactions || typeof m.reactions !== 'object') m.reactions = {};
+      let names = Array.isArray(m.reactions[emoji]) ? m.reactions[emoji] : [];
+      if (add) { if (!names.includes(name)) names.push(name); }
+      else names = names.filter(n => n !== name);
+      if (names.length) m.reactions[emoji] = names; else delete m.reactions[emoji];
+      if (!Object.keys(m.reactions).length) delete m.reactions;
+      saveChatHistory();
+      // ★ ส่ง reactions ล่าสุดทั้งชุดของข้อความนี้ → client แทนที่ตรง ๆ (กัน drift)
+      broadcastToAll({ type: 'roomReact', id, emoji, name, add, reactions: m.reactions || {} });
+      log(`🗨️ Reaction [${name}] ${add ? '+' : '-'}${emoji} → msg ${id}`);
       return;
     }
   });

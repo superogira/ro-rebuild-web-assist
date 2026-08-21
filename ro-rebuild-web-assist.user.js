@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.179.0
+// @version      4.180.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,18 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.179.0';
+  const VERSION = '4.180.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.180.0', d: '2026-08-21', items: [
+      '😀 ใหม่! รีแอ็กชั่นข้อความแชท — ในห้องแชท UI script และ remote monitor:',
+      '   ปุ่ม 🙂+ ท้ายข้อความ → เลือกอีโมจิ (👍❤️😂😮😢🔥🎉🙏) กดได้ทั้งข้อตัวเองและคนอื่น',
+      '   chip รีแอ็กชั่นแสดงมุมขวาล่างข้อความ: อีโมจิ + จำนวนคน · hover ดูรายชื่อ',
+      '   · ตัวที่เรากดอยู่ = ขอบฟ้า · คลิก chip ซ้ำ = ยกเลิกของเรา',
+      '   sync ทุก client ทันทีผ่าน relay (roomReact) · เก็บถาวรไปกับ chat-history.json',
+      '   ★ ต้องรีสตาร์ท relay server ก่อน (เพิ่ม id ข้อความ + handler roomReact)',
+      '   ข้อความเก่าก่อนอัปเดตไม่มี id → กด reaction ไม่ได้ (เฉพาะข้อใหม่)',
+    ]},
     { v: '4.179.0', d: '2026-08-21', items: [
       '👤 ใหม่! Profile การตั้งค่า — สร้าง/สลับ/ลบ ชุด config ได้หลายชุด',
       '   เหมาะกับ: บอทหลายตัวต่างบัญชี (รวม auto-login) หรือสไตล์เล่นต่างกัน',
@@ -9026,6 +9035,49 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
     };
     reader.readAsDataURL(file);
   }
+  // ★★ Chat Reaction — ชื่อ emoji ที่เราใช้ reaction ข้อความ (ใครกดได้ทั้งของตัวเองและคนอื่น)
+  const CHAT_REACT_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '🙏'];
+  function chatMyName() {
+    const nameEl = document.getElementById('__assist_chatroom_name');
+    if (nameEl && nameEl.value.trim()) return nameEl.value.trim();
+    try { return localStorage.getItem('roAssistChatName') || ''; } catch (_) { return ''; }
+  }
+  function chatMsgKey(m) { return m.id || ('t' + m.t); }
+  function sendRoomReact(id, emoji, add) {
+    if (!relayWs || relayWs.readyState !== 1) return;
+    const displayName = chatMyName() || 'ผู้ใช้';
+    try { relayWs.send(JSON.stringify({ type: 'roomReact', id, emoji, name: displayName, add: !!add })); } catch (_) {}
+  }
+  function showChatReactPicker(btn) {
+    document.querySelectorAll('.__assist_react_picker').forEach(p => p.remove());
+    const mid = btn.dataset.mid;
+    const picker = document.createElement('div');
+    picker.className = '__assist_react_picker';
+    picker.style.cssText = 'position:fixed;z-index:1000002;background:#1a1a2e;border:1px solid #3a3f4b;border-radius:8px;padding:4px;display:flex;gap:2px;box-shadow:0 4px 12px rgba(0,0,0,.6)';
+    for (const emo of CHAT_REACT_EMOJIS) {
+      const b = document.createElement('button');
+      b.textContent = emo;
+      b.style.cssText = 'background:none;border:none;font-size:16px;cursor:pointer;padding:2px 4px;border-radius:4px;font-family:inherit';
+      b.onmouseenter = () => b.style.background = '#2a3a4a';
+      b.onmouseleave = () => b.style.background = 'none';
+      b.onclick = (ev) => {
+        ev.stopPropagation();
+        const m = chatMessages.find(x => chatMsgKey(x) === mid);
+        const mine = !!(m && m.reactions && Array.isArray(m.reactions[emo]) && m.reactions[emo].includes(chatMyName()));
+        sendRoomReact(mid, emo, !mine);   // toggle: กดซ้ำ = ยกเลิก
+        picker.remove();
+      };
+      picker.appendChild(b);
+    }
+    document.body.appendChild(picker);
+    const r = btn.getBoundingClientRect();
+    picker.style.left = Math.max(4, Math.min(r.left, innerWidth - 270)) + 'px';
+    picker.style.top = (r.top - 40 < 8 ? r.bottom + 4 : r.top - 40) + 'px';
+    setTimeout(() => {
+      const closer = (ev) => { if (!picker.contains(ev.target)) { picker.remove(); document.removeEventListener('mousedown', closer); } };
+      document.addEventListener('mousedown', closer);
+    }, 0);
+  }
   function renderChatRoomMessages(modal) {
     const box = modal.querySelector('#__assist_chatroom_msgs');
     if (!box) return;
@@ -9057,9 +9109,30 @@ setInterval(()=>{if(last&&Date.now()-last.t>5000){document.getElementById('dot')
       }
       // ★★ reply button
       const replyBtn = `<button class="__assist_reply_btn" data-reply-name="${encodeURIComponent(name)}" data-reply-text="${encodeURIComponent(text)}" style="background:none;border:none;color:#666;font-size:10px;cursor:pointer;padding:0 2px;opacity:.6" title="ตอบกลับ">↩</button>`;
-      return `<div style="margin-bottom:6px">${replyHtml}<span style="color:#666;font-size:10px">${ts}</span> <span style="color:#4fc3f7;font-weight:600">${name}</span><span style="color:#888">: </span><span style="color:#e8e8e8">${text}</span>${attachHtml} ${replyBtn}</div>`;
+      // ★★ reaction — แสดงที่มุมขวาล่างของข้อความ: chip รายการที่มี + ปุ่มเพิ่ม (เฉพาะข้อความใหม่ที่มี id)
+      const mid = chatMsgKey(m);
+      const myName = chatMyName();
+      let reactChips = '';
+      if (m.reactions && typeof m.reactions === 'object') {
+        reactChips = Object.entries(m.reactions).map(([emo, names]) => {
+          const arr = Array.isArray(names) ? names : [];
+          const mine = arr.includes(myName);
+          const tt = arr.map(n => String(n).replace(/"/g, '&quot;').replace(/</g, '&lt;')).join(', ');
+          return `<button class="__assist_react_chip" data-mid="${mid}" data-emoji="${emo}" data-mine="${mine ? 1 : 0}" title="${tt}" style="background:${mine ? '#1a2a3a' : '#23262e'};border:1px solid ${mine ? '#4fc3f7' : '#3a3f4b'};border-radius:10px;color:#ddd;font-size:10px;padding:1px 7px;cursor:pointer;font-family:inherit">${emo} ${arr.length}</button>`;
+        }).join('');
+      }
+      const reactAdd = m.id ? `<button class="__assist_react_add" data-mid="${mid}" style="background:none;border:1px dashed #3a3f4b;border-radius:10px;color:#777;font-size:10px;padding:1px 6px;cursor:pointer;font-family:inherit" title="รีแอ็กชั่น">🙂+</button>` : '';
+      const reactRow = (reactChips || reactAdd) ? `<div style="display:flex;justify-content:flex-end;gap:4px;align-items:center;flex-wrap:wrap;margin-top:2px">${reactChips}${reactAdd}</div>` : '';
+      return `<div style="margin-bottom:6px">${replyHtml}<span style="color:#666;font-size:10px">${ts}</span> <span style="color:#4fc3f7;font-weight:600">${name}</span><span style="color:#888">: </span><span style="color:#e8e8e8">${text}</span>${attachHtml} ${replyBtn}${reactRow}</div>`;
     }).join('');
     box.scrollTop = box.scrollHeight;
+    // ★★ wire reaction — คลิก chip = toggle ของเราในอีโมจินั้น · ปุ่ม 🙂+ = เลือกอีโมจิ
+    box.querySelectorAll('.__assist_react_chip').forEach(btn => {
+      btn.onclick = (e) => { e.stopPropagation(); sendRoomReact(btn.dataset.mid, btn.dataset.emoji, btn.dataset.mine !== '1'); };
+    });
+    box.querySelectorAll('.__assist_react_add').forEach(btn => {
+      btn.onclick = (e) => { e.stopPropagation(); showChatReactPicker(btn); };
+    });
     // ★★ wire image click → fullscreen modal
     box.querySelectorAll('img[data-full]').forEach(img => {
       img.onclick = () => {
@@ -9883,6 +9956,16 @@ return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" d
             const badge = document.getElementById('__assist_chatbadge');
             if (badge) { badge.textContent = chatUnread > 99 ? '99+' : chatUnread; badge.style.display = 'flex'; }
           }
+        }
+        // ★★ Chat Room — รับ reaction (broadcast): แทนที่ reactions ทั้งชุดของข้อความนั้น
+        else if (m.type === 'roomReact' && m.id) {
+          const target = chatMessages.find(x => chatMsgKey(x) === m.id);
+          if (target) {
+            if (m.reactions && Object.keys(m.reactions).length) target.reactions = m.reactions;
+            else delete target.reactions;
+          }
+          const modal = document.getElementById('__assist_chatroom_modal');
+          if (modal) renderChatRoomMessages(modal);
         }
       };
     } catch (e) {

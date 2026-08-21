@@ -1239,6 +1239,46 @@ if (m) { document.getElementById('pid-input').value = m[1]; connect(m[1]); }
   };
   document.getElementById('cr-close').onclick = () => popup.classList.remove('open');
 
+  // ★★ Chat Reaction — emoji ที่เลือกได้ + helper (ใครกดได้ทั้งข้อตัวเองและคนอื่น)
+  const REACT_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '🙏'];
+  function myName() { return (nameEl && nameEl.value.trim()) || (function(){ try { return localStorage.getItem('roMonitorChatName') || ''; } catch(_) { return ''; } })(); }
+  function msgKey(m) { return m.id || ('t' + m.t); }
+  function sendReact(id, emoji, add) {
+    if (window.__monitorWs && window.__monitorWs.readyState === 1) {
+      try { window.__monitorWs.send(JSON.stringify({ type: 'roomReact', id, emoji, name: myName() || 'ผู้ดู', add: !!add })); } catch (_) {}
+    }
+  }
+  function showReactPicker(btn) {
+    document.querySelectorAll('.cr-react-picker').forEach(p => p.remove());
+    const mid = btn.dataset.mid;
+    const picker = document.createElement('div');
+    picker.className = 'cr-react-picker';
+    picker.style.cssText = 'position:fixed;z-index:10005;background:#1a1a2e;border:1px solid #3a3f4b;border-radius:8px;padding:4px;display:flex;gap:2px;box-shadow:0 4px 12px rgba(0,0,0,.6)';
+    REACT_EMOJIS.forEach(emo => {
+      const b = document.createElement('button');
+      b.textContent = emo;
+      b.style.cssText = 'background:none;border:none;font-size:16px;cursor:pointer;padding:2px 4px;border-radius:4px;font-family:inherit';
+      b.onmouseenter = () => b.style.background = '#2a3a4a';
+      b.onmouseleave = () => b.style.background = 'none';
+      b.onclick = (ev) => {
+        ev.stopPropagation();
+        const m = chatMsgs.find(x => msgKey(x) === mid);
+        const mine = !!(m && m.reactions && Array.isArray(m.reactions[emo]) && m.reactions[emo].includes(myName()));
+        sendReact(mid, emo, !mine);   // toggle: กดซ้ำ = ยกเลิก
+        picker.remove();
+      };
+      picker.appendChild(b);
+    });
+    document.body.appendChild(picker);
+    const r = btn.getBoundingClientRect();
+    picker.style.left = Math.max(4, Math.min(r.left, innerWidth - 270)) + 'px';
+    picker.style.top = (r.top - 40 < 8 ? r.bottom + 4 : r.top - 40) + 'px';
+    setTimeout(() => {
+      const closer = (ev) => { if (!picker.contains(ev.target)) { picker.remove(); document.removeEventListener('mousedown', closer); } };
+      document.addEventListener('mousedown', closer);
+    }, 0);
+  }
+
   function renderMsgs() {
     msgsEl.innerHTML = chatMsgs.map(m => {
       const d = new Date(m.t);
@@ -1265,9 +1305,30 @@ if (m) { document.getElementById('pid-input').value = m[1]; connect(m[1]); }
         replyQuote = '<div style="border-left:2px solid #4fc3f7;padding-left:6px;margin-bottom:2px;font-size:10px;color:#888"><span style="color:#4fc3f7">' + escapeHtml(m.replyTo.displayName) + '</span>: ' + escapeHtml((m.replyTo.text||'').slice(0,80)) + '</div>';
       }
       var replyBtn = '<button class="cr-reply-btn" data-rn="' + encodeURIComponent(name) + '" data-rt="' + encodeURIComponent(m.text||'') + '" style="background:none;border:none;color:#666;font-size:10px;cursor:pointer;padding:0 2px;opacity:.6" title="ตอบกลับ">↩</button>';
-      return '<div style="margin-bottom:6px">' + replyQuote + '<span style="color:#666;font-size:10px">' + ts + '</span> <span style="color:#4fc3f7;font-weight:600">' + name + '</span><span style="color:#888">: </span><span style="color:#e8e8e8">' + text + '</span>' + attach + ' ' + replyBtn + '</div>';
+      // ★★ reaction — chip รายการที่มี + ปุ่มเพิ่ม ที่มุมขวาล่างของข้อความ (เฉพาะข้อที่มี id)
+      const mid = msgKey(m);
+      const mn = myName();
+      let reactChips = '';
+      if (m.reactions && typeof m.reactions === 'object') {
+        reactChips = Object.entries(m.reactions).map(([emo, arrRaw]) => {
+          const arr = Array.isArray(arrRaw) ? arrRaw : [];
+          const mine = arr.includes(mn);
+          const tt = arr.map(n => String(n).replace(/"/g, '&quot;').replace(/</g, '&lt;')).join(', ');
+          return '<button class="cr-react-chip" data-mid="' + mid + '" data-emoji="' + emo + '" data-mine="' + (mine ? 1 : 0) + '" title="' + tt + '" style="background:' + (mine ? '#1a2a3a' : '#23262e') + ';border:1px solid ' + (mine ? '#4fc3f7' : '#3a3f4b') + ';border-radius:10px;color:#ddd;font-size:10px;padding:1px 7px;cursor:pointer;font-family:inherit">' + emo + ' ' + arr.length + '</button>';
+        }).join('');
+      }
+      const reactAdd = m.id ? '<button class="cr-react-add" data-mid="' + mid + '" style="background:none;border:1px dashed #3a3f4b;border-radius:10px;color:#777;font-size:10px;padding:1px 6px;cursor:pointer;font-family:inherit" title="รีแอ็กชั่น">🙂+</button>' : '';
+      const reactRow = (reactChips || reactAdd) ? '<div style="display:flex;justify-content:flex-end;gap:4px;align-items:center;flex-wrap:wrap;margin-top:2px">' + reactChips + reactAdd + '</div>' : '';
+      return '<div style="margin-bottom:6px">' + replyQuote + '<span style="color:#666;font-size:10px">' + ts + '</span> <span style="color:#4fc3f7;font-weight:600">' + name + '</span><span style="color:#888">: </span><span style="color:#e8e8e8">' + text + '</span>' + attach + ' ' + replyBtn + reactRow + '</div>';
     }).join('');
     msgsEl.scrollTop = msgsEl.scrollHeight;
+    // ★★ wire reaction — คลิก chip = toggle ของเรา · ปุ่ม 🙂+ = เลือกอีโมจิ
+    msgsEl.querySelectorAll('.cr-react-chip').forEach(btn => {
+      btn.onclick = (e) => { e.stopPropagation(); sendReact(btn.dataset.mid, btn.dataset.emoji, btn.dataset.mine !== '1'); };
+    });
+    msgsEl.querySelectorAll('.cr-react-add').forEach(btn => {
+      btn.onclick = (e) => { e.stopPropagation(); showReactPicker(btn); };
+    });
     // ★ คลิกรูป → เต็มจอ
     msgsEl.querySelectorAll('img[data-full]').forEach(img => {
       img.onclick = () => {
@@ -1327,6 +1388,14 @@ if (m) { document.getElementById('pid-input').value = m[1]; connect(m[1]); }
         chatUnread++;
         updateBadge();
       }
+    } else if (m.type === 'roomReact' && m.id) {
+      // ★★ reaction — แทนที่ reactions ทั้งชุดของข้อความนั้น (server ส่งล่าสุดมาให้)
+      const target = chatMsgs.find(x => msgKey(x) === m.id);
+      if (target) {
+        if (m.reactions && Object.keys(m.reactions).length) target.reactions = m.reactions;
+        else delete target.reactions;
+      }
+      if (popup.classList.contains('open')) renderMsgs();
     }
   };
   window.__chatRoomSend = function(msg) {
