@@ -116,9 +116,17 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.172.1';
+  const VERSION = '4.173.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.173.0', d: '2026-08-21', items: [
+      '🏃 แก้วาร์ปหนี "aggro N ตัว" ทั้งที่มอนแค่เดินผ่าน (passive ไม่ตีเรา):',
+      '   trigger aggro เดิมใช้ getThreatCount = max(aggro จริง, มอนรอบตัว) — ยกมาจาก',
+      '   บอทหลักซึ่งใช้รวมเป็น trigger เดียว พอมาอยู่ userscript ที่มี 3 trigger แยก',
+      '   → มอน passive ใกล้ครบเกณฑ์ (default 5) ก็วาร์ปหนี และยิงก่อน fleeOnProximityCount',
+      '   → ตอนนี้: รุม = ตีเราจริง · aggro = เล็งเรา (0x18) · มอนรอบ = ใกล้ตัว (รวม passive)',
+      '   + log วาร์ปหนีบอกครบ 3 ค่า เช่น "aggro 6 ตัว (ตีเรา 1 · เล็งเรา 6 · มอนรอบ 8)"',
+    ]},
     { v: '4.172.1', d: '2026-08-21', items: [
       '⚙️ เพิ่มช่องตั้ง attackAbandonMs ใน Combat — รอเงียบขั้นต่ำก่อน abandon (นับจากตีครั้งแรก)',
       '   (เดิมตั้งได้แค่ console ASSIST.setAttackAbandon และไม่ persist — reload หายเป็น 5000)',
@@ -5092,9 +5100,17 @@
         }
       }
     }
-    if (CFG.fleeOnMobCount > 0 && getMobAttackerCount(CFG.fleeOnProximityRadius) >= CFG.fleeOnMobCount) { doFlee('รุม ' + getMobAttackerCount(CFG.fleeOnProximityRadius) + ' ตัว'); return; }
-    if (CFG.fleeOnAggroCount > 0 && getThreatCount(CFG.fleeOnProximityRadius) >= CFG.fleeOnAggroCount) { doFlee('aggro ' + getThreatCount(CFG.fleeOnProximityRadius) + ' ตัว'); return; }
-    if (CFG.fleeOnProximityCount > 0 && countMonsters(CFG.fleeOnProximityRadius) >= CFG.fleeOnProximityCount) { doFlee('มอนรอบ ' + countMonsters(CFG.fleeOnProximityRadius) + ' ตัว'); return; }
+    // ★ flee triggers — นับแยกความหมายให้ชัด (เดิม "aggro" ใช้ getThreatCount = max(aggro, มอนรอบ)
+    //   → มอน passive เดินอยู่ใกล้ครบเกณฑ์ก็โดนวาร์ปหนีว่า "aggro N ตัว" ทั้งที่ไม่ได้จับเราเป็นเ้า
+    //   และยิงก่อน fleeOnProximityCount ที่ตั้งสูงกว่าไว้ — ตอนนี้:
+    //   รุม = ตีเราจริง (mobAttackers) · aggro = เล็งเรา (0x18 dst=เรา) · มอนรอบ = ใกล้ตัว (รวม passive)
+    const _fleeAtkN = getMobAttackerCount(CFG.fleeOnProximityRadius);
+    const _fleeAggN = getAggroCount(CFG.fleeOnProximityRadius);
+    const _fleeNearN = countMonsters(CFG.fleeOnProximityRadius);
+    const _fleeCtx = ' (ตีเรา ' + _fleeAtkN + ' · เล็งเรา ' + _fleeAggN + ' · มอนรอบ ' + _fleeNearN + ')';
+    if (CFG.fleeOnMobCount > 0 && _fleeAtkN >= CFG.fleeOnMobCount) { doFlee('รุม ' + _fleeAtkN + ' ตัว' + _fleeCtx); return; }
+    if (CFG.fleeOnAggroCount > 0 && _fleeAggN >= CFG.fleeOnAggroCount) { doFlee('aggro ' + _fleeAggN + ' ตัว' + _fleeCtx); return; }
+    if (CFG.fleeOnProximityCount > 0 && _fleeNearN >= CFG.fleeOnProximityCount) { doFlee('มอนรอบ ' + _fleeNearN + ' ตัว' + _fleeCtx); return; }
     if (inCooldown && mobCount === 0) return;   // อยู่ใน cooldown + ไม่โดนรุม → รอ
 
     // === 1b. ★ ถ้ามีของรอเก็บ → หยุด combat ชั่วคราว ให้ loot ทำงานก่อน ===
