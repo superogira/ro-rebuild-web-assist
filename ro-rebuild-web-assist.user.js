@@ -116,9 +116,20 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.171.0';
+  const VERSION = '4.172.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.172.0', d: '2026-08-21', items: [
+      '👻 แก้มอนผี "ffffffff ffffffff" ยืนทับตัวเรา — ตีไม่โดน pending ขึ้น 9 บอทยืนนิ่งนาน:',
+      '   สาเหตุ: 0x0b แจ้งเราโดนตีโดย attacker id ผิดปกติ (ffffffff = server ไม่บอกผู้โจมตี)',
+      '   → ระบบสร้าง ghost entity เป็นมอนยืนทับเรา (dist 0.0) + ลง mobAttackers',
+      '   → defensive "ตีตัวที่กำลังตีเรา" เลือกมัน → ตีไม่โดน → isTargetStillEngaged',
+      '     บล็อก abandon ตลอด → รอแต่วาร์ปหนีรุม (จาก log จริง pending 7-9 ถึงได้หนี)',
+      '   → ตอนนี้: id ผิดปกติ (0/ffffffff) ไม่ถูก track เป็นมอน (HP เรายังลดตาม damage จริง)',
+      '   + กัน entity id ขยะเข้า radar ทาง 0x2a/0x3c/0x14 ทุกทาง',
+      '🧯 โซ่หนีภัยใหม่: pending ≥ attackPendingMax+3 (อย่างน้อย 5) แม้ "กำลังสู้อยู่" → abandon',
+      '   (กันอนาคต: entity ตีไม่ได้แต่ส่งสัญญาณสู้ จะไม่ค้างเป้าจนยืนนิ่งเป็นนาทีอีก)',
+    ]},
     { v: '4.171.0', d: '2026-08-21', items: [
       '🔁 ใหม่! ไปรับบัพจากบอทอีกตัว (คู่บอท: ฟาร์ม + บัพ) — Sub-tab Buff',
       '   ตั้ง: แมป+พิกัดจุดรับ / ทุกกี่วินาทีไปรับ / รอรับนานสุดกี่วินาที',
@@ -2917,7 +2928,7 @@
           const eid = u32(u, p); p += 4;
           const ex = i16(u, p), ey = i16(u, p + 2); p += 4;
           const eflag = u[p]; p += 1;
-          if (!eid || ex < -500 || ex > 1000 || ey < -500 || ey > 1000) continue;
+          if (!eid || eid === 0xffffffff || ex < -500 || ex > 1000 || ey < -500 || ey > 1000) continue;
           if (eflag === 5) {
             // ★ warp portal → track as entity kind=2 (NPC) + _isWarp flag
             entities.set(eid, { id: eid, kind: 2, x: ex, y: ey, alive: true, _lastSeenAt: now, _isWarp: true, name: 'Warp' });
@@ -2951,7 +2962,7 @@
         const id = u32(u, 3);
         const x = i16(u, 7), y = i16(u, 9);
         const flag = u[11];
-        if (id && x >= -500 && x <= 1000 && y >= -500 && y <= 1000 && (flag === 1 || flag === 3 || flag === 4)) {
+        if (id && id !== 0xffffffff && x >= -500 && x <= 1000 && y >= -500 && y <= 1000 && (flag === 1 || flag === 3 || flag === 4)) {
           if (flag === 1) {
             // ★ flag=1 = ผู้เล่นบนแมป (minimap marker) → track เป็น kind=0
             //   ★★ ห้าม SELF-DETECT จาก minimap — id เราไม่เปลี่ยนตอนวาร์ป (ดู comment ด้านบน)
@@ -3339,7 +3350,7 @@
               if (e) { e.x = x; e.y = y; e._lastSeenAt = now; }
               else { entities.set(id, { id, kind: 0, x, y, alive: true, _lastSeenAt: now, name: '', _src: 'beacon' }); }
             }
-          } else if (id !== playerId && !isStaleId(id, now) && !isBeaconPlayer(id, now)) {
+          } else if (id !== playerId && id !== 0 && id !== 0xffffffff && !isStaleId(id, now) && !isBeaconPlayer(id, now)) {
             const e = entities.get(id);
             if (e) { e.x = x; e.y = y; e._lastSeenAt = now; if (flag === 3) e._isMiniBoss = true; if (flag === 4) e._isBoss = true; }
             else { entities.set(id, { id, kind: 1, x, y, alive: true, _lastSeenAt: now, ...(flag === 3 ? { _isMiniBoss: true } : flag === 4 ? { _isBoss: true } : {}) }); }
@@ -3353,7 +3364,7 @@
       const id = u32(u, 1);
       const x = i16(u, 5), y = i16(u, 7);
       if (x >= -500 && x <= 1000 && y >= -500 && y <= 1000) {   // sanity
-        if (id !== playerId && !isStaleId(id, nowMs()) && !isBeaconPlayer(id, nowMs())) {
+        if (id !== playerId && id !== 0 && id !== 0xffffffff && !isStaleId(id, nowMs()) && !isBeaconPlayer(id, nowMs())) {
           const e = entities.get(id);
           if (e) { e.x = x; e.y = y; e._lastSeenAt = nowMs(); }
           else { entities.set(id, { id, kind: 1, x, y, alive: true, _lastSeenAt: nowMs() }); }
@@ -3452,13 +3463,18 @@
       }
       // มอนตีเรา → mark mobAttacker + ★★ ลด HP ทันที (ไม่รอ STAT!)
       else if (victimId === playerId || (victimId === 0 && attacker !== playerId)) {
-        mobAttackers.set(attacker, now);
+        // ★★★ attacker id ผิดปกติ (0 / ffffffff = server ไม่บอกผู้โจมตีจริง เช่น damage ทางอ้อม)
+        //   ห้าม track เป็นมอน! (บั๊กจริง: สร้าง ghost "ffffffff" ยืนทับเรา dist 0.0 →
+        //   defensive เลือกเป็นเป้า → ตีไม่โดน pending 9+ → isTargetStillEngaged บล็อก abandon
+        //   → บอทยืนนิ่งนาน รอแต่วาร์ปหนีรุม)
+        const attackerKnown = attacker !== 0 && attacker !== 0xffffffff;
+        if (attackerKnown) mobAttackers.set(attacker, now);
         markCombat();
         // ★★★ ผู้โจมตีเรา = มอนแน่นอน (ยกเว้นผู้เล่นบน radar) — แก้ ghost ทันที!
         //   มอน linked-aggro (เช่น Condor ช่วยกัน) เดินเข้ามาทาง 0x07 ก่อน SPAWN
         //   → ถูกสร้างเป็น kind=0 _src='move' → targeting มองไม่เห็น + defensive retarget ข้าม
         //   → โดนรุมทั้งที่ไม่ตีกลับ (จาก log จริง: โดนตี 1→2→3→5 แล้ววาร์ปหนี)
-        if (!isBeaconPlayer(attacker, now)) {
+        if (attackerKnown && !isBeaconPlayer(attacker, now)) {
           const am = entities.get(attacker);
           if (am && am.kind !== 1) {
             am.kind = 1; am._src = 'attack';
@@ -5169,7 +5185,14 @@
         // ★★ เพิ่มเวลาเดิน — ระยะ 5 ช่อง = +1 วิ (กัน abandon ตอนกำลังเดินไปหามอนไกล)
         const travelSec = curDist > 0 ? Math.ceil(curDist / 5) : 0;
         const engageLimit = (isSlowMonster ? (CFG.maxEngageSecSlow || 180) : CFG.maxEngageSec) + travelSec;
-        if (target.engageAt && engageAge > engageLimit && !isTargetStillEngaged) {
+        // ★★★ hard cap: pending สูงเกินปกติมาก "แม้กำลังสู้อยู่" → abandon ได้
+        //   กัน entity ผิดปกติ (id ขยะ/ตีไม่ได้ แต่ส่งสัญญาณตีเรา) — isTargetStillEngaged
+        //   จะบล็อก abandon ข้างล่างไปเรื่อย ๆ บอทยืนตี้ ๆ นานเป็นสิบวินาที (เคย pending 9)
+        const hardPendingCap = Math.max(CFG.attackPendingMax + 3, 5);
+        if (target.pendingAttacks >= hardPendingCap && target.firstAttackAt && (now - target.firstAttackAt > CFG.attackAbandonMs)) {
+          abandonTarget('pending ' + target.pendingAttacks + ' (ตีไม่โดนแม้กำลังสู้)', true, 10000); target = null;
+        }
+        else if (target.engageAt && engageAge > engageLimit && !isTargetStillEngaged) {
           abandonTarget('engage นาน ' + engageAge.toFixed(0) + 's' + (isSlowMonster ? ' (slow)' : ''), true, 10000); target = null;
         }
         else if (!target.engageAt && acquireAge > engageLimit && !isTargetStillEngaged) {
