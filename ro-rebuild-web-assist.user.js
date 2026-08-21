@@ -116,9 +116,14 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.172.0';
+  const VERSION = '4.172.1';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.172.1', d: '2026-08-21', items: [
+      '⚙️ เพิ่มช่องตั้ง attackAbandonMs ใน Combat — รอเงียบขั้นต่ำก่อน abandon (นับจากตีครั้งแรก)',
+      '   (เดิมตั้งได้แค่ console ASSIST.setAttackAbandon และไม่ persist — reload หายเป็น 5000)',
+      '   ตอนนี้บันทึกถาวรผ่าน PERSIST_KEYS แล้ว · ลดค่า = abandon เร็วขึ้น (เช่น 2500-3000)',
+    ]},
     { v: '4.172.0', d: '2026-08-21', items: [
       '👻 แก้มอนผี "ffffffff ffffffff" ยืนทับตัวเรา — ตีไม่โดน pending ขึ้น 9 บอทยืนนิ่งนาน:',
       '   สาเหตุ: 0x0b แจ้งเราโดนตีโดย attacker id ผิดปกติ (ffffffff = server ไม่บอกผู้โจมตี)',
@@ -912,7 +917,7 @@
     'lootEnabled', 'lootDelayAfterDropMs', 'lootUseKillPos', 'pickRadiusKill', 'lootRespectOthers', 'filter', 'sendThrottleMs', 'maxAttempts',
     'warpLootEnabled',
     'combatEnabled', 'targetWhitelist', 'targetBlacklist', 'fightBackBlacklisted', 'guardEnabled', 'guardMap', 'guardX', 'guardY', 'warpDanceEnabled', 'warpDanceMode', 'warpDanceDistance', 'warpDanceThrottleMs', 'autoLoginEnabled', 'autoLoginUser', 'autoLoginPass', 'autoLoginSlot', 'autoRefreshEnabled', 'autoRefreshStallSec', 'attackRange', 'rangedAttackRange',
-    'maxAcquireDistance', 'searchRadii', 'maxChaseDistance', 'attackPendingMax', 'antiKS', 'avoidOtherPlayers', 'targetLowestHpFirst',
+    'maxAcquireDistance', 'searchRadii', 'maxChaseDistance', 'attackPendingMax', 'attackAbandonMs', 'antiKS', 'avoidOtherPlayers', 'targetLowestHpFirst',
     'fleeOnMobCount', 'fleeOnAggroCount', 'fleeOnProximityCount', 'fleeOnProximityRadius', 'fleeMonsters', 'fleeMonsterRadius', 'maxEngageSec', 'maxEngageSecSlow', 'slowMonsterSubIds',
     'wanderEnabled', 'warpFindEnabled', 'warpToMonster', 'stuckWarpOnAbandon', 'stepAsideOnAbandon', 'warpToBoss', 'warpToMiniBoss', 'bossAlertRadius', 'noMonsterWarpSec',
     'restEnabled', 'restHpPercent', 'restSpPercent', 'restUntilPercent', 'restMaxSec', 'restDelayMs', 'postCombatDelayMs', 'autoRespawnEnabled', 'autoRespawnDelayMs', 'telegramAlertCard', 'telegramAlertFlee', 'telegramAlertBotMention', 'telegramAlertNearby', 'telegramAlertWhisper', 'telegramBotToken', 'telegramChatId',
@@ -7438,6 +7443,7 @@
             <div class="field"><label>รัศมีค้นหามอน (ช่อง) — เลือกมอนในระยะนี้เท่านั้น (เล็ก=ไม่เดินไกล)</label><input type="number" id="__assist_maxacq" min="1" max="50" placeholder="30"></div>
             <div class="field"><label>ไล่ตามมอนสูงสุด (ช่อง) — ไกลกว่านี้ abandon</label><input type="number" id="__assist_maxchase" min="5" max="100" placeholder="40"></div>
             <div class="field"><label>abandon มอนถ้าตีแล้ว server เงียบครบ N ครั้ง (attackPendingMax 1-10)</label><input type="number" id="__assist_pendmax" min="1" max="10" step="1"></div>
+            <div class="field"><label>รอเงียบขั้นต่ำก่อน abandon (ms) — นับจากตีครั้งแรก (attackAbandonMs 1000-30000)</label><input type="number" id="__assist_abandonms" min="1000" max="30000" step="500"></div>
             <div class="btns">
               <button id="__assist_t_antiks" class="on">antiKS</button>
               <button id="__assist_t_avoidp" class="on">avoidPlayers</button>
@@ -8037,11 +8043,15 @@
       // ★ attackPendingMax — abandon มอนถ้าตีแล้ว server เงียบครบ N ครั้ง
       const apm = parseInt(root.querySelector('#__assist_pendmax')?.value, 10);
       if (!isNaN(apm) && apm >= 1 && apm <= 10) { CFG.attackPendingMax = apm; log('⚔️ abandon ถ้า pending ≥', apm); saveConfigDebounced(); }
+      // ★ attackAbandonMs — รอเงียบขั้นต่ำก่อน abandon (นับจากตีครั้งแรก)
+      const aab = parseInt(root.querySelector('#__assist_abandonms')?.value, 10);
+      if (!isNaN(aab) && aab >= 1000 && aab <= 30000) { CFG.attackAbandonMs = aab; log('⚔️ abandon ถ้าเงียบเกิน', aab + 'ms'); saveConfigDebounced(); }
     });
     // ★ populate inputs ครั้งเดียว
     const _maq = root.querySelector('#__assist_maxacq'); if (_maq) _maq.value = CFG.maxAcquireDistance;
     const _mch = root.querySelector('#__assist_maxchase'); if (_mch) _mch.value = CFG.maxChaseDistance;
     const _apm = root.querySelector('#__assist_pendmax'); if (_apm) _apm.value = CFG.attackPendingMax;
+    const _aab = root.querySelector('#__assist_abandonms'); if (_aab) _aab.value = CFG.attackAbandonMs;
     const _es = root.querySelector('#__assist_engagesec'); if (_es) _es.value = CFG.maxEngageSec;
     const _esl = root.querySelector('#__assist_engageslow'); if (_esl) _esl.value = CFG.maxEngageSecSlow;
     // ★ populate noMonsterWarpSec ครั้งเดียว
