@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.176.0
+// @version      4.177.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,21 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.176.0';
+  const VERSION = '4.177.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.177.0', d: '2026-08-21', items: [
+      '🔓🔓 ไข้ปริศนาขาย equipment สำเร็จด้วย capture ตัวเกมจริง — ต้นเหตุเดียว 2 อาการ:',
+      '   ★ ตัวเกมขายด้วย format เดียวกับเราเป๊ะ (0x57 + slot 20000+N เรียงสูง→ต่ำ → 5b 01 สำเร็จ)',
+      '   ★ แต่หลังขาย/ฝาก server resend ก้อน equipment "คง inst id เดิม" (มีช่องว่าง!',
+      '     เช่นเหลือ 0x13880-0x13890 แล้วกระโดดไป 0x138d4) — โค้ดเดิมคำนวณ slot จาก',
+      '     "ตำแหน่งในก้อน" → พอมีของถูกเอาออก slot เลื่อนผิดทั้งชุด:',
+      '     1. รอบขายถัดไปส่ง slot ผิด → server ปฏิเสธ (ขายไม่ออกตลอดกาล)',
+      '     2. 0x32 removal หา slot ไม่เจอ → รายการฝากแล้วค้างใน UI Equip',
+      '     3. หาง worn ใช้ดัชนี array → ชิ้นสวมหลัง resend กลายเป็น "ในถุง"',
+      '   → แก้: slot = 20000 + (inst − 0x13880)/4 ของชิ้นเอง + หา worn จาก inst ตรง ๆ',
+      '     (ยืนยันครบจาก capture: 0x13894→20005 ขายจริง · 0x138d4 สวมอยู่=ไม่ขาย · 0x138d8→20022 ขาย)',
+    ]},
     { v: '4.176.0', d: '2026-08-21', items: [
       '💰🔍 สรุปจาก git: การขาย equipment โดย slot id ไม่เคยสำเร็จเลย (ตั้งแต่ v4.150 —',
       '   ครั้งนั้นแก้แค่ "แยก packet ให้ stackable รอด") ไม่ใช่พังหลัง 4.160.2 ·',
@@ -2932,27 +2944,34 @@
               worn: false,
               card: (cardId >= 4001 && cardId <= 4600) ? cardId : 0,
               refine: refineE > 1 ? refineE : 0,
+              inst,
+              // ★★★ slot id ยึด "inst ของชิ้นเอง" — capture ยืนยัน: ตัวเกมขาย 0x4E25(20005) ให้ชิ้น inst 0x13894
+              //   และหลังขาย/ฝาก server resend ก้อนโดย "คง inst เดิม" (มีช่องว่าง ไม่เรียงใหม่!)
+              //   → ตำแหน่งในก้อนเลื่อน แต่ slot จริงของชิ้นไม่เปลี่ยน — สูตรเดิม (20000+ตำแหน่ง)
+              //   เพี้ยนทั้งชุดหลังมีของถูกเอาออก → ขายโดนปฏิเสธ + 0x32 removal หา slot ไม่เจอ (UI ค้าง)
+              slotId: 20000 + (inst - 0x13880) / 4,
             });
             ep += 44;
           }
           // ★★★ pass 2: "หาง" ท้ายก้อน = รายการ inst ของของที่กำลังสวมอยู่ (0 = ช่องว่าง
           //   เช่น ช่องโล่ตอนถือดาบ 2 มือ) — ตัวชี้รายการถูกตำแหน่งสวมใส่แบบแน่นอน
           //   ยืนยัน 4/4 captures: testmage สวม 6 ชิ้นตรงเป๊ะ · superogira0 9 ชิ้น · ไม่สวม = ไม่มี
+          //   ★★ หา record จาก inst ตรง ๆ (เดิมใช้ดัชนี array — พังกับก้อน resend ที่มีช่องว่าง:
+          //     inst 0x138d4 = ดัชนี 21 แต่ในก้อนใหม่มีแค่ 6 แถว → recs[21] undefined → worn หาย)
+          const recByInst = new Map(recs.map(r => [r.inst, r]));
           for (let o = ep; o <= u.length - 4; o++) {
             const v = u32(u, o);
             if (v >= 0x13880 && (v - 0x13880) % 4 === 0) {
-              const i2 = (v - 0x13880) / 4;
-              if (i2 < recs.length) recs[i2].worn = true;
+              const r2 = recByInst.get(v);
+              if (r2) r2.worn = true;
             }
           }
-          // ★★ pass 3: bag slot id = 20000 + ลำดับในก้อน "รวมชิ้นที่สวมอยู่ด้วย"
+          // ★★ pass 3: ลงทะเบียน slot (คำนวณจาก inst แล้วใน pass 1)
           //   ★ ของที่สวมก็ยังถือ slot ของตัวเอง (ไม่หายไปไหน) — ยืนยันจาก server error
-          //   "Cannot store an item while it's equipped" ตอนสูตรเดิม (ข้ามชิ้นสวม) ทำให้เลขเลื่อน
-          //   ไปโดนชิ้นที่สวมอยู่ + สวม/ถอดกลับมาที่ slot เดิมเสมอ (0x30 ใช้ idx เดิมซ้ำ)
+          //   "Cannot store an item while it's equipped" + สวม/ถอดกลับมาที่ slot เดิมเสมอ
           //   → เก็บ slotId ไว้ใน record ทุกชิ้น แต่ลงทะเบียนให้ฝาก/ขายได้เฉพาะชิ้นที่ไม่ได้สวม
           for (let bi = 0; bi < recs.length; bi++) {
             const r = recs[bi];
-            r.slotId = 20000 + bi;
             if (!r.worn) {
               const slots2 = equipmentSlots.get(r.id) || [];
               if (!slots2.includes(r.slotId)) slots2.push(r.slotId);
