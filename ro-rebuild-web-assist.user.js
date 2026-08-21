@@ -116,9 +116,13 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.173.0';
+  const VERSION = '4.173.1';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.173.1', d: '2026-08-21', items: [
+      '📊 แท็บสถิติ "มอน (ตี/aggro/รอบ)" ตัดค่า threat ทิ้ง — เหลือ 3 ค่าตรงชื่อแถว',
+      '   (threat = max(aggro, มอนรอบ) ซ้ำซ้อน และหลังแก้ flee แล้วไม่ได้ถูกใช้คุบอะไร)',
+    ]},
     { v: '4.173.0', d: '2026-08-21', items: [
       '🏃 แก้วาร์ปหนี "aggro N ตัว" ทั้งที่มอนแค่เดินผ่าน (passive ไม่ตีเรา):',
       '   trigger aggro เดิมใช้ getThreatCount = max(aggro จริง, มอนรอบตัว) — ยกมาจาก',
@@ -9814,7 +9818,7 @@ return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" d
     const tgt = ASSIST.getTarget();
     const agg = ASSIST.getAggro();
     set('[data-combat-target]', tgt ? (tgt.id + ' pending:' + tgt.pending) : '(none)');
-    set('[data-combat-aggro]', agg.mobAttackers + ' ตี / ' + agg.aggro + ' aggro / ' + agg.threat + ' threat / ' + agg.monstersNearby + ' รอบ');
+    set('[data-combat-aggro]', agg.mobAttackers + ' ตี / ' + agg.aggro + ' aggro / ' + agg.monstersNearby + ' รอบ');
     // inventory + sell state
     // ★ inventory — pill mini-bar ใส่ 🎒 นำหน้าเสมอ (เดิม set ทับ icon จนหาย) + แถวสถิติแยกกัน
     const invCountTxt = inventory.size + ' ชนิด' + (inventoryFull ? ' ⚠️เต็ม' : '');
