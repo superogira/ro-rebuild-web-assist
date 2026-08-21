@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.174.1
+// @version      4.175.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,21 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.174.1';
+  const VERSION = '4.175.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.175.0', d: '2026-08-21', items: [
+      '💰 แก้ "กดขายเดี๋ยวนี้หลังเข้าเกม แล้วของไม่ถูกขาย" — sellNow ด้อยกว่า depositNow:',
+      '   1. ไม่รีเซ็ต state ใช้ร่วม → retry วาร์ป/retry ค้างจากรอบก่อนฆ่ารอบใหม่เงียบ ๆ',
+      '      (เช่น relogin ในหน้าเดิม: sellWarpRetries=2 ค้าง → รอบใหม่ห้ามวาร์ปซ้ำ → abort ไม่พบ NPC)',
+      '   2. กดก่อนพิกัดมาถึง → ปฏิเสธด้วย "(state: IDLE)" ที่ดูเหมือนไม่มีอะไรผิด',
+      '      → ตอนนี้บอกชัด "ยังไม่รู้พิกัด รอ 1-2 วิ ลองกดอีกครั้ง"',
+      '   3. เพิ่ม pre-check มีของจะขายไหม (ผ่าน equipmentSlots สำหรับของ login) —',
+      '      ไม่มี = บอกทันที ไม่วาร์ปไป NPC เปล่า · ชิ้นที่สวมอยู่ = แจ้งให้ถอดก่อน',
+      '   4. อยู่ใกล้ NPC แล้วไม่วาร์ปซ้ำ (เหมือน trigger อัตโนมัติ — กันโดน server ดรอป)',
+      '⚠️ server ปฏิเสธการขาย ("could not complete sale") → จบทันที ปิด dialog วาร์ปกลับ',
+      '   (เดิมแค่ log แล้วค้างใน state SELL จน timeout 15 วิ)',
+    ]},
     { v: '4.174.1', d: '2026-08-21', items: [
       '⚙️ เพิ่มช่องตั้ง fleeOnProximityRadius ใน Sub-tab Flee — รัศมีนับมอนของ',
       '   flee ทั้ง 3 แบบ (รุม/aggro/มอนรอบ ใช้รัศมีเดียวกัน, default 8)',
@@ -2750,8 +2762,13 @@
           lastPickupDropId = null;
         }
         if (msg.includes('could not complete sale') || msg.includes('do not match')) {
-          // sell failed signal
-          if (sellState === 'SELL') { log('⚠️ ขายของล้มเหลว (server ปฏิเสธ)'); }
+          // sell failed signal — ★★ จบเลย ไม่รอ timeout 15s (เดิมแค่ log แล้วค้างใน state SELL)
+          if (sellState === 'SELL') {
+            log('⚠️ ขายของล้มเหลว (server ปฏิเสธ)');
+            pendingSellEquip = []; sellEquipRoundSent = false;
+            sendSellClose();
+            sellState = 'WARP_BACK'; sellStateAt = nowMs();
+          }
         }
         // ★ ฝากของที่กำลังสวมอยู่ — server ปฏิเสธเงียบ ๆ (เคสจริง: slot id เลื่อนไปโดนชิ้นที่สวม)
         if (msg.includes("while it's equipped") || msg.includes('while equipped')) {
@@ -6270,7 +6287,39 @@
     setSellItems(...ids) { CFG.sellItemIds = ids; log('💰 ขาย item:', ids.map(nameOf).join(', ')); },
     addSellItem(id) { if (!CFG.sellItemIds.includes(id)) CFG.sellItemIds.push(id); log('💰 เพิ่มขาย:', nameOf(id)); },
     removeSellItem(id) { CFG.sellItemIds = CFG.sellItemIds.filter(x => x !== id); log('💰 เลิกขาย:', nameOf(id)); },
-    sellNow() { if (storageState !== 'IDLE') { log('⚠️ กำลังฝากของอยู่ (state:', storageState + ') — รอให้จบก่อนแล้วค่อยขาย'); return; } if (sellState === 'IDLE' && currentMap && player.x != null) { sellReturnTo = { map: currentMap, x: Math.round(player.x), y: Math.round(player.y) }; sendTeleport(CFG.sellNpcMap, CFG.sellNpcX, CFG.sellNpcY); setSellState('WARP_TO_NPC'); log('💰 ขายทันที! → วาร์ป', CFG.sellNpcMap, '@(', CFG.sellNpcX, CFG.sellNpcY + ')'); } else { log('⚠️ ไม่สามารถขายได้ตอนนี้ (state:', sellState + ')'); } },
+    sellNow() {
+      if (storageState !== 'IDLE') { log('⚠️ กำลังฝากของอยู่ (state:', storageState + ') — รอให้จบก่อนแล้วค่อยขาย'); return; }
+      if (sellState !== 'IDLE') { log('⚠️ กำลังขายอยู่แล้ว (state:', sellState + ')'); return; }
+      if (!CFG.sellItemIds.length) { log('⚠️ ยังไม่ได้เลือก item ที่จะขาย'); return; }
+      // ★★ กดหลังเข้าเกมทันที → พิกัดยังไม่มา — บอกชัดแทน "(state: IDLE)" ที่ดูเหมือนไม่มีอะไรผิด
+      if (!currentMap || player.x == null) { log('⚠️ ยังไม่รู้พิกัดตัวละคร (หลังเข้าเกมใหม่ รอ 1-2 วิ) — ลองกดอีกครั้ง'); return; }
+      // ★★ pre-check เหมือน depositNow — ของ equipment จาก login อยู่ใน equipmentSlots ไม่ใช่ inventory
+      //   (กดตอนของยังไม่โหลด/ขายหมดแล้ว → บอกตรง ๆ ไม่วาร์ปไป NPC เปล่า)
+      let hasSell = false, wornOnly = 0;
+      for (const id of CFG.sellItemIds) {
+        if ((equipmentSlots.get(id) || []).length > 0 || (inventory.get(id) || 0) > 0) { hasSell = true; break; }
+        if (equipmentList.some(x => x.id === id && x.worn)) wornOnly++;
+      }
+      if (!hasSell) {
+        log('⚠️ ไม่มีของที่จะขายใน inventory' + (wornOnly > 0 ? ' (มี ' + wornOnly + ' ชนิดกำลังสวมอยู่ — ถอดก่อนจึงขายได้)' : ''));
+        return;
+      }
+      // ★★ รีเซ็ต state ใช้ร่วมทุกตัว (เดิมลืม — retry/warp ค้างจากรอบก่อนฆ่ารอบใหม่เงียบ ๆ
+      //   เช่น relogin ในหน้าเดิม: sellWarpRetries=2 ค้าง → รอบใหม่ห้ามวาร์ปซ้ำ → abort "ไม่พบ NPC")
+      sellWarpRetries = 0; pendingSellEquip = []; sellEquipRoundSent = false;
+      sellReturnTo = { map: currentMap, x: Math.round(player.x), y: Math.round(player.y) };
+      // ★★ อยู่แมป NPC แล้ว + ใกล้พอ → ไม่วาร์ป (เหมือน trigger อัตโนมัติ — กันวาร์ปซ้ำโดน server ดรอป)
+      const dNpc = Math.hypot(player.x - CFG.sellNpcX, player.y - CFG.sellNpcY);
+      if (currentMap === CFG.sellNpcMap && dNpc <= 40) {
+        sellWarped = true;
+        log('💰 ขายทันที! — อยู่ใกล้ NPC แล้ว ไม่ต้องวาร์ป');
+      } else {
+        sellWarped = false;
+        sendTeleport(CFG.sellNpcMap, CFG.sellNpcX, CFG.sellNpcY);
+        log('💰 ขายทันที! → วาร์ป', CFG.sellNpcMap, '@(', CFG.sellNpcX, CFG.sellNpcY + ')');
+      }
+      setSellState('WARP_TO_NPC');
+    },
     getInventory() { return [...inventory.entries()].map(([id, c]) => ({ id, name: itemDisplayName(id), count: c, action: getItemAction(Number(id)) })).sort((a, b) => b.count - a.count); },
 
     // ---------- Auto-Storage (ฝากเข้า Kafra) ----------
