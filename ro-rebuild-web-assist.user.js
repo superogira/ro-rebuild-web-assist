@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.174.0
+// @version      4.174.1
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,14 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.174.0';
+  const VERSION = '4.174.1';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.174.1', d: '2026-08-21', items: [
+      '⚙️ เพิ่มช่องตั้ง fleeOnProximityRadius ใน Sub-tab Flee — รัศมีนับมอนของ',
+      '   flee ทั้ง 3 แบบ (รุม/aggro/มอนรอบ ใช้รัศมีเดียวกัน, default 8)',
+      '   (เดิมตั้งได้แค่ console ASSIST.setFleeProximity(n, radius) — ค่า persist อยู่แล้ว)',
+    ]},
     { v: '4.174.0', d: '2026-08-21', items: [
       '🛡️ guard เลขเวอร์ชั่น — เช็คตอน checkVersion:',
       '   1. @version ที่ Tampermonkey รายงาน (GM_info) ไม่ตรง const VERSION → เตือนทันที',
@@ -7576,6 +7581,7 @@
             <div class="field"><label>flee: รุม N ตัว (0=off)</label><input type="number" id="__assist_fleemob" min="0" max="20"></div>
             <div class="field"><label>flee: aggro N ตัว (0=off)</label><input type="number" id="__assist_fleeaggro" min="0" max="20"></div>
             <div class="field"><label>flee: มอนรอบ N ตัว ในระยะ (0=off)</label><input type="number" id="__assist_fleeprox" min="0" max="20"></div>
+            <div class="field"><label>รัศมีนับมอนของ flee ทั้ง 3 แบบ (ช่อง) — รุม/aggro/มอนรอบ นับมอนในระยะนี้</label><input type="number" id="__assist_fleerprox" min="1" max="50" step="1" placeholder="8"></div>
             <div class="field"><label>🚨 มอนที่ต้องหนี (ชื่อหรือ sub-ID คั่นจุลภาค) — เจอในระยะ → วาร์ปหนี</label><input type="text" id="__assist_fleemonsters" placeholder="เช่น MVP,Boss,1234"></div>
             <div class="field"><label>ระยะหนีมอนอันตราย (ช่อง)</label><input type="number" id="__assist_fleemonsterradius" min="1" max="50" placeholder="20"></div>
             <div class="btns"><button id="__assist_applyflee">ใช้ค่า flee</button></div>
@@ -8193,6 +8199,9 @@
       if (!isNaN(fm)) ASSIST.setFleeMob(fm);
       if (!isNaN(fa)) ASSIST.setFleeAggro(fa);
       if (!isNaN(fp)) ASSIST.setFleeProximity(fp);
+      // ★ รัศมีนับมอนของ flee ทั้ง 3 แบบ (รุม/aggro/มอนรอบ ใช้รัศมีเดียวกัน)
+      const fpr = parseInt(root.querySelector('#__assist_fleerprox').value, 10);
+      if (!isNaN(fpr) && fpr >= 1 && fpr <= 50) { CFG.fleeOnProximityRadius = fpr; log('🏃 รัศมีนับมอน flee =', fpr, 'ช่อง'); }
       const fmList = root.querySelector('#__assist_fleemonsters').value.trim();
       if (fmList !== '') CFG.fleeMonsters = fmList.split(',').map(s => s.trim()).filter(Boolean);
       const fmr = parseInt(root.querySelector('#__assist_fleemonsterradius').value, 10);
@@ -9917,6 +9926,7 @@ return `<div class="invslot" data-itemid="${x.id}" data-name="${esc(nameBar)}" d
     const respawnBtn = root.querySelector('#__assist_respawnbtn');
     if (respawnBtn) { respawnBtn.textContent = 'Respawn: ' + (CFG.autoRespawnEnabled ? 'ON' : 'OFF'); respawnBtn.className = CFG.autoRespawnEnabled ? 'on' : 'off'; }
     syncInput('#__assist_fleeprox', CFG.fleeOnProximityCount);
+    syncInput('#__assist_fleerprox', CFG.fleeOnProximityRadius);
     syncInput('#__assist_stuckwarp', CFG.stuckWarpOnAbandon);
     syncToggle('#__assist_t_warptoboss', CFG.warpToBoss === true);
     syncToggle('#__assist_t_warptominiboss', CFG.warpToMiniBoss === true);
