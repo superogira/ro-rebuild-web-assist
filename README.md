@@ -1,6 +1,6 @@
 # 🗡️ RO Rebuild Web Assist
 
-ผู้ช่วยเล่นเว็บ client **Ragnarok Online** (Unity WebGL / WebSocket) — ทำงานผ่าน **Tampermonkey** หรือ **browser console** โดยดัก/ฉีด WebSocket ของเกมเพื่ออ่าน packet และสั่งการอัตโนมัติ
+ผู้ช่วยเล่นเว็บ client **Ragnarok Online** (Unity WebGL / WebSocket) — ทำงานผ่าน **Tampermonkey** โดยดัก/ฉีด WebSocket ของเกมเพื่ออ่าน packet และสั่งการอัตโนมัติ พร้อม **Remote Monitor** ดู/ควบคุมจากนอกเกม + แจ้งเตือน **Telegram**
 
 > ⚠️ เป็นสคริปต์สแตนด์อะโลน **ไม่ใช่** บอท proxy แยกต่างหาก — รันในหน้าเว็บเกมเท่านั้น
 
@@ -8,231 +8,185 @@
 
 ## ✨ ฟีเจอร์ทั้งหมด
 
+### 🎒 พื้นฐาน
+
 | ระบบ | ทำอะไร | Default | Mini-bar |
 |---|---|---|---|
-| **📦 Auto-Loot** | เก็บของที่ตกจากมอนที่ **เราฆ่าเอง** — เช็คพิกัดมอนที่ฆ่า (นักธนูยิงไกล), สลับชิ้น, ลองหลายครั้ง, popup จัดการรายการ (ไอคอน+ชื่อ) | ON | 📦 |
-| **💉 Auto-Heal** | ใช้ขวดยาอัตโนมัติเมื่อ HP% ต่ำ — เลือกยาได้หลายชนิด, โหมดเรียง/สุ่ม, ตรวจจับ "ยาหมด" | OFF | 💉 |
-| **🪑 Auto-Rest** | HP ต่ำ + ไม่โดนรุม → นั่งพักฟื้น → ลุกยืนกลับฟาร์ม | ON | 🪑 |
-| **⚔️ Auto-Combat** | ตีมอนอัตโนมัติ — progressive search, เลือกเป้าใกล้สุด/HP ต่ำสุด, หนีมอนอันตราย, claim system, กันแย่ง (KS), มอนตี damage 1 เพิ่มเวลาฆ่า | OFF | ⚔️ |
-| **🔮 Auto-Skill** | ใช้สกิลตามเงื่อนไข — 4 โหมด (targeted/ground/AoE/self-cast) + SP tracking + cooldown + preset dropdown (11 สกิล) | OFF | 🔮 |
-| **✨ Auto-Buff** | ใช้ไอเทมบัพเป็นระยะ (timer) — countdown display, เก็บเวลาข้าม session | OFF | ✨ |
-| **💰 Auto-Sell** | ไปขายของ NPC อัตโนมัติ — เมื่อของเต็ม/ครบเวลา, per-item toggle (เก็บ/ขาย/ฝาก) | OFF | 💰 |
-| **🏦 Auto-Storage** | ฝากของเข้า Kafra — chain หลังขาย, แยก equipment/stackable | OFF | 🏦 |
-| **🗺️ Navigation** | บันทึกเส้นทางเดิน + waypoint graph — patrol mode (เดินตามลำดับ), export/import ข้อมูล | OFF | — |
-| **🌀 Teleport** | วาร์ปสุ่มในแมปปัจจุบันทันที | — | 🌀 |
-| **🔔 Log สำคัญ** | แสดง card drop + chat ที่พูดถึง bot + หนีมอนอันตราย | — | tab |
-| **📤 Backup** | Import/Export ข้อมูลทั้งหมด — ย้ายเครื่องได้ | — | — |
+| **📦 Auto-Loot** | เก็บของจากมอนที่ **เราฆ่าเอง** — จดพิกัดฆ่า (นักธนูยิงไกล), กันของคนอื่น (blacklist 60s), warp-to-loot ของติดกำแพง | ON | 📦 |
+| **💉 Auto-Heal** | ใช้ยาเมื่อ HP% ต่ำ — หลายชนิด, โหมดเรียง/สุ่ม, ตรวจ "ยาหมด" | OFF | 💉 |
+| **🪑 Auto-Rest** | HP **หรือ SP** ต่ำ + ไม่โดนรุม → นั่งพัก → ฟื้นครบทั้งคู่ค่อยลุก (SP สำหรับบอทบัพ) | ON | 🪑 |
+| **🎒 Inventory Popup** | เหมือนในเกม 3 แท็บ (Item/Etc/Equip) — ไอคอน + จำนวน + **ชื่อเต็ม** (`+7 Anti-Magic Helm[1]`/`Brooch of Counter`) + Attack/Weight/Level/Jobs + live-refresh + ลากย้ายได้ + ปุ่ม ขาย/ฝากเดี๋ยวนี้ | — | 🎒 |
+| **🔑 Auto-Login + Refresh** | ล็อกอินใหม่อัตโนมัติ (รหัสที่เกมจำ) + เลือกตัวละคร + refresh ตอนค้าง | OFF | 🤖 |
+| **📤 Backup** | Import/Export ข้อมูลทั้งหมด | — | — |
 
-ทุกระบบเปิด/ปิดเป็นอิสระต่อกัน + บันทึกค่าลง localStorage ข้าม session
+### ⚔️ ต่อสู้
+
+| ระบบ | ทำอะไร | Default |
+|---|---|---|
+| **⚔️ Auto-Combat** | Progressive search, เป้าใกล้สุด/HP ต่ำสุด, claim + anti-KS, กันแย่ง, abandon/stuck handling, มอนช้า (เห็ด) ยืดเวลา, **Warp Dance** (ตีแล้ววาร์ปรอบมอน — นักเวท/นักธนู) | OFF |
+| **🏃 Flee Players** | เจอผู้เล่นเข้ารัศมี → วาร์ปหนี (เปลี่ยนแมป / แมปเดิม) + cooldown — กันโดนจับว่าบอท | OFF |
+| **🛡️ Guard Mode** | ยืนประจำตำแหน่ง — **ไม่หามอนเอง** ตีกลับเฉพาะมอนที่มาตี (มอนยิงไกลก็เดินเข้าไปตี) ฆ่าเสร็จกลับจุดเดิม + วาร์ปกลับถ้าตกแมป — ฐานของ**บอทบัพ** | OFF |
+
+### 💰 เศรษฐกิจ
+
+| ระบบ | ทำอะไร | Default |
+|---|---|---|
+| **💰 Auto-Sell** | ของเต็ม/ครบเวลา → วาร์ปไป NPC → ขาย (**แยก 2 รอบ** stackable → equipment กัน server ปฏิเสธทั้งก้อน) + สรุปผลจริง | OFF |
+| **🏦 Auto-Storage** | ฝาก Kafra — equipment ส่ง **bag slot id** (ถอดจาก packet ตอน login), สรุป "สำเร็จ X/Y" ตามที่ server ยืนยันจริง | OFF |
+| **♻️ แมปฟาร์มหมุนวน** | ตายแต่ละครั้ง → หมุนไปแมปถัดไปในรายการ (เพิ่ม/ลบ/"ใช้เลย" ได้) — เหมาะแมปมอนแรง/ผู้เล่นแย่ง | OFF |
+
+### 🤝 บอทบัพ (Buff Bot) — ครบวงจร
+
+| ระบบ | ทำอะไร | Default |
+|---|---|---|
+| **🤝 Auto-Buff Others** | บัพ/Heal **ผู้เล่นอื่น**อัตโนมัติ — ทุกคนในระยะ หรือเฉพาะรายชื่อ, ระยะ, delay ซ้ำต่อคน, **HP เป้าหมาย < %** (Heal เฉพาะคนเลือดต่ำ), รวมตัวเอง, สกิลพื้นที่ (Sanctuary) ส่งพิกัดเป้า, นั่งอยู่ก็ลุกมาบัพ + นั่งใหม่ | OFF |
+| **🔁 Buff Visit (คู่บอท)** | บอท**ฟาร์ม**ย้อนกลับไปรับบัพจากบอทบัพทุก N วิ — ตั้งแมป/พิกัดจุดรับ + เวลารอ → ไปใกล้=เดิน ไกล=วาร์ป → ยืนรับ → กลับฟาร์ม**แมป+พิกัดเดิม** | OFF |
+| **✨ Auto-Buff (item)** | ใช้ไอเทมบัพเป็นระยะ + countdown ข้าม session | OFF |
+
+### 🖥️ ระบบรอบตัว
+
+| ระบบ | ทำอะไร |
+|---|---|
+| **🖥️ Remote Monitor** | ดู HP/SP/แมป/มอนรุม/แผนที่(คลิกเดิน/วาร์ป/โจมตี)/Log/แชท จากเบราว์เซอร์อื่น + สั่ง toggle/ขาย/ฝาก/**กดเก็บ-ขาย-ฝากต่อ item** + popup Inventory 3 แท็บเหมือนในเกม |
+| **📨 Telegram Alert** | การ์ดดรอป / หนี+**ตาย (บอกสาเหตุ: สู้กับมอนอะไร+ตำแหน่ง)** / แชทพูดถึงบอท |
+| **💬 ห้องแชท** | แชทข้ามบอท/ข้ามผู้ใช้ (ส่งรูป/ไฟล์ได้) + badge ข้อความใหม่ |
+| **🐞 Feedback** | ปุ่มแจ้งปัญหา/ข้อเสนอแนะ พร้อม log แนบ |
+
+ทุกระบบเปิด/ปิดอิสระ + บันทึกลง localStorage ข้าม session
 
 ---
 
-## 📥 วิธีติดตั้ง
+## 📥 วิธีตั้งค่า
 
-### ทางเลือก A — Tampermonkey (แนะนำ)
+### ตัวช่วย (userscript)
 
-1. ติดตั้งส่วนเสริม [Tampermonkey](https://www.tampermonkey.net/)
-2. คลิกไอคอน Tampermonkey → **Create a new script**
-3. ลบเนื้อหาเดิม → วางเนื้อหาจากไฟล์ [`ro-rebuild-web-assist.user.js`](./ro-rebuild-web-assist.user.js) ทั้งหมด → **Ctrl+S**
-4. รีเฟรชหน้าเว็บเกม — auto-update ทำงานอัตโนมัติ (มี `@updateURL`)
+1. ติดตั้ง [Tampermonkey](https://www.tampermonkey.net/) → **Create a new script** → วางทั้งหมดจาก [`ro-rebuild-web-assist.user.js`](./ro-rebuild-web-assist.user.js) → **Ctrl+S**
+2. รีเฟรชหน้าเกม — auto-update อัตโนมัติ
 
-### ทางเลือก B — Console (ชั่วคราว)
+### Relay server (สำหรับ Remote Monitor / Telegram / แชท)
 
-1. เปิดหน้าเว็บเกม (เข้าหน้าล็อกอินได้ แต่ **ยังไม่กดเข้าเกม**)
-2. กด **F12** → แท็บ **Console**
-3. วางโค้ดทั้งหมด → **Enter**
-4. ค่อยเข้าเกม → จะเห็นแถบ ASSIST มุมขวาบน
+```bash
+node relay-server.js        # ค่า default wss ที่จะรัน (deploy เอง เช่น render.com)
+```
 
-> ⚠️ ใช้วิธี B ต้องวางใหม่ทุกครั้งที่รีเฟรช
+เปิด `remote-monitor.html` → ใส่ player_id (ดูได้จาก log ตอนเข้าเกม) → เชื่อมต่อ
+
+### โครงสร้างไฟล์
+
+| ไฟล์ | หน้าที่ |
+|---|---|
+| `ro-rebuild-web-assist.user.js` | ตัวช่วยหลัก (~9,000 บรรทัด) |
+| `relay-server.js` | relay กลาง (monitor + Telegram + แชท + upload) |
+| `remote-monitor.html` | หน้า monitor ระยะไกล |
+| `db/Item/` | item DB v2 — 6 CSV (2,579 รายการ) + 6 desc + EquipmentGroups.csv |
 
 ---
 
-## 🎮 วิธีใช้งาน
-
-เล่นเกมตามปกติ — ระบบทำงานเอง คลิก **แถบ ASSIST มุมขวาบน** เพื่อเปิด panel ตั้งค่า
-
-### ⭐ คำสั่งที่ใช้บ่อย (console)
+## 🎮 คำสั่ง console ที่ใช้บ่อย
 
 ```javascript
-ASSIST.status()                    // ดูสถานะทั้งหมด
-ASSIST.help()                      // ดูคำสั่งทั้งหมด
-ASSIST.config()                    // ดูค่า config ปัจจุบัน
+ASSIST.status() / help() / config()
 
-// ---- Auto-Loot ----
-ASSIST.lootOn() / lootOff()
-ASSIST.setLootMode('all')          // 'all' | 'only' | 'except'
-
-// ---- Auto-Heal ----
-ASSIST.setHealItems(501, 502, 503) // ตั้งไอเทม (เปิด auto-heal อัตโนมัติ)
-ASSIST.setHealAt(50)               // HP < 50% → ใช้ยา
-ASSIST.healOn() / healOff()
-
-// ---- Auto-Combat ----
+// Combat / เป้า
 ASSIST.combatOn() / combatOff()
-ASSIST.setTargetWhitelist('Poring', 'Lunatic')  // ว่าง = ตีทุกมอน
-ASSIST.setRanged(8)               // นักธนู: ตีไกล 8 ช่อง
-ASSIST.setFleeMob(4)              // รุม 4 ตัว → วาร์ปหนี
-CFG.fleeMonsters = ['MVP', 'Orc Hero']  // เจอมอนเหล่านี้ → วาร์ปหนีทันที
+ASSIST.setTargetWhitelist('Poring', 'Lunatic')   // ว่าง = ทุกมอน
+ASSIST.setRanged(8)                              // นักธนู
 
-// ---- Auto-Skill ----
-ASSIST.addSkill({ skillId:24, level:10, targeted:true, maxUsesPerTarget:2, maxDistance:12, spMin:14, cooldownMs:2000 })
-ASSIST.skillOn() / skillOff()
-ASSIST.skillNow()                  // ใช้ skill ทั้งหมดทันที
+// Guard (บอทบัพยืนประจำจุด)
+ASSIST.toggleGuard(true)
+ASSIST.setGuardPos('izlude', 129, 88)
 
-// ---- Auto-Buff ----
-ASSIST.addBuffItem(656, 30)        // Awakening Potion ทุก 30 นาที
-ASSIST.buffOn() / buffOff()
+// สกิล — 6 โหมด: targeted / ground / aoe / self / ally / buff
+ASSIST.addSkill({ skillId: 41, level: 10, ally: true, hpBelowPct: 50 })           // Heal ตัวเอง HP<50%
+ASSIST.addSkill({ skillId: 44, level: 10, buffMode: true, buffNames: ['friend'], targetHpBelowPct: 90 })  // Blessing ให้คน
+ASSIST.skillOn() / skillNow()
 
-// ---- Auto-Sell ----
-ASSIST.setSellNpc('Tool Dealer', 'izlude_in')
-ASSIST.sellNow()                   // ไปขายทันที
+// บัพให้คนอื่น + ไปรับบัพ (คู่บอท)
+ASSIST.toggleBuffOthers ? null : null           // เปิดผ่านปุ่มใน Sub-tab Skill
+ASSIST.toggleBuffVisit(true)
+ASSIST.setBuffVisitPos('izlude', 129, 88, 600, 20)
 
-// ---- Auto-Storage (Kafra) ----
-ASSIST.setKafra('Kafra Staff', 'izlude')
-ASSIST.depositNow()                // ไปฝากทันที
+// เศรษฐกิจ
+ASSIST.sellNow() / depositNow()
+ASSIST.setSellNpc('Tool Dealer', 'izlude_in', 116, 55)
+ASSIST.setKafra('Kafra Staff', 'izlude', 129, 88)
 
-// ---- Farm Map ----
-ASSIST.useCurrentPosAsFarm()       // ตั้งแมปฟาร์ม = ตำแหน่งปัจจุบัน
-ASSIST.warpToFarm()                // วาร์ปกลับแมปฟาร์ม
+// แมป
+ASSIST.useCurrentPosAsFarm() / warpToFarm()
 
-// ---- Navigation ----
-ASSIST.navRecordOn() / navRecordOff()   // บันทึกเส้นทางเดิน
-ASSIST.navGetAllStats()                 // ดูข้อมูลทุกแมป
-
-// ---- Backup ----
-ASSIST.exportAll()                // download ข้อมูลทั้งหมด
-ASSIST.importAll(jsonString)      // import จาก string
+// ข้อมูล
+ASSIST.getInventory() / exportAll() / importAll(json)
 ```
 
 ---
 
-## 🪟 Panel UI
+## 🧠 รายละเอียดสำคัญ
 
-คลิกแถบ **ASSIST** มุมขวาบน → เปิด panel มี 4 tab:
+### Teleport Serializer
+Server รับคำสั่งวาร์ป (0x40) ห่างกัน ~3 วินาที — ยิงถี่ตัวหลังถูก**ดรอปเงียบ** (เคยทำระบบขาย/ฝากค้างเป็นนาที) → สคริปต์จัดคิว intent ล่าสุดชนะ (last-wins) แล้ว flush เมื่อครบกำหนดทุกกรณี
 
-### 📊 สถิติ (Stats)
-- HP/SP, ตำแหน่ง, แมปปัจจุบัน/แมปฟาร์ม
-- ฆ่าได้, เก็บของได้, EXP/นาที, ⚔️ DPS, ⚡ ASPD, 💰 Zeny/ชม.
-- มอนที่ตีอยู่, aggro, จำนวนมอนรอบตัว
-- ของที่เก็บได้ (พร้อม toggle เก็บ/ขาย/ฝาก)
-- **ล้างรายการของ**, **รีเซ็ตสถิติ**
-- **📤 export / 📥 import** ข้อมูลทั้งหมด
+### Auto-Skill — 6 โหมด
 
-### ⚙️ ตั้งค่า (Config)
-- toggle ทุกระบบ + ช่องตั้งค่า
-- **Popup จัดการรายการ item** (เก็บเฉพาะ/ยกเว้น) — แสดงไอคอน + ชื่อ + ค้นหา + เพิ่ม id manual
-- **Popup จัดการ skill** — preset dropdown (11 สกิล) + ฟอร์มแก้ไข (label + tooltip ทุกช่อง)
-- Skill/Buff countdown display (เหลือเวลาอีกกี่นาที/วินาที)
-- **มอนที่ต้องหนี** (fleeMonsters) + ระยะหนี
-
-### 🔔 สำคัญ (Alert)
-- 🃏 Card drop (สีทอง)
-- 💬 Chat ที่พูดถึง bot/บอท/บอต (สีแดง, บอกประเภท: ใกล้/ตะโกน/กระซิบ)
-- 🚨 หนีมอนอันตราย (สีแดง)
-
-### 📋 Log
-- log การทำงานแบบ real-time
-
----
-
-## 🧠 รายละเอียดแต่ละระบบ
-
-### Auto-Combat (โจมตีอัตโนมัติ)
-- **Progressive search** — ค้นมอนจากรัศมีเล็กไปใหญ่ `[5,10,20,30]` (เลือกใกล้ก่อน)
-- **Claim system** — ตีมอนก่อนคนอื่น → ยึดสิทธิ์ (ตีต่อแม้คนอื่นมาแยม)
-- **Anti-KS** — heuristic ตรวจจาก 0x0b + 0x17 + 0x1d (ข้ามมอนที่คนอื่นตี)
-- **Flee monsters** — เจอมอนอันตราย (MVP/Boss) → วาร์ปหนีทันที
-- **Stuck handling** — ตีไม่ติด/server เงียบ → abandon + เดินหลีก
-- **Slow monster** — มอนตี damage 1 (mushroom/plant) → เพิ่มเวลาฆ่าเป็น 180s
-- **HP guard** — ป้องกัน HP ผิดเพี้ยนในที่คนเยอะ (playerName guard + grace period)
-
-### Auto-Loot (เก็บของอัตโนมัติ)
-- **Kill position tracking** — จดพิกัดมอนที่เราฆ่า → เช็ค item ใกล้พิกัดมอน (≤5 ช่อง)
-  - แก้ปัญหานักธนูยิงมอนตายไกล → ของตกที่พิกัดมอน ไม่ใช่ที่ตัวเรา
-- **Heuristic ownership** — เก็บเฉพาะของที่อยู่ใกล้ player หรือใกล้พิกัดมอนที่เราฆ่า
-  - ไม่เก็บของคนอื่น (ถ้าไม่อยู่ใกล้พิกัดมอนที่เราฆ่า)
-- **Popup จัดการรายการ** — เลือก item แบบ visual (ไอคอน + ชื่อ + ค้นหา)
-
-### Auto-Skill (ใช้สกิลอัตโนมัติ)
-4 โหมดการส่ง:
 | โหมด | Protocol | ตัวอย่าง |
 |---|---|---|
-| **targeted** (sub=01) | `[1d][01][targetId:4][skillId:1][level:1]` | Bash, Double Strafe, Charge Arrow |
-| **ground** (sub=04) | `[1d][04][x:2][y:2][skillId:1][level:1]` | Arrow Shower |
-| **AoE** (sub=05) | `[1d][05][skillId:2][level:1]` | Magnum Break |
-| **self-cast** (sub=05) | `[1d][05][skillId:2][level:1]` | Two-Hand Quicken, Improve Concentration |
+| **targeted** | `[1d][01][targetId:4][skillId:1][level:1]` | Bash, Double Strafe |
+| **ground** | `[1d][04][x:2][y:2][skillId:1][level:1]` | Arrow Shower, Sanctuary (ให้คน = พิกัดเป้า) |
+| **AoE** | `[1d][05][skillId:2][level:1]` | Magnum Break |
+| **self-cast** | `[1d][05]` (ไม่มี target) | Two-Hand Quicken (สกิล Self แท้) |
+| **ally** | `[1d][01]` + playerId ตัวเอง | Heal/Blessing ใช้กับตัวเอง (Skills.toml Target=Ally) |
+| **buff** | `[1d][01]` + playerId **คนอื่น** | บอทบัพ Heal/Blessing ให้ผู้เล่น |
 
-- **SP tracking** — อ่าน SP จาก packet 0x27 (SP_UPDATE) แยกจาก HP
-- **Cooldown + persist** — บันทึกเวลาใช้ล่าสุดข้าม session
-- **Per-target uses** — จำกัดจำนวนครั้งต่อมอน + reset ตอนเปลี่ยน target/ตาย
-- **Preset dropdown** — เลือกสกิลสำเร็จรูป (ทดลองแล้ว) จาก list
-- **Popup จัดการ skill** — เพิ่ม/แก้ไข/ลบ + label + tooltip ทุกช่อง
+เงื่อนไขต่อสกิล: SP ขั้นต่ำ · **HP ตัวเอง < %** · **HP เป้าหมาย < %** (รวมตัวเอง) · มอนขั้นต่ำ · ระยะ · cooldown · interval · **delay ซ้ำต่อคน** (buff) · รายชื่อผู้เล่น (buff) — dedupe ด้วย skillId+โหมด (Heal ally + Heal buff อยู่ด้วยกันได้)
 
-### Auto-Sell + Auto-Storage
-- **Sell**: วาร์ปไป NPC → คุย → เลือก Sell → ส่งรายการขาย → วาร์ปกลับ
-- **Storage (Kafra)**: chain หลังขาย → คุย Kafra → เปิด storage → ฝากทีละชิ้น → ปิด → วาร์ปกลับ
-- **Equipment**: ส่ง slot ID (ไม่ใช่ itemId) + เรียง slot สูง→ต่ำ (กัน index shift)
-- **Per-item toggle**: ปุ่มสีที่รายการของ — เก็บ(เทา) → ขาย(ส้ม) → ฝาก(เขียว)
+Preset **~110 สกิล** จาก Skills.toml ของ server จริง (13 ตัวยืนยันจาก capture แล้ว)
 
-### Navigation (เส้นทางเดิน)
-- **Recording**: เปิดบันทึก → เดินเอง → บันทึก trail (ตำแหน่งที่คลิกจริง)
-- **Waypoint graph**: สร้าง graph จาก trail (merge จุดใกล้กัน + edges)
-- **Patrol mode**: เดินตามลำดับ route → ครบแล้วย้อนกลับ (ping-pong)
-- **localStorage** per-map + export/import
+### Equipment Inventory (ถอดจาก login packet 0x38)
 
-### Farm Map
-- ตั้งแมปฟาร์ม + พิกัดวาร์ป
-- เผลอเดินเข้าวาร์ป → วาร์ปกลับอัตโนมัติ (retry ทุก 5s ถ้าไม่สำเร็จ)
-- ปุ่ม "วาร์ปไปแมปฟาร์ม" สำหรับใช้ manual
+ก้อน 0x13880 (stride 44) = **ของในถุง equipment** — ต่อชิ้น: refine (u8@11÷4) · **การ์ดในชิ้น** (u32@28÷4 — ยืนยัน 6/6 การ์ด) · **bag slot id** (20000+ลำดับ รวมชิ้นที่สวมอยู่ — ใช้ฝาก/ขายได้ทันที) · หาง packet = รายการ inst ของ**ชิ้นที่สวมอยู่** (0 = ช่องว่าง เช่น โล่ตอนถือดาบ 2 มือ)
+
+### ระบบกันชนกัน (หลาย state machine)
+
+- ตอนขาย/ฝาก: combat + wander + loot + warp-loot หยุดหมด ให้ routine เป็นเจ้าของตัวละคร
+- Guard เปิด: farm-back ทั้ง 0x12 และ combatLoop หยุดดึงกลับ (กันปิงปอง)
+- Buff Visit กำลังเดิน: ไม่ acquire มอนใหม่/ไม่ wander และ farm-back ไม่ดึงตอนอยู่แมปรับบัพ
+- ตาย: 0x12 ไม่ warp กลับทันที (รอ post-respawn rest จบ — เคยวาร์ปกลับไปตายซ้ำใน 3 วิ)
 
 ---
 
-## 🔧 การทำงานเบื้องหลัง
+## 🔧 Packet หลักที่ใช้
 
-สคริปต์ดัก `WebSocket` constructor → อ่าน packet ที่เข้า/ออก และส่ง packet เอง
-
-| Packet | Opcode | ใช้สำหรับ |
-|---|---|---|
-| STAT | `0x25` | อ่าน HP/Max HP |
-| SP_UPDATE | `0x27` | อ่าน SP/Max SP |
-| DAMAGE_V2 | `0x17` | damage ที่มอนได้รับ (DPS + anti-KS heuristic) |
-| ITEM_DROP | `0x51` | ของตกจากมอน |
-| PICKUP | `0x52` | สั่งเก็บของ + รับผล |
-| USE_ITEM | `0x2f` | สั่งใช้ยา/buff |
-| SKILL | `0x1d` | สั่งใช้สกิล (targeted/ground/AoE/self) |
-| ATTACK | `0x0b` | สั่งโจมตีมอน + DPS/ASPD tracking |
-| CHAT | `0x2c` | อ่านแชท (ตรวจคำว่า bot/บอท/บอต) |
-| MOVE | `0x07` | สั่งเดิน (click-move) + บันทึก trail |
-| TELEPORT | `0x40` | วาร์ป (flee/warp-loot/warp-farm) |
-| SIT_STAND | `0x0e` | นั่ง/ลุก |
-| SPAWN | `0x06` | ตรวจจับมอน + HP + ตำแหน่ง + playerId |
-| INVENTORY | `0x32` | track inventory count + equipment slot |
-| NPC_TALK | `0x4c` | คุย NPC (sell/storage) |
-| NPC_DIALOG | `0x4d` | NPC menu → เลือก Sell/Storage |
-| SELL_ITEMS | `0x57` | ส่งรายการขาย |
-| STORAGE_MOVE | `0x56` | ฝากของเข้า Kafra |
-| MAP_NAME | `0x12` | ชื่อแมป + warp-back-to-farm |
-| SELECT_CHAR | `0x03` | playerId + ชื่อแมป (login) |
-
----
-
-## 📦 ข้อมูลที่ใช้
-
-| ไฟล์ | รายละเอียด |
+| Opcode | ใช้เพื่อ |
 |---|---|
-| `items.csv` | รายการ item id + name (949 รายการ, dedup + sort) |
-| `items/meta.json` | item metadata + buyPrice (853 entries) |
-| `items/small/` | ไอคอน item (.gif, 960 รายการ) |
+| `0x03` SELECT_CHAR | playerId + แมป (authoritative) |
+| `0x06` SPAWN | entity + HP + ตำแหน่ง + playerId/ชื่อ |
+| `0x07` MOVE | ตำแหน่ง entity/ตัวเรา + ghost มอนก่อน SPAWN |
+| `0x0b` ATTACK | สั่งตี + DPS/anti-KS + ตีกลับ (victim=เรา) |
+| `0x12` MAP_NAME | ชื่อแมป + warp-back มี gate กันชนครบ |
+| `0x17` DAMAGE_V2 | damage → DPS/ASPD/anti-KS |
+| `0x1b`+`0x36` | despawn pending + reason (5=ยังอยู่, 2=ถูกเก็บ) |
+| `0x1d` SKILL | ทั้ง 6 โหมด (ตารางด้านบน) |
+| `0x24` DEATH | ตาย + วิเคราะห์ฆาตกร (target + ตีเราล่าสุด) + หมุนแมปฟาร์ม |
+| `0x25`/`0x27` | HP / SP |
+| `0x2c` CHAT | แชท (คำว่า bot + /where) |
+| `0x30` EQUIP | สวมใส่/ถอด + invIdx = slotId & 0xFF |
+| `0x32` INVENTORY | stackable (sub=3 ตั้งค่า absolute) + equipment add (sub=5) + removal |
+| `0x36`/`0x1b` | despawn sweeper (pending 2s ไร้ยืนยัน) |
+| `0x38` MAP_DATA | zeny + **inventory+น้ำหนัก** (re-sync ทุกครั้งหลัง equip/คาฟรา) + **ก้อน equipment** |
+| `0x3c` MINIMAP_MARKER | ผู้เล่น/Boss/Warp portal (flag ต่อระเบียน) |
+| `0x51`/`0x52` | ของตก / สั่งเก็บ + ผล |
+| `0x53`/`0x57`/`0x5b` | sell menu / ส่งขาย (แยก 2 รอบ) / ผลขาย |
+| `0x4c`/`0x4d` | คุย NPC / dialog menu |
+| `0x54`/`0x56` | รายการ Kafra / ฝาก-ถอย (sub=01 ฝาก, 02 ถอย + itemId ในคำตอบ) |
+| `0x40` TELEPORT | วาร์ป (ผ่าน serializer) |
 
 ---
 
 ## ⚠️ ข้อควรระวัง
 
-- ใช้กับเว็บ client ที่สื่อสารผ่าน **WebSocket** เท่านั้น (Unity WebGL)
+- ใช้กับเว็บ client **WebSocket** (Unity WebGL) เท่านั้น
 - การใช้สคริปต์ช่วยเล่นอาจผิดกฎของเซิร์ฟเวอร์ — **ใช้ในความรับผิดชอบของผู้ใช้**
-- `@match` ตั้งไว้ที่ `*://*.rayrag.com/*` — ถ้าเซิร์ฟอื่นให้แก้ให้ตรง
-- ฟีเจอร์ที่ส่ง packet จริง (warp/combat/skill) **default OFF** — เปิดเองเมื่อพร้อม
-- สกิลใน preset dropdown เฉพาะที่ **ทดลองแล้ว** (verify จาก packet capture) — จะค่อยๆ เพิ่ม
+- ฟีเจอร์ที่ส่ง packet จริง (warp/combat/skill/บัพคนอื่น) **default OFF** — เปิดเองเมื่อพร้อม
+- รหัสผ่าน Auto-Login เก็บใน localStorage (plain) — ห้ามส่งออก/แชร์เครื่อง
 
 ---
 
