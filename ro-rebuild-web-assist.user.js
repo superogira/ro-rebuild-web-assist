@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RO Rebuild Web Assist
 // @namespace    ro-rebuild-web-assist
-// @version      4.175.0
+// @version      4.176.0
 // @description  ผู้ช่วยเล่นเว็บ client RO — auto-loot, auto-heal, auto-combat, auto-rest + อัปเดตอัตโนมัติ (Unity WebGL / WebSocket)
 // @match        *://*.rayrag.com/*
 // @run-at       document-start
@@ -116,9 +116,18 @@
   // ============================================================
   //  VERSION + config persistence (localStorage)
   // ============================================================
-  const VERSION = '4.175.0';
+  const VERSION = '4.176.0';
   // ★★ CHANGELOG — แสดงในปุ่ม 📜 Update Log (ใหม่สุดขึ้นก่อน)
   const CHANGELOG = [
+    { v: '4.176.0', d: '2026-08-21', items: [
+      '💰🔍 สรุปจาก git: การขาย equipment โดย slot id ไม่เคยสำเร็จเลย (ตั้งแต่ v4.150 —',
+      '   ครั้งนั้นแก้แค่ "แยก packet ให้ stackable รอด") ไม่ใช่พังหลัง 4.160.2 ·',
+      '   สาย mark ขายของ equipment ตรวจครบแล้วถูกต้อง (Equip tab → sellItemIds → คิว)',
+      '🔁 เมื่อรอบ equipment โดนปฏิเสธ (0x5b flag=0 หรือ "could not complete sale")',
+      '   → ลองส่งใหม่แบบ itemId ตรง ๆ อัตโนมัติ 1 รอบ (ปลอดภัย: ชนิดเดียวกับที่ mark ไว้)',
+      '📥 diagnostic: log dump โครงสร้าง 0x53 SELL_OPEN (ร้านรับซื้ออะไร) + 0x5b ทุกครั้ง',
+      '   — ถ้ายังไม่ผ่าน ส่ง log ช่วงขายมาจะได้ format จริงที่ server ต้องการ',
+    ]},
     { v: '4.175.0', d: '2026-08-21', items: [
       '💰 แก้ "กดขายเดี๋ยวนี้หลังเข้าเกม แล้วของไม่ถูกขาย" — sellNow ด้อยกว่า depositNow:',
       '   1. ไม่รีเซ็ต state ใช้ร่วม → retry วาร์ป/retry ค้างจากรอบก่อนฆ่ารอบใหม่เงียบ ๆ',
@@ -2764,8 +2773,16 @@
         if (msg.includes('could not complete sale') || msg.includes('do not match')) {
           // sell failed signal — ★★ จบเลย ไม่รอ timeout 15s (เดิมแค่ log แล้วค้างใน state SELL)
           if (sellState === 'SELL') {
+            // ★★ equipment โดนปฏิเสธแบบ slot id → ลองส่งแบบ itemId ตรง ๆ รอบเดียว (เหมือนช่องทาง 0x5b)
+            if (pendingSellEquip.length > 0 && !sellEqRetryMode) {
+              sellEqRetryMode = true;
+              log('🔁 ขาย equipment ด้วย slot id ไม่ผ่าน (server ปฏิเสธ) → ลองส่งแบบ itemId ตรง ๆ', pendingSellEquip.length, 'ชิ้น');
+              sendSellItems(pendingSellEquip.map(i => ({ itemId: i.realId, count: 1 })));
+              sellStateAt = nowMs();   // รอผลรอบลองใหม่ (ยังอยู่ state SELL)
+              return;
+            }
             log('⚠️ ขายของล้มเหลว (server ปฏิเสธ)');
-            pendingSellEquip = []; sellEquipRoundSent = false;
+            pendingSellEquip = []; sellEquipRoundSent = false; sellEqRetryMode = false;
             sendSellClose();
             sellState = 'WARP_BACK'; sellStateAt = nowMs();
           }
@@ -3087,6 +3104,12 @@
     }
     // 0x53 SELL_OPEN: sell menu opened → ส่ง sellItems
     else if (op === 0x53 && sellState === 'SELECT_SELL') {
+      // ★★ diagnostic: dump โครงสร้าง 0x53 SELL_OPEN (ร้านรับซื้ออะไรบ้าง?) —
+      //   format จริงยังไม่เคยถอด และ 0x57 แบบ slot id โดนปฏิเสธตลอด → เก็บหลักฐานใน log ทุกครั้ง
+      try {
+        const hexDump = Array.from(u.slice(0, Math.min(u.length, 160))).map(b => b.toString(16).padStart(2, '0')).join(' ');
+        log('📥 SELL_OPEN len=' + u.length + ' (ส่งต่อเพื่อไข้ format): ' + hexDump);
+      } catch (e) {}
       // ★ สร้างรายการขาย — แยก equipment vs stackable (mirror bot.js _buildSellItems:1141-1171)
       //   equipment: ส่ง slot ID (20000+) count=1 ทีละชิ้น — เหมือน storageMove
       //   stackable: ส่ง itemId + count ปกติ
@@ -3116,7 +3139,7 @@
         sendSellClose();   // ★★ ปิด sell dialog ก่อน warp (กัน warp ไม่ไป)
         sellState = 'WARP_BACK'; sellStateAt = nowMs();
       } else {
-        pendingSellEquip = eqItems;
+        pendingSellEquip = eqItems; sellEqRetryMode = false;
         const first = stackItems.length > 0 ? stackItems : eqItems;
         // ★ มีแต่ equipment (ไม่มี stackable) → ส่งรอบเดียวจบ ห้ามส่งซ้ำรอบสอง
         if (stackItems.length === 0) sellEquipRoundSent = true;
@@ -3132,9 +3155,11 @@
     }
     // 0x5b SELL_RESULT: [5b][flag:1] flag>0 = success
     else if (op === 0x5b && u.length >= 2 && sellState === 'SELL') {
+      log('📥 SELL_RESULT:', Array.from(u).map(b => b.toString(16).padStart(2, '0')).join(' '));
       if (u[1] > 0) {
         // ★★ รอบ stackable สำเร็จ + มี equipment ค้าง → ส่งรอบสอง (แยก packet)
-        if (pendingSellEquip.length > 0 && !sellEquipRoundSent) {
+        //   ★ ห้ามเมื่อกำลังอยู่รอบ retry แบบ itemId (มิจะส่งซ้ำ)
+        if (pendingSellEquip.length > 0 && !sellEquipRoundSent && !sellEqRetryMode) {
           log('✅ ขาย stackable สำเร็จ! → ขาย equipment ต่อ', pendingSellEquip.length, 'ชิ้น');
           sellEquipRoundSent = true;
           sendSellItems(pendingSellEquip.map(i => ({ itemId: i.itemId, count: 1 })));
@@ -3156,7 +3181,7 @@
           if (ei >= 0) equipmentList.splice(ei, 1);
         }
         invDataVer++;
-        pendingSellEquip = []; sellEquipRoundSent = false;
+        pendingSellEquip = []; sellEquipRoundSent = false; sellEqRetryMode = false;
         inventoryFull = false;
         lastSellAt = nowMs();
         // ★ chain → storage: ถ้าเปิด depositAfterSell และมีของฝาก → ฝากต่อ (mirror bot.js:1773-1781)
@@ -3172,8 +3197,17 @@
           }
         }
       } else {
+        // ★★ equipment โดนปฏิเสธแบบ slot id → ลองส่งแบบ itemId ตรง ๆ รอบเดียว
+        //   (ปลอดภัย: itemId = ชนิดเดียวกับที่ mark ขายไว้ — server เลือก instance เอง)
+        if (pendingSellEquip.length > 0 && !sellEqRetryMode) {
+          sellEqRetryMode = true;
+          log('🔁 ขาย equipment ด้วย slot id ไม่ผ่าน → ลองส่งแบบ itemId ตรง ๆ', pendingSellEquip.length, 'ชิ้น');
+          sendSellItems(pendingSellEquip.map(i => ({ itemId: i.realId, count: 1 })));
+          sellState = 'SELL'; sellStateAt = nowMs();   // รอผลรอบลองใหม่
+          return;
+        }
         log('⚠️ ขายของล้มเหลว (SELL_RESULT flag=0)' + (sellEquipRoundSent ? ' — รอบ equipment (stackable ขายไปแล้ว)' : ''));
-        pendingSellEquip = []; sellEquipRoundSent = false;
+        pendingSellEquip = []; sellEquipRoundSent = false; sellEqRetryMode = false;
         sendSellClose();   // ★★ ปิด dialog ก่อน warp
       }
       sellState = 'WARP_BACK'; sellStateAt = nowMs();
@@ -3846,6 +3880,7 @@
   let sellMoveLastAt = 0;        // throttle เดินเข้าหา NPC (เดิมเก็บบน string = no-op!)
   let pendingSellEquip = [];     // ★ equipment รอขายรอบสอง (แยก packet กัน server ปฏิเสธทั้งก้อน)
   let sellEquipRoundSent = false;
+  let sellEqRetryMode = false;   // ★ true = รอบลองส่ง equipment แบบ itemId ตรง ๆ (slot id โดนปฏิเสธ — ไม่เคยสำเร็จเลยตั้งแต่ v4.150)
   function abortSell(reason) {
     log('⚠️ ยกเลิกขาย:', reason);
     sellState = 'IDLE'; sellStateAt = 0;
@@ -3874,7 +3909,7 @@
       }
       if (shouldSell && currentMap && player.x != null) {
         sellReturnTo = { map: currentMap, x: Math.round(player.x), y: Math.round(player.y) };
-        sellWarpRetries = 0; pendingSellEquip = []; sellEquipRoundSent = false;
+        sellWarpRetries = 0; pendingSellEquip = []; sellEquipRoundSent = false; sellEqRetryMode = false;
         // ★★ อยู่แมป NPC แล้ว + ใกล้พอ → ไม่วาร์ป (วาร์ปซ้ำโดน server ดรอป + log "วาร์ปไป" ทั้งที่ไม่ไปไหน)
         const dNpc = Math.hypot(player.x - CFG.sellNpcX, player.y - CFG.sellNpcY);
         if (currentMap === CFG.sellNpcMap && dNpc <= 40) {
@@ -6306,7 +6341,7 @@
       }
       // ★★ รีเซ็ต state ใช้ร่วมทุกตัว (เดิมลืม — retry/warp ค้างจากรอบก่อนฆ่ารอบใหม่เงียบ ๆ
       //   เช่น relogin ในหน้าเดิม: sellWarpRetries=2 ค้าง → รอบใหม่ห้ามวาร์ปซ้ำ → abort "ไม่พบ NPC")
-      sellWarpRetries = 0; pendingSellEquip = []; sellEquipRoundSent = false;
+      sellWarpRetries = 0; pendingSellEquip = []; sellEquipRoundSent = false; sellEqRetryMode = false;
       sellReturnTo = { map: currentMap, x: Math.round(player.x), y: Math.round(player.y) };
       // ★★ อยู่แมป NPC แล้ว + ใกล้พอ → ไม่วาร์ป (เหมือน trigger อัตโนมัติ — กันวาร์ปซ้ำโดน server ดรอป)
       const dNpc = Math.hypot(player.x - CFG.sellNpcX, player.y - CFG.sellNpcY);
