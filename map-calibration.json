@@ -2266,5 +2266,313 @@
       "scaleY": -0.9858281665190434,
       "offsetY": 389.62769412459403
     }
+  },
+  "cmd_fild02": {
+    "points": [
+      {
+        "tileX": 80,
+        "tileY": 172,
+        "pixelX": 82,
+        "pixelY": 219
+      },
+      {
+        "tileX": 322,
+        "tileY": 97,
+        "pixelX": 305,
+        "pixelY": 290
+      },
+      {
+        "tileX": 308,
+        "tileY": 290,
+        "pixelX": 296,
+        "pixelY": 112
+      }
+    ],
+    "transform": {
+      "scaleX": 0.9290255002528354,
+      "offsetX": 7.797298273495623,
+      "scaleY": -0.9208951019402092,
+      "offsetY": 378.593453994859
+    }
+  },
+  "gef_fild04": {
+    "points": [
+      {
+        "tileX": 208,
+        "tileY": 139,
+        "pixelX": 210,
+        "pixelY": 241
+      },
+      {
+        "tileX": 168,
+        "tileY": 179,
+        "pixelX": 172,
+        "pixelY": 201
+      },
+      {
+        "tileX": 300,
+        "tileY": 53,
+        "pixelX": 300,
+        "pixelY": 323
+      }
+    ],
+    "transform": {
+      "scaleX": 0.9711874272409778,
+      "offsetX": 8.492433061699671,
+      "scaleY": -0.965905435831457,
+      "offsetY": 374.4503055644902
+    }
+  },
+  "pay_fild07": {
+    "points": [
+      {
+        "tileX": 129,
+        "tileY": 280,
+        "pixelX": 125,
+        "pixelY": 115
+      },
+      {
+        "tileX": 355,
+        "tileY": 34,
+        "pixelX": 342,
+        "pixelY": 351
+      },
+      {
+        "tileX": 373,
+        "tileY": 295,
+        "pixelX": 359,
+        "pixelY": 102
+      }
+    ],
+    "transform": {
+      "scaleX": 0.9595081848994015,
+      "offsetX": 1.2338285137376488,
+      "scaleY": -0.9563719327652838,
+      "offsetY": 383.4768356846859
+    }
+  },
+  "moc_pryd05": {
+    "points": [
+      {
+        "tileX": 160,
+        "tileY": 63,
+        "pixelX": 264,
+        "pixelY": 277
+      },
+      {
+        "tileX": 89,
+        "tileY": 37,
+        "pixelX": 148,
+        "pixelY": 321
+      },
+      {
+        "tileX": 166,
+        "tileY": 28,
+        "pixelX": 276,
+        "pixelY": 335
+      }
+    ],
+    "transform": {
+      "scaleX": 1.6503725240777758,
+      "offsetX": 1.0318008359076885,
+      "scaleY": -1.6649848637739657,
+      "offsetY": 382.03935418768924
+    }
+  },
+  "mjolnir_05": {
+    "points": [
+      {
+        "tileX": 72,
+        "tileY": 129,
+        "pixelX": 69,
+        "pixelY": 260
+      },
+      {
+        "tileX": 104,
+        "tileY": 50,
+        "pixelX": 97,
+        "pixelY": 335
+      },
+      {
+        "tileX": 218,
+        "tileY": 102,
+        "pixelX": 211,
+        "pixelY": 284
+      }
+    ],
+    "transform": {
+      "scaleX": 0.9798505773149196,
+      "offsetX": -3.0203758206927773,
+      "scaleY": -0.953586934050031,
+      "offsetY": 382.3193094893529
+    }
+  },
+  "mjolnir_07": {
+    "points": [
+      {
+        "tileX": 139,
+        "tileY": 319,
+        "pixelX": 135,
+        "pixelY": 76
+      },
+      {
+        "tileX": 65,
+        "tileY": 132,
+        "pixelX": 64,
+        "pixelY": 258
+      },
+      {
+        "tileX": 320,
+        "tileY": 98,
+        "pixelX": 306,
+        "pixelY": 287
+      }
+    ],
+    "transform": {
+      "scaleX": 0.9482190931804536,
+      "offsetX": 2.7110650578140962,
+      "scaleY": -0.960984393757503,
+      "offsetY": 382.8601440576231
+    }
+  },
+  "gef_fild09": {
+    "points": [
+      {
+        "tileX": 86,
+        "tileY": 105,
+        "pixelX": 84,
+        "pixelY": 281
+      },
+      {
+        "tileX": 190,
+        "tileY": 43,
+        "pixelX": 181,
+        "pixelY": 341
+      },
+      {
+        "tileX": 213,
+        "tileY": 83,
+        "pixelX": 204,
+        "pixelY": 301
+      }
+    ],
+    "transform": {
+      "scaleX": 0.94114435466259,
+      "offsetX": 2.9268035233311593,
+      "scaleY": -0.97165991902834,
+      "offsetY": 382.48448043184885
+    }
+  },
+  "pay_arche": {
+    "points": [
+      {
+        "tileX": 105,
+        "tileY": 40,
+        "pixelX": 205,
+        "pixelY": 307
+      },
+      {
+        "tileX": 133,
+        "tileY": 139,
+        "pixelX": 254,
+        "pixelY": 117
+      },
+      {
+        "tileX": 60,
+        "tileY": 106,
+        "pixelX": 118,
+        "pixelY": 178
+      }
+    ],
+    "transform": {
+      "scaleX": 1.8696239862374047,
+      "offsetX": 6.617350700417812,
+      "scaleY": -1.9242424242424243,
+      "offsetY": 383.469696969697
+    }
+  },
+  "ama_dun03": {
+    "points": [
+      {
+        "tileX": 50,
+        "tileY": 123,
+        "pixelX": 77,
+        "pixelY": 184
+      },
+      {
+        "tileX": 40,
+        "tileY": 183,
+        "pixelX": 65,
+        "pixelY": 90
+      },
+      {
+        "tileX": 122,
+        "tileY": 24,
+        "pixelX": 195,
+        "pixelY": 344
+      }
+    ],
+    "transform": {
+      "scaleX": 1.605263157894737,
+      "offsetX": -1.1052631578947398,
+      "scaleY": -1.5993485342019544,
+      "offsetY": 381.92833876221493
+    }
+  },
+  "xmas_dun01": {
+    "points": [
+      {
+        "tileX": 64,
+        "tileY": 154,
+        "pixelX": 88,
+        "pixelY": 153
+      },
+      {
+        "tileX": 140,
+        "tileY": 192,
+        "pixelX": 207,
+        "pixelY": 93
+      },
+      {
+        "tileX": 145,
+        "tileY": 223,
+        "pixelX": 214,
+        "pixelY": 47
+      }
+    ],
+    "transform": {
+      "scaleX": 1.5600226500566252,
+      "offsetX": -11.815968289920724,
+      "scaleY": -1.5378174713926878,
+      "offsetY": 389.3393804074797
+    }
+  },
+  "xmas_dun02": {
+    "points": [
+      {
+        "tileX": 35,
+        "tileY": 32,
+        "pixelX": 55,
+        "pixelY": 333
+      },
+      {
+        "tileX": 67,
+        "tileY": 231,
+        "pixelX": 100,
+        "pixelY": 43
+      },
+      {
+        "tileX": 192,
+        "tileY": 90,
+        "pixelX": 283,
+        "pixelY": 248
+      }
+    ],
+    "transform": {
+      "scaleX": 1.455542641290135,
+      "offsetX": 3.356821153566765,
+      "scaleY": -1.4566559526461509,
+      "offsetY": 379.39985042803045
+    }
   }
 }
