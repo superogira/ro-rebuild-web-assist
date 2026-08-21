@@ -2574,5 +2574,33 @@
       "scaleY": -1.4566559526461509,
       "offsetY": 379.39985042803045
     }
+  },
+  "mjolnir_06": {
+    "points": [
+      {
+        "tileX": 261,
+        "tileY": 89,
+        "pixelX": 247,
+        "pixelY": 296
+      },
+      {
+        "tileX": 237,
+        "tileY": 142,
+        "pixelX": 227,
+        "pixelY": 246
+      },
+      {
+        "tileX": 306,
+        "tileY": 131,
+        "pixelX": 294,
+        "pixelY": 253
+      }
+    ],
+    "transform": {
+      "scaleX": 0.980440097799511,
+      "offsetX": -6.757946210268945,
+      "scaleY": -0.9657008947592671,
+      "offsetY": 381.5279079676182
+    }
   }
 }
